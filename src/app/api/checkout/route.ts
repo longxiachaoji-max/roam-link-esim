@@ -1,54 +1,171 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
-import { supabase } from '@/lib/supabase';
 
-// 延後初始化或提供 fallback，避免 Vercel 建置期間因為沒有環境變數而崩潰
-const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key_for_build');
+// Initialize Supabase client with Service Role Key for backend operations
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
 
 export async function POST(request: Request) {
   try {
-    const { name, email, items, total } = await request.json();
+    const body = await request.json();
+    const { email, name, productId, useTokens, paymentMethod } = body;
 
-    // 1. 建立訂單紀錄 (模擬)
-    /*
-    const { data: order, error } = await supabase
+    if (!email || !productId) {
+      return NextResponse.json({ error: 'Email and productId are required' }, { status: 400 });
+    }
+
+    // 1. Get or create customer
+    let { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (customerError && customerError.code !== 'PGRST116') {
+      console.error('Error fetching customer:', customerError);
+      return NextResponse.json({ error: 'Failed to fetch customer' }, { status: 500 });
+    }
+
+    if (!customer) {
+      const { data: newCustomer, error: createError } = await supabase
+        .from('customers')
+        .insert([{ email, name, token_balance: 0 }])
+        .select()
+        .single();
+      
+      if (createError) throw createError;
+      customer = newCustomer;
+    }
+
+    // 2. Get product
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+
+    if (productError || !product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
+    // 3. Find available eSIM inventory
+    // In a real app, you might want to use an RPC or a transaction to avoid race conditions.
+    const { data: inventory, error: inventoryError } = await supabase
+      .from('e_sim_inventory')
+      .select('*')
+      .eq('product_id', productId)
+      .eq('status', 'AVAILABLE')
+      .limit(1)
+      .single();
+
+    if (inventoryError || !inventory) {
+      return NextResponse.json({ error: 'Out of stock for this product' }, { status: 400 });
+    }
+
+    // 4. Calculate total amount and token deduction
+    let totalAmount = Number(product.price);
+    let tokensUsed = 0;
+
+    if (useTokens && customer.token_balance > 0) {
+      // Assuming 1 token = $1 discount
+      if (customer.token_balance >= totalAmount) {
+        tokensUsed = totalAmount;
+        totalAmount = 0;
+      } else {
+        tokensUsed = customer.token_balance;
+        totalAmount -= tokensUsed;
+      }
+    }
+
+    // 5. Create Order
+    const { data: order, error: orderError } = await supabase
       .from('orders')
-      .insert([
-        { customer_name: name, customer_email: email, total_amount: total, status: 'paid' }
-      ])
+      .insert([{
+        customer_id: customer.id,
+        total_amount: totalAmount,
+        tokens_used: tokensUsed,
+        payment_method: paymentMethod || 'CREDIT_CARD',
+        payment_status: totalAmount === 0 ? 'PAID' : 'PENDING',
+        order_status: 'CREATED'
+      }])
       .select()
       .single();
-    */
 
-    // 2. 寄送含 QR Code 的 Email 給客戶
-    const emailResponse = await resend.emails.send({
-      from: 'Roam Link eSIM <onboarding@resend.dev>', // 正式上線會換成您的專屬網域信箱
-      to: email,
-      subject: '✈️ 您的 Roam Link eSIM 購買成功！(內附 QR Code 安裝指南)',
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-          <h2 style="color: #FF4E6A;">感謝您的購買，${name}！</h2>
-          <p>您購買的 eSIM 方案已準備就緒，以下是您的訂單明細：</p>
-          <ul style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-            ${items.map((item: any) => `<li>${item.flag} ${item.country} ${item.data} (${item.days}) - NT$${item.price}</li>`).join('')}
-          </ul>
-          <h3>您的 eSIM QR Code ⬇️</h3>
-          <p>請使用手機掃描下方 QR Code，或手動輸入啟用碼來加入行動方案。</p>
-          <div style="text-align: center; border: 2px dashed #ccc; padding: 20px; margin: 20px 0;">
-            <p style="font-size: 12px; color: #888;">[系統將自動抓取庫存的 QR Code 顯示於此]</p>
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=LPA:1$smdp2.apple.com$模擬的啟動碼" alt="eSIM QR Code" />
-            <br/><br/>
-            <p><strong>手動輸入位址：</strong> smdp2.apple.com</p>
-            <p><strong>手動輸入啟用碼：</strong> ABCD-EFGH-IJKL-MNOP</p>
-          </div>
-          <p>祝您旅途愉快！</p>
-          <p><strong>一飛通全球漫遊 團隊敬上</strong></p>
-        </div>
-      `,
+    if (orderError) throw orderError;
+
+    // 6. Bind Inventory to Order Item and Mark Inventory as SOLD
+    // Update inventory first
+    const { error: updateInventoryError } = await supabase
+      .from('e_sim_inventory')
+      .update({
+        status: 'SOLD',
+        sold_at: new Date().toISOString()
+      })
+      .eq('id', inventory.id)
+      .eq('status', 'AVAILABLE'); // Optimistic locking
+
+    if (updateInventoryError) throw updateInventoryError;
+
+    // Create order item
+    const { error: orderItemError } = await supabase
+      .from('order_items')
+      .insert([{
+        order_id: order.id,
+        product_id: product.id,
+        inventory_id: inventory.id,
+        price: product.price
+      }]);
+
+    if (orderItemError) throw orderItemError;
+
+    // Deduct tokens from customer if used
+    if (tokensUsed > 0) {
+      const { error: tokenError } = await supabase
+        .from('customers')
+        .update({ token_balance: customer.token_balance - tokensUsed })
+        .eq('id', customer.id);
+      
+      if (tokenError) throw tokenError;
+    }
+
+    // 7. Send email via Resend
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    try {
+      await resend.emails.send({
+        from: `Roam Link eSIM <${fromEmail}>`,
+        to: [email],
+        subject: `Your eSIM for ${product.name} is ready!`,
+        html: `
+          <h1>Thank you for your purchase!</h1>
+          <p>Here are your eSIM details for <strong>${product.name}</strong>.</p>
+          <p><strong>SM-DP+ Address:</strong> ${inventory.smdp_address}</p>
+          <p><strong>Activation Code:</strong> ${inventory.activation_code}</p>
+          <p>Or scan the QR code (generated from the LPA string) on your device.</p>
+          <p>Enjoy your trip to ${product.country}!</p>
+        `,
+      });
+    } catch (emailError) {
+      console.error('Failed to send email:', emailError);
+      // We don't throw here, order is still successful, but email failed.
+    }
+
+    // Optional: Mark order as COMPLETED if payment was skipped
+    if (totalAmount === 0) {
+      await supabase.from('orders').update({ order_status: 'COMPLETED' }).eq('id', order.id);
+    }
+
+    return NextResponse.json({
+      success: true,
+      orderId: order.id,
+      message: 'Checkout successful, eSIM provisioned.',
     });
 
-    return NextResponse.json({ success: true, message: '訂單成立且郵件已寄出' });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: '系統錯誤' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Checkout error:', error);
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }

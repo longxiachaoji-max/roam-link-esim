@@ -6,12 +6,12 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const navigation = [
-    { name: 'Dashboard', href: '/admin' },
-    { name: 'Orders', href: '/admin/orders' },
-    { name: 'Products', href: '/admin/products' },
-    { name: 'eSIM Inventory', href: '/admin/esim-inventory' },
-    { name: 'Promo Codes', href: '/admin/promo-codes' },
-    { name: 'Settings', href: '/admin/settings' },
+    { name: '儀表板', href: '/admin' },
+    { name: '訂單管理', href: '/admin/orders' },
+    { name: '商品管理', href: '/admin/products' },
+    { name: 'eSIM 庫存', href: '/admin/esim-inventory' },
+    { name: '優惠代碼', href: '/admin/promo-codes' },
+    { name: '系統設定', href: '/admin/settings' },
   ];
 
   return (
@@ -20,7 +20,7 @@ export default function AdminLayout({
       <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0">
         <div className="h-full flex flex-col">
           <div className="h-16 flex items-center px-6 border-b border-gray-200">
-            <h1 className="text-xl font-bold text-gray-800">Admin Panel</h1>
+            <h1 className="text-xl font-bold text-gray-800">管理後台</h1>
           </div>
           <nav className="flex-1 overflow-y-auto py-4">
             <ul className="space-y-1 px-3">
