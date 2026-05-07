@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingCart, Search, Globe, Zap, CreditCard, ChevronDown, X } from "lucide-react";
+import { ShoppingCart, Search, Globe, Zap, CreditCard, ChevronDown, X, User } from "lucide-react";
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
@@ -9,7 +9,12 @@ export default function Home() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
+  
+  // 模擬登入狀態
+  const [user, setUser] = useState<any>(null);
 
   const regions = ["全部", "亞洲", "歐洲", "美洲", "大洋洲"];
   
@@ -43,36 +48,40 @@ export default function Home() {
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // 模擬登入成功
+    setUser({ email: 'user@example.com', token_balance: 1000 });
+    setIsLoginOpen(false);
+    showToast("✅ 登入成功");
+  };
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    // 模擬註冊成功
+    showToast("✅ 註冊成功，請檢查您的信箱進行驗證。");
+    setIsRegisterMode(false);
+  };
+
   const completeOrder = async () => {
-    const nameInput = document.getElementById('nameInput') as HTMLInputElement;
-    const emailInput = document.getElementById('emailInput') as HTMLInputElement;
-    
-    if (!nameInput?.value || !emailInput?.value) {
-      showToast("⚠️ 請填寫姓名與電子郵件");
+    if (!user) {
+      showToast("⚠️ 請先登入");
+      setIsCheckoutOpen(false);
+      setIsLoginOpen(true);
       return;
     }
 
-    // 呼叫後端 API
-    try {
-      showToast("⏳ 正在處理訂單與發送 QR Code...");
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: nameInput.value,
-          email: emailInput.value,
-          items: cart,
-          total: cartTotal
-        })
-      });
-      
-      // 為了展示順暢，不管 API 有沒有 key 報錯，都跑完成功流程
-      setIsCheckoutOpen(false);
-      setIsSuccessOpen(true);
-      setCart([]);
-    } catch (error) {
-      showToast("❌ 訂單處理失敗");
-    }
+    // 呼叫後端 API (模擬)
+    showToast("⏳ 正在處理訂單...");
+    setTimeout(() => {
+        setIsCheckoutOpen(false);
+        setIsSuccessOpen(true);
+        setCart([]);
+        // 模擬扣除代幣
+        if(user.token_balance >= cartTotal) {
+            setUser({...user, token_balance: user.token_balance - cartTotal});
+        }
+    }, 1500);
   };
 
   return (
@@ -85,18 +94,37 @@ export default function Home() {
         <ul className="hidden md:flex gap-8">
           <li><a href="#" className="text-muted hover:text-text-main transition-colors text-sm font-medium">首頁</a></li>
           <li><a href="#products" className="text-muted hover:text-text-main transition-colors text-sm font-medium">eSIM 方案</a></li>
-          <li><a href="#faq" className="text-muted hover:text-text-main transition-colors text-sm font-medium">常見問題</a></li>
         </ul>
-        <button 
-          onClick={() => setIsCartOpen(true)}
-          className="flex items-center gap-2 bg-coral hover:bg-coral/90 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,78,106,0.4)] transition-all text-white px-4 py-2 rounded-full font-bold text-sm"
-        >
-          <ShoppingCart size={18} />
-          購物車
-          <span className="bg-yellow text-dark w-5 h-5 rounded-full flex items-center justify-center text-xs font-black">
-            {cart.length}
-          </span>
-        </button>
+        <div className="flex items-center gap-4">
+            {user ? (
+                <div className="flex items-center gap-3">
+                    <div className="text-right hidden sm:block">
+                        <div className="text-xs text-muted">{user.email}</div>
+                        <div className="text-sm font-bold text-yellow">💰 NT$ {user.token_balance}</div>
+                    </div>
+                    <button onClick={() => setUser(null)} className="text-xs text-muted hover:text-white border border-white/10 px-2 py-1 rounded">登出</button>
+                </div>
+            ) : (
+                <button 
+                  onClick={() => setIsLoginOpen(true)}
+                  className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition-all text-white px-4 py-2 rounded-full font-bold text-sm"
+                >
+                  <User size={18} />
+                  <span className="hidden sm:inline">登入 / 註冊</span>
+                </button>
+            )}
+
+            <button 
+            onClick={() => setIsCartOpen(true)}
+            className="flex items-center gap-2 bg-coral hover:bg-coral/90 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,78,106,0.4)] transition-all text-white px-4 py-2 rounded-full font-bold text-sm"
+            >
+            <ShoppingCart size={18} />
+            <span className="hidden sm:inline">購物車</span>
+            <span className="bg-yellow text-dark w-5 h-5 rounded-full flex items-center justify-center text-xs font-black">
+                {cart.length}
+            </span>
+            </button>
+        </div>
       </nav>
 
       {/* 首頁區塊 */}
@@ -111,14 +139,6 @@ export default function Home() {
         <p className="text-muted text-lg max-w-lg mx-auto mb-8 animate-fade-in-up animation-delay-200">
           無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animation-delay-300">
-          <button className="bg-gradient-to-br from-coral to-[#FF8C42] hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(255,78,106,0.4)] transition-all text-white font-bold py-3 px-8 rounded-full">
-            尋找目的地 eSIM
-          </button>
-          <button className="border-2 border-white/20 hover:border-cyan hover:-translate-y-1 transition-all text-white font-bold py-3 px-8 rounded-full">
-            如何安裝？
-          </button>
-        </div>
       </section>
 
       {/* 商品區塊 */}
@@ -180,6 +200,48 @@ export default function Home() {
         </div>
       </section>
 
+      {/* 登入 / 註冊對話框 */}
+      {isLoginOpen && (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
+          <div className="bg-[#1A1A2E] w-full max-w-sm rounded-3xl p-8 shadow-2xl relative">
+            <button onClick={() => setIsLoginOpen(false)} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
+            
+            <h3 className="text-2xl font-black mb-6 text-center">{isRegisterMode ? '建立新帳號' : '會員登入'}</h3>
+            
+            <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm text-muted mb-2">電子郵件</label>
+                <input required type="email" placeholder="example@mail.com" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
+              </div>
+              <div>
+                <label className="block text-sm text-muted mb-2">密碼</label>
+                <input required type="password" placeholder="••••••••" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
+              </div>
+              
+              {!isRegisterMode && (
+                  <div className="text-right">
+                      <a href="#" className="text-xs text-cyan hover:underline">忘記密碼？</a>
+                  </div>
+              )}
+
+              <button type="submit" className="w-full bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 rounded-xl hover:-translate-y-1 transition-all mt-4">
+                {isRegisterMode ? '註冊' : '登入'}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center text-sm text-muted">
+              {isRegisterMode ? '已經有帳號了？' : '還沒有帳號？'}
+              <button 
+                onClick={() => setIsRegisterMode(!isRegisterMode)} 
+                className="text-cyan font-bold ml-2 hover:underline"
+              >
+                {isRegisterMode ? '返回登入' : '立即註冊'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 購物車側邊欄 (Overlay) */}
       {isCartOpen && (
         <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-end">
@@ -234,34 +296,55 @@ export default function Home() {
         </div>
       )}
 
-      {/* 結帳對話框 (簡易版) */}
+      {/* 結帳對話框 */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-end md:items-center">
           <div className="bg-[#1A1A2E] w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setIsCheckoutOpen(false)} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
             
-            <h3 className="text-xl font-black mb-6">結帳資料</h3>
+            <h3 className="text-xl font-black mb-6">確認訂單</h3>
             
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm text-muted mb-2">收件人姓名</label>
-                <input id="nameInput" type="text" placeholder="例: 王小明" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
-              </div>
-              <div>
-                <label className="block text-sm text-muted mb-2">電子郵件 (接收 eSIM QR Code)</label>
-                <input id="emailInput" type="email" placeholder="example@mail.com" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
-              </div>
-            </div>
-
             <div className="bg-card-bg border border-white/10 rounded-xl p-4 mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-muted">應付總額</span>
-                <span className="text-xl font-black text-coral">NT${cartTotal}</span>
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-muted">購買項目</span>
+                <span className="font-bold">{cart.length} 件</span>
               </div>
+              <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-4">
+                <span className="text-muted">小計</span>
+                <span className="font-bold">NT${cartTotal}</span>
+              </div>
+              
+              {user ? (
+                 <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted">目前儲值金餘額</span>
+                    <span className="font-bold text-yellow">NT${user.token_balance}</span>
+                 </div>
+              ) : (
+                  <div className="text-sm text-coral">請先登入以使用儲值金付款</div>
+              )}
             </div>
 
-            <button onClick={completeOrder} className="w-full bg-cyan text-dark font-black py-4 rounded-xl hover:-translate-y-1 transition-all">
-              確認付款 (模擬)
+            {user && user.token_balance >= cartTotal ? (
+                <button onClick={completeOrder} className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                    <Zap size={20} />
+                    使用儲值金扣款 (NT${cartTotal})
+                </button>
+            ) : (
+                <button disabled className="w-full bg-white/10 text-white/50 font-black py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-2 mb-3">
+                    <Zap size={20} />
+                    儲值金餘額不足
+                </button>
+            )}
+
+            <div className="relative flex py-5 items-center">
+                <div className="flex-grow border-t border-white/10"></div>
+                <span className="flex-shrink-0 mx-4 text-muted text-xs">或使用其他付款方式</span>
+                <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <button className="w-full bg-card-bg border border-white/20 text-white font-bold py-3 rounded-xl hover:bg-white/5 transition-all flex items-center justify-center gap-2">
+              <CreditCard size={18} />
+              信用卡付款 (即將推出)
             </button>
           </div>
         </div>
@@ -275,9 +358,9 @@ export default function Home() {
               ✓
             </div>
             <h3 className="text-2xl font-black mb-2">訂購成功！</h3>
-            <p className="text-muted mb-8">您的 eSIM QR Code 與安裝說明已經寄送到您的信箱，請查收。</p>
-            <button onClick={() => setIsSuccessOpen(false)} className="bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-8 rounded-full transition-all">
-              返回首頁
+            <p className="text-muted mb-8">您可以在會員中心查看您的 eSIM QR Code 與安裝說明。</p>
+            <button onClick={() => setIsSuccessOpen(false)} className="bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 px-8 rounded-full hover:-translate-y-1 transition-all">
+              前往會員中心查看
             </button>
           </div>
         </div>
