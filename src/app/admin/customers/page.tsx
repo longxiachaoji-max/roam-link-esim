@@ -53,7 +53,6 @@ export default function AdminCustomersPage() {
     
     setCustomers(updatedCustomers);
     
-    // 這裡未來可將 reason 與交易紀錄寫入 Supabase logs
     console.log(`[Log] ${selectedCustomer.email} 餘額變更: ${amount > 0 ? '+' : ''}${amount}. 原因: ${reason}`);
 
     showToast(`✅ 成功為 ${selectedCustomer.email} ${amount > 0 ? '加值' : '扣除'} NT$${Math.abs(amount)}`);
@@ -63,15 +62,15 @@ export default function AdminCustomersPage() {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
+    <div className="w-full">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-black mb-2">會員管理與儲值</h1>
-          <p className="text-muted">查詢會員資料並手動加值/扣款 (Tokens)</p>
+          <h1 className="text-2xl md:text-3xl font-black mb-2">會員管理與儲值</h1>
+          <p className="text-muted text-sm md:text-base">查詢會員資料並手動加值/扣款 (Tokens)</p>
         </div>
       </div>
 
-      <div className="bg-card-bg border border-white/10 rounded-2xl p-6 mb-8 shadow-xl">
+      <div className="bg-[#1A1A2E] md:bg-card-bg border border-white/10 rounded-2xl p-4 md:p-6 mb-8 shadow-xl">
         <div className="relative mb-6">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={20} />
           <input 
@@ -83,7 +82,8 @@ export default function AdminCustomersPage() {
           />
         </div>
 
-        <div className="overflow-x-auto">
+        {/* 電腦版表格視圖 */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 text-muted">
@@ -98,7 +98,7 @@ export default function AdminCustomersPage() {
                 <tr key={customer.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                   <td className="py-4 px-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-muted">
+                      <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-muted shrink-0">
                         <User size={18} />
                       </div>
                       <div>
@@ -119,7 +119,7 @@ export default function AdminCustomersPage() {
                   <td className="py-4 px-4 text-right">
                     <button 
                       onClick={() => setSelectedCustomer(customer)}
-                      className="bg-cyan/20 text-cyan hover:bg-cyan/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-2"
+                      className="bg-cyan/20 text-cyan hover:bg-cyan/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-2 whitespace-nowrap"
                     >
                       <PlusCircle size={16} />
                       手動調整餘額
@@ -137,12 +137,55 @@ export default function AdminCustomersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* 手機版卡片視圖 */}
+        <div className="md:hidden flex flex-col gap-4">
+          {filteredCustomers.map(customer => (
+            <div key={customer.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-muted shrink-0">
+                    <User size={18} />
+                  </div>
+                  <div className="overflow-hidden">
+                    <div className="font-bold truncate">{customer.email}</div>
+                    <div className="text-sm text-muted truncate">{customer.name || '未提供'}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between bg-black/20 p-3 rounded-lg">
+                <span className="text-sm text-muted">儲值金餘額</span>
+                <div className="flex items-center gap-2 font-black text-yellow text-lg">
+                  <Zap size={16} className="text-yellow" />
+                  {customer.token_balance}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-muted">註冊日: {customer.created_at}</span>
+                <button 
+                  onClick={() => setSelectedCustomer(customer)}
+                  className="bg-cyan/20 text-cyan hover:bg-cyan/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-2"
+                >
+                  <PlusCircle size={16} />
+                  調整餘額
+                </button>
+              </div>
+            </div>
+          ))}
+          {filteredCustomers.length === 0 && (
+            <div className="py-8 text-center text-muted">
+              找不到符合條件的客戶
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 加值 Modal */}
       {selectedCustomer && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
-          <div className="bg-[#1A1A2E] w-full max-w-md rounded-3xl p-8 shadow-2xl relative border border-white/10">
+          <div className="bg-[#1A1A2E] w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl relative border border-white/10 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => { setSelectedCustomer(null); setAddAmount(""); setReason(""); }} 
               className="absolute top-4 right-4 text-muted hover:text-white"
@@ -150,11 +193,11 @@ export default function AdminCustomersPage() {
               ✕
             </button>
             
-            <h3 className="text-2xl font-black mb-6">調整客戶餘額</h3>
+            <h3 className="text-xl md:text-2xl font-black mb-6 pr-6">調整客戶餘額</h3>
             
             <div className="bg-black/30 p-4 rounded-xl mb-6">
               <div className="text-sm text-muted mb-1">客戶帳號</div>
-              <div className="font-bold mb-3">{selectedCustomer.email}</div>
+              <div className="font-bold mb-3 break-all">{selectedCustomer.email}</div>
               <div className="text-sm text-muted mb-1">調整前餘額</div>
               <div className="font-black text-yellow">NT$ {selectedCustomer.token_balance}</div>
             </div>
@@ -167,12 +210,12 @@ export default function AdminCustomersPage() {
                     type="number" 
                     autoFocus
                     required
-                    placeholder="輸入 1000 加值，輸入 -500 扣款" 
+                    placeholder="例如 1000 (可負數)" 
                     value={addAmount}
                     onChange={(e) => setAddAmount(e.target.value)}
-                    className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow text-xl font-bold" 
+                    className="w-full bg-[#0B0B1A] md:bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow text-xl font-bold" 
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted">
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs md:text-sm text-muted pointer-events-none">
                     正數加值 / 負數扣款
                   </div>
                 </div>
@@ -183,10 +226,10 @@ export default function AdminCustomersPage() {
                 <input 
                   type="text" 
                   required
-                  placeholder="例如: 轉帳儲值、活動贈送、錯誤退回..." 
+                  placeholder="例如: 轉帳儲值、活動贈送..." 
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan text-sm" 
+                  className="w-full bg-[#0B0B1A] md:bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan text-sm" 
                 />
               </div>
               
@@ -204,7 +247,7 @@ export default function AdminCustomersPage() {
 
       {/* 吐司通知 */}
       {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white text-dark px-6 py-3 rounded-full font-bold shadow-2xl z-[300] animate-fade-in-up">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white text-dark px-6 py-3 rounded-full font-bold shadow-2xl z-[300] animate-fade-in-up whitespace-nowrap text-sm md:text-base">
           {toastMsg}
         </div>
       )}
