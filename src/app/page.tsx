@@ -99,7 +99,7 @@ export default function Home() {
         <div className="flex items-center gap-4">
             {user ? (
                 <div className="flex items-center gap-3">
-                    <div className="text-right block sm:block cursor-pointer" onClick={() => setIsTopUpOpen(true)}>>
+                    <div className="text-right block sm:block cursor-pointer" onClick={() => setIsTopUpOpen(true)}>
                         <div className="text-xs text-muted">{user.email}</div>
                         <div className="text-sm font-bold text-yellow">💰 NT$ {user.token_balance}</div>
                     </div>
