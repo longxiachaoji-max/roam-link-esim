@@ -15,6 +15,7 @@ export default function AdminCustomersPage() {
   const [customers, setCustomers] = useState(MOCK_CUSTOMERS);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [addAmount, setAddAmount] = useState("");
+  const [reason, setReason] = useState("");
   const [toastMsg, setToastMsg] = useState("");
 
   const filteredCustomers = customers.filter(c => 
@@ -31,8 +32,13 @@ export default function AdminCustomersPage() {
     e.preventDefault();
     const amount = parseInt(addAmount);
     
-    if (isNaN(amount) || amount <= 0) {
-      showToast("⚠️ 請輸入有效的加值金額");
+    if (isNaN(amount) || amount === 0) {
+      showToast("⚠️ 請輸入有效的調整金額 (不可為 0)");
+      return;
+    }
+
+    if (!reason.trim()) {
+      showToast("⚠️ 請填寫手動調整的原因");
       return;
     }
 
@@ -41,14 +47,19 @@ export default function AdminCustomersPage() {
     // 模擬更新本地狀態
     const updatedCustomers = customers.map(c => 
       c.id === selectedCustomer.id 
-        ? { ...c, token_balance: c.token_balance + amount }
+        ? { ...c, token_balance: Math.max(0, c.token_balance + amount) } // 確保餘額不會變負數
         : c
     );
     
     setCustomers(updatedCustomers);
+    
+    // 這裡未來可將 reason 與交易紀錄寫入 Supabase logs
+    console.log(`[Log] ${selectedCustomer.email} 餘額變更: ${amount > 0 ? '+' : ''}${amount}. 原因: ${reason}`);
+
+    showToast(`✅ 成功為 ${selectedCustomer.email} ${amount > 0 ? '加值' : '扣除'} NT$${Math.abs(amount)}`);
     setSelectedCustomer(null);
     setAddAmount("");
-    showToast(`✅ 成功為 ${selectedCustomer.email} 加值 NT$${amount}`);
+    setReason("");
   };
 
   return (
@@ -56,7 +67,7 @@ export default function AdminCustomersPage() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-black mb-2">會員管理與儲值</h1>
-          <p className="text-muted">查詢會員資料並手動加值儲值金 (Tokens)</p>
+          <p className="text-muted">查詢會員資料並手動加值/扣款 (Tokens)</p>
         </div>
       </div>
 
@@ -111,7 +122,7 @@ export default function AdminCustomersPage() {
                       className="bg-cyan/20 text-cyan hover:bg-cyan/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-2"
                     >
                       <PlusCircle size={16} />
-                      手動加值
+                      手動調整餘額
                     </button>
                   </td>
                 </tr>
@@ -133,33 +144,49 @@ export default function AdminCustomersPage() {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
           <div className="bg-[#1A1A2E] w-full max-w-md rounded-3xl p-8 shadow-2xl relative border border-white/10">
             <button 
-              onClick={() => { setSelectedCustomer(null); setAddAmount(""); }} 
+              onClick={() => { setSelectedCustomer(null); setAddAmount(""); setReason(""); }} 
               className="absolute top-4 right-4 text-muted hover:text-white"
             >
               ✕
             </button>
             
-            <h3 className="text-2xl font-black mb-6">為客戶加值</h3>
+            <h3 className="text-2xl font-black mb-6">調整客戶餘額</h3>
             
             <div className="bg-black/30 p-4 rounded-xl mb-6">
               <div className="text-sm text-muted mb-1">客戶帳號</div>
               <div className="font-bold mb-3">{selectedCustomer.email}</div>
-              <div className="text-sm text-muted mb-1">加值前餘額</div>
+              <div className="text-sm text-muted mb-1">調整前餘額</div>
               <div className="font-black text-yellow">NT$ {selectedCustomer.token_balance}</div>
             </div>
 
             <form onSubmit={handleAddTokens}>
+              <div className="mb-4">
+                <label className="block text-sm text-muted mb-2">請輸入調整金額 (NT$)</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    autoFocus
+                    required
+                    placeholder="輸入 1000 加值，輸入 -500 扣款" 
+                    value={addAmount}
+                    onChange={(e) => setAddAmount(e.target.value)}
+                    className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow text-xl font-bold" 
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted">
+                    正數加值 / 負數扣款
+                  </div>
+                </div>
+              </div>
+
               <div className="mb-6">
-                <label className="block text-sm text-muted mb-2">請輸入加值金額 (NT$)</label>
+                <label className="block text-sm text-muted mb-2">手動調整原因 <span className="text-red-400">*必填</span></label>
                 <input 
-                  type="number" 
-                  autoFocus
+                  type="text" 
                   required
-                  min="1"
-                  placeholder="例如: 1000" 
-                  value={addAmount}
-                  onChange={(e) => setAddAmount(e.target.value)}
-                  className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow text-xl font-bold" 
+                  placeholder="例如: 轉帳儲值、活動贈送、錯誤退回..." 
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan text-sm" 
                 />
               </div>
               
@@ -168,7 +195,7 @@ export default function AdminCustomersPage() {
                 className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2"
               >
                 <Zap size={20} />
-                確認加值
+                確認調整餘額
               </button>
             </form>
           </div>
