@@ -12,7 +12,7 @@ export default function Home() {
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [isTopUpOpen, setIsTopUpOpen] = useState(false); // 新增儲值介面狀態
+  // TopUp modal moved to /member
   const [toastMsg, setToastMsg] = useState("");
   
   // 模擬登入狀態
