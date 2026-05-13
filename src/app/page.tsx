@@ -194,7 +194,7 @@ export default function Home() {
         <div className="flex items-center gap-4">
             {user ? (
                 <div className="flex items-center gap-3">
-                    <div className="text-right block sm:block cursor-pointer" onClick={() => setIsTopUpOpen(true)}>
+                    <div className="text-right block sm:block cursor-pointer" onClick={() => window.location.href="/member"}>
                         <div className="text-xs text-muted">{user.email}</div>
                         <div className="text-sm font-bold text-yellow">💰 NT$ {user.token_balance}</div>
                     </div>
@@ -345,43 +345,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 儲值對話框 */}
-      {isTopUpOpen && user && (
-        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
-          <div className="bg-[#1A1A2E] w-full max-w-sm rounded-3xl p-8 shadow-2xl relative">
-            <button onClick={() => setIsTopUpOpen(false)} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
-            
-            <h3 className="text-2xl font-black mb-6 text-center">儲值金加值</h3>
-            
-            <div className="bg-card-bg border border-white/10 rounded-xl p-4 mb-6 text-center">
-                <p className="text-muted text-sm mb-2">您目前的儲值金餘額</p>
-                <p className="text-4xl font-black text-yellow">NT$ {user.token_balance}</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              {[200, 500, 1000].map((amount) => (
-                <button 
-                  key={amount} 
-                  onClick={() => {
-                    // 模擬儲值操作
-                    setUser({...user, token_balance: user.token_balance + amount});
-                    setIsTopUpOpen(false);
-                    showToast(`🎉 成功儲值 NT$ ${amount}！`);
-                  }}
-                  className="bg-white/10 hover:bg-white/20 transition-all text-white px-4 py-3 rounded-xl font-bold text-lg"
-                >
-                  NT$ {amount}
-                </button>
-              ))}
-            </div>
-
-            <button className="w-full bg-card-bg border border-white/20 text-white font-bold py-3 rounded-xl hover:bg-white/5 transition-all flex items-center justify-center gap-2">
-              <CreditCard size={18} />
-              信用卡付款 (即將推出)
-            </button>
-          </div>
-        </div>
-      )}
+      
 
       {/* 購物車側邊欄 (Overlay) */}
       {isCartOpen && (
