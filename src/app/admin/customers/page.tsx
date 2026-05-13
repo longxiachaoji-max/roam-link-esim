@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import { Search, Zap, User, PlusCircle } from "lucide-react";
 
 // 模擬客戶資料
@@ -12,7 +13,18 @@ const MOCK_CUSTOMERS = [
 
 export default function AdminCustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [customers, setCustomers] = useState(MOCK_CUSTOMERS);
+    const [customers, setCustomers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+    if (!error && data) {
+      setCustomers(data);
+    }
+  };
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [addAmount, setAddAmount] = useState("");
   const [reason, setReason] = useState("");

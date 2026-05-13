@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ShoppingCart, Search, Globe, Zap, CreditCard, ChevronDown, X, User } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
@@ -16,6 +17,8 @@ export default function Home() {
   
   // 模擬登入狀態
   const [user, setUser] = useState<any>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
 
   const regions = ["全部", "亞洲", "歐洲", "美洲", "大洋洲"];
   
@@ -49,19 +52,79 @@ export default function Home() {
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // 模擬登入成功
-    setUser({ email: 'user@example.com', token_balance: 1000 });
-    setIsLoginOpen(false);
-    showToast("✅ 登入成功");
+  // Check active session on load
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await fetchCustomerProfile(session.user.email);
+      }
+    };
+    checkSession();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        fetchCustomerProfile(session.user.email);
+      } else {
+        setUser(null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchCustomerProfile = async (email: string | undefined) => {
+    if (!email) return;
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('email', email)
+      .single();
+    
+    if (customer) {
+      setUser(customer);
+    } else {
+      // Auto-create customer profile if missing
+      const { data: newCustomer } = await supabase
+        .from('customers')
+        .insert([{ email, token_balance: 0, name: email.split('@')[0] }])
+        .select()
+        .single();
+      setUser(newCustomer);
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    showToast("✅ 已登出");
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // 模擬註冊成功
-    showToast("✅ 註冊成功，請檢查您的信箱進行驗證。");
-    setIsRegisterMode(false);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password: authPassword,
+    });
+    if (error) {
+      showToast("❌ 登入失敗: " + error.message);
+    } else {
+      setIsLoginOpen(false);
+      showToast("✅ 登入成功");
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { data, error } = await supabase.auth.signUp({
+      email: authEmail,
+      password: authPassword,
+    });
+    if (error) {
+      showToast("❌ 註冊失敗: " + error.message);
+    } else {
+      showToast("✅ 註冊成功，請登入。");
+      setIsRegisterMode(false);
+    }
   };
 
   const completeOrder = async () => {
@@ -72,17 +135,41 @@ export default function Home() {
       return;
     }
 
-    // 呼叫後端 API (模擬)
     showToast("⏳ 正在處理訂單...");
-    setTimeout(() => {
-        setIsCheckoutOpen(false);
-        setIsSuccessOpen(true);
-        setCart([]);
-        // 模擬扣除代幣
-        if(user.token_balance >= cartTotal) {
-            setUser({...user, token_balance: user.token_balance - cartTotal});
+    
+    try {
+      // 由於購物車可能有多個商品，我們逐一呼叫 API
+      for (const item of cart) {
+        // 在真實場景中 productId 需要從真實資料庫獲取，這裡我們假設有一個 dummy UUID 或不傳遞報錯，
+        // 但為了串接測試，我們暫時需要先從資料庫獲取 product id 或使用現有的商品名稱 mapping
+        // TODO: 完整的 productId mapping，先嘗試只透過 API 傳送
+        const res = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user.email,
+            name: user.name || user.email.split('@')[0],
+            productId: item.id || '2967ce20-f463-448a-ba0d-0fc4e9afbeec', // 需要真實 UUID
+            useTokens: true,
+            paymentMethod: 'TOKENS'
+          })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) {
+           throw new Error(data.error || '購買失敗');
         }
-    }, 1500);
+      }
+
+      setIsCheckoutOpen(false);
+      setIsSuccessOpen(true);
+      setCart([]);
+      
+      // 更新前台餘額顯示
+      await fetchCustomerProfile(user.email);
+    } catch (err: any) {
+      showToast("❌ " + err.message);
+    }
   };
 
   return (
@@ -103,7 +190,7 @@ export default function Home() {
                         <div className="text-xs text-muted">{user.email}</div>
                         <div className="text-sm font-bold text-yellow">💰 NT$ {user.token_balance}</div>
                     </div>
-                    <button onClick={() => setUser(null)} className="text-xs text-muted hover:text-white border border-white/10 px-2 py-1 rounded">登出</button>
+                    <button onClick={handleLogout} className="text-xs text-muted hover:text-white border border-white/10 px-2 py-1 rounded">登出</button>
                 </div>
             ) : (
                 <button 
@@ -212,11 +299,11 @@ export default function Home() {
             <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
               <div>
                 <label className="block text-sm text-muted mb-2">電子郵件</label>
-                <input required type="email" placeholder="example@mail.com" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
+                <input required type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="example@mail.com" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
               </div>
               <div>
                 <label className="block text-sm text-muted mb-2">密碼</label>
-                <input required type="password" placeholder="••••••••" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
+                <input required type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
               </div>
               
               {!isRegisterMode && (
