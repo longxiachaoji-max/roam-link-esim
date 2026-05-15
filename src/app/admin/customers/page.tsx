@@ -69,7 +69,9 @@ export default function AdminCustomersPage() {
 
       const result = await res.json();
       if (!res.ok) {
-        throw new Error(result.error || '調整失敗');
+        const errorMessage = result.error || '調整失敗，請檢查後台日誌。';
+        alert(`發生錯誤:\n\n${errorMessage}`); // 使用強制 alert 彈窗
+        throw new Error(errorMessage);
       }
 
       // 更新本地狀態
