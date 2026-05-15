@@ -69,7 +69,13 @@ export async function POST(request: Request) {
 
     if (txError) {
       console.error('Failed to record transaction:', txError);
-      // We still return success even if history fails, but ideally it should be a transaction.
+      // Rollback the balance update to maintain data integrity
+      await supabase
+        .from('customers')
+        .update({ token_balance: customer.token_balance }) // Revert to the old balance
+        .eq('id', customerId);
+        
+      return NextResponse.json({ error: `Transaction record failed: ${txError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, newBalance });
