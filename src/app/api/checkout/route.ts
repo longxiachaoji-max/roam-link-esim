@@ -63,14 +63,21 @@ export async function POST(request: Request) {
       .single();
 
     if (inventoryError || !inventory) {
-      return NextResponse.json({ error: 'Out of stock for this product' }, { status: 400 });
+      return NextResponse.json({ error: '庫存不足' }, { status: 400 });
     }
 
     // 4. Calculate total amount and token deduction
     let totalAmount = Number(product.price);
     let tokensUsed = 0;
 
-    if (useTokens && customer.token_balance > 0) {
+    // Check for sufficient tokens if payment method is TOKENS
+    if (paymentMethod === 'TOKENS') {
+      if (!customer.token_balance || customer.token_balance < totalAmount) {
+        return NextResponse.json({ error: '請儲值後結帳' }, { status: 400 });
+      }
+      tokensUsed = totalAmount;
+      totalAmount = 0;
+    } else if (useTokens && customer.token_balance > 0) {
       // Assuming 1 token = $1 discount
       if (customer.token_balance >= totalAmount) {
         tokensUsed = totalAmount;
@@ -124,12 +131,24 @@ export async function POST(request: Request) {
 
     // Deduct tokens from customer if used
     if (tokensUsed > 0) {
+      const newBalance = customer.token_balance - tokensUsed;
       const { error: tokenError } = await supabase
         .from('customers')
-        .update({ token_balance: customer.token_balance - tokensUsed })
+        .update({ token_balance: newBalance })
         .eq('id', customer.id);
       
       if (tokenError) throw tokenError;
+
+      // 新增：寫入扣款紀錄到 token_transactions
+      const { error: txError } = await supabase
+        .from('token_transactions')
+        .insert([{
+          customer_id: customer.id,
+          amount: -tokensUsed,
+          balance_after: newBalance,
+          reason: `購買 eSIM (訂單 #${order.id.split('-')[0]})`
+        }]);
+      if (txError) console.error("Failed to insert token_transaction:", txError);
     }
 
     // 7. Send email via Resend
