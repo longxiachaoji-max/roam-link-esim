@@ -55,6 +55,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
+    // 3. Record transaction
+    const { error: txError } = await supabase
+      .from('token_transactions')
+      .insert([{
+        customer_id: customerId,
+        amount: amount,
+        balance_after: newBalance,
+        reason: reason
+      }]);
+
+    if (txError) {
+      console.error('Failed to record transaction:', txError);
+      // We still return success even if history fails, but ideally it should be a transaction.
+    }
+
     return NextResponse.json({ success: true, newBalance });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
