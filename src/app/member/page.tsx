@@ -11,12 +11,25 @@ export default function MemberCenter() {
   
   // Modals
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
+  };
+
+  const fetchHistory = async (customerId: string) => {
+    const { data } = await supabase
+      .from('token_transactions')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
+    if (data) {
+      setTransactions(data);
+    }
   };
 
   useEffect(() => {
@@ -30,7 +43,10 @@ export default function MemberCenter() {
           .eq('email', session.user.email)
           .single();
         
-        if (customer) setUser(customer);
+        if (customer) {
+          setUser(customer);
+          fetchHistory(customer.id);
+        }
 
         // Fetch Orders via API
         const res = await fetch(`/api/member/orders?email=${session.user.email}`);
@@ -99,7 +115,10 @@ export default function MemberCenter() {
             >
               + 儲值
             </button>
-            <button className="bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 rounded-2xl transition-all">
+            <button 
+              onClick={() => setIsHistoryOpen(true)}
+              className="bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 rounded-2xl transition-all"
+            >
               消費紀錄
             </button>
           </div>
@@ -220,6 +239,42 @@ export default function MemberCenter() {
               <CreditCard size={20} />
               信用卡結帳 (等待串接)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction History Modal */}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-end md:items-center px-4 pb-4 md:pb-0 transition-opacity">
+          <div className="bg-[#1A1A2E] w-full max-w-md rounded-[2rem] p-6 md:p-8 shadow-2xl relative border border-white/10 animate-fade-in-up max-h-[85vh] flex flex-col">
+            <button onClick={() => setIsHistoryOpen(false)} className="absolute top-5 right-5 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
+            
+            <h3 className="text-2xl font-black mb-6 text-center mt-2">消費與儲值紀錄</h3>
+            
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+              {transactions.length > 0 ? (
+                transactions.map((tx) => (
+                  <div key={tx.id} className="bg-black/30 rounded-2xl p-4 border border-white/5 flex justify-between items-center">
+                    <div>
+                      <div className="text-sm font-bold text-white/90 mb-1">{tx.reason || '系統操作'}</div>
+                      <div className="text-xs text-white/40">
+                        {new Date(tx.created_at).toLocaleString('zh-TW', {
+                          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-black text-lg ${tx.amount > 0 ? 'text-green-400' : 'text-white'}`}>
+                        {tx.amount > 0 ? '+' : ''}{tx.amount}
+                      </div>
+                      <div className="text-xs text-white/30 font-medium">餘額 {tx.balance_after}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10 text-white/40">目前沒有任何紀錄</div>
+              )}
+            </div>
           </div>
         </div>
       )}
