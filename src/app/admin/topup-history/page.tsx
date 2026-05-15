@@ -16,25 +16,14 @@ export default function TopupHistoryPage() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('token_transactions')
-        .select(`
-          id,
-          amount,
-          balance_after,
-          reason,
-          created_at,
-          customers (
-            email,
-            name
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        setTransactions(data);
-      } else if (error) {
-        console.error("Fetch transactions error:", error);
+      // 透過後端 API 抓取資料（繞過 RLS），以確保管理員能看到所有紀錄
+      const res = await fetch('/api/admin/topup-history');
+      const json = await res.json();
+      
+      if (res.ok && json.transactions) {
+        setTransactions(json.transactions);
+      } else {
+        console.error("Fetch transactions error:", json.error);
       }
     } catch (err) {
       console.error(err);
