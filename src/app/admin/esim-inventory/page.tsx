@@ -138,7 +138,7 @@ export default function EsimInventoryPage() {
         <h1 className="text-2xl font-semibold text-gray-900">eSIM 庫存管理</h1>
         <button 
           onClick={() => setIsAddModalOpen(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm flex items-center"
+          className="bg-sky-400 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-sky-500 transition-colors shadow-sm flex items-center border-2 border-white"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
