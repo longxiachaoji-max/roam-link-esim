@@ -98,6 +98,112 @@ export default function EsimInventoryPage() {
     }
   };
 
+
+  // Delete handler
+  const handleDelete = async (id: string) => {
+    if (!confirm('確定要刪除這筆 eSIM 庫存嗎？')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('e_sim_inventory')
+        .delete()
+        .eq('id', id);
+        
+      if (error) throw error;
+      fetchData(); // Refresh list after successful deletion
+    } catch (error: any) {
+      console.error('Error deleting eSIM:', error);
+      alert('刪除失敗: ' + error.message);
+    }
+  };
+
+  // Edit states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    id: '',
+    productId: '',
+    iccid: '',
+    smdpAddress: '',
+    activationCode: '',
+    status: '',
+    expiryDate: ''
+  });
+
+  const openEditModal = (esim: EsimItem) => {
+    // We need to find the raw product ID based on the boundProduct string (since we only saved the name in esims state)
+    // A better approach would be to store productId in EsimItem, but we'll do a quick lookup for now
+    const product = products.find(p => p.name === esim.boundProduct);
+    
+    // Convert status back to DB format
+    let rawStatus = 'AVAILABLE';
+    if (esim.status === '已售出') rawStatus = 'SOLD';
+    if (esim.status === '已過期') rawStatus = 'EXPIRED';
+
+    // Format date string for the input field (YYYY-MM-DD)
+    // The previous string might be "M/D/YYYY" from toLocaleDateString
+    // Let's ensure it's in YYYY-MM-DD format for the input[type="date"]
+    let formattedDate = '';
+    try {
+      const d = new Date(esim.expiryDate);
+      formattedDate = d.toISOString().split('T')[0];
+    } catch(e) {
+      formattedDate = new Date().toISOString().split('T')[0];
+    }
+
+    setEditFormData({
+      id: esim.id,
+      productId: product?.id || '',
+      iccid: '', // Note: we didn't fetch iccid into EsimItem initially, so we have to re-fetch or just handle what we have
+      smdpAddress: esim.smdpAddress,
+      activationCode: esim.activationCode,
+      status: rawStatus,
+      expiryDate: formattedDate
+    });
+    
+    // Fetch the specific item to get the real ICCID
+    supabase
+      .from('e_sim_inventory')
+      .select('iccid')
+      .eq('id', esim.id)
+      .single()
+      .then(({data}) => {
+        if (data) {
+          setEditFormData(prev => ({...prev, iccid: data.iccid}));
+        }
+      });
+
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from('e_sim_inventory')
+        .update({
+          product_id: editFormData.productId,
+          iccid: editFormData.iccid,
+          smdp_address: editFormData.smdpAddress,
+          activation_code: editFormData.activationCode,
+          status: editFormData.status,
+          expiry_date: new Date(editFormData.expiryDate).toISOString()
+        })
+        .eq('id', editFormData.id);
+
+      if (error) throw error;
+
+      setIsEditModalOpen(false);
+      fetchData();
+    } catch (error: any) {
+      console.error('Error updating eSIM:', error);
+      alert('更新失敗: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -227,8 +333,18 @@ export default function EsimInventoryPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{esim.expiryDate}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-4">編輯</button>
-                      <button className="text-red-600 hover:text-red-900">刪除</button>
+                      <button 
+                        onClick={() => openEditModal(esim)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        編輯
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(esim.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        刪除
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -323,6 +439,109 @@ export default function EsimInventoryPage() {
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50"
                 >
                   {isSubmitting ? '處理中...' : '確認新增'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit eSIM Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">編輯 eSIM 庫存</h2>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">綁定商品</label>
+                  <select 
+                    required
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    value={editFormData.productId}
+                    onChange={(e) => setEditFormData({...editFormData, productId: e.target.value})}
+                  >
+                    <option value="" disabled>請選擇商品</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                  <select 
+                    required
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    value={editFormData.status}
+                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
+                  >
+                    <option value="AVAILABLE">可使用</option>
+                    <option value="SOLD">已售出</option>
+                    <option value="EXPIRED">已過期</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ICCID</label>
+                  <input 
+                    type="text" 
+                    required
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    value={editFormData.iccid}
+                    onChange={(e) => setEditFormData({...editFormData, iccid: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SM-DP+ 位置</label>
+                  <input 
+                    type="text" 
+                    required
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    value={editFormData.smdpAddress}
+                    onChange={(e) => setEditFormData({...editFormData, smdpAddress: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">啟用碼 (Activation Code)</label>
+                  <input 
+                    type="text" 
+                    required
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    value={editFormData.activationCode}
+                    onChange={(e) => setEditFormData({...editFormData, activationCode: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
+                  <input 
+                    type="date" 
+                    required
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    value={editFormData.expiryDate}
+                    onChange={(e) => setEditFormData({...editFormData, expiryDate: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none"
+                >
+                  取消
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50"
+                >
+                  {isSubmitting ? '處理中...' : '儲存變更'}
                 </button>
               </div>
             </form>
