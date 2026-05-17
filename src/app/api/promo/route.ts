@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key';
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +15,8 @@ export async function POST(request: Request) {
     if (!email || !code) {
       return NextResponse.json({ error: 'Email and promo code are required' }, { status: 400 });
     }
+
+    const supabase = getSupabase();
 
     // 1. Get customer by email
     const { data: customer, error: customerError } = await supabase
