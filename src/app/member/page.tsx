@@ -249,10 +249,10 @@ export default function MemberCenter() {
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl shadow-inner">
-                       {getFlag(item.products.country)}
+                       {getFlag(item.products?.country || '')}
                     </div>
                     <div>
-                      <div className="font-bold text-lg">{item.products.name}</div>
+                      <div className="font-bold text-lg">{item.products?.name || '已下架商品'}</div>
                       <div className="text-xs text-white/40 mb-0.5">#{order.id.split('-')[0].toUpperCase()}</div>
                       <div className="text-xs text-white/40">訂購：{new Date(order.created_at).toLocaleString()}</div>
                     </div>
@@ -326,11 +326,11 @@ export default function MemberCenter() {
                 <div className="flex justify-between border-t border-white/5 pt-4 mb-5 px-2">
                   <div>
                     <div className="text-xs text-white/40 mb-1">方案</div>
-                    <div className="font-bold text-sm text-white/90">{item.products.data_amount || 'N/A'}</div>
+                    <div className="font-bold text-sm text-white/90">{item.products?.data_amount || 'N/A'}</div>
                   </div>
                   <div>
                     <div className="text-xs text-white/40 mb-1">天數</div>
-                    <div className="font-bold text-sm text-white/90">{item.products.validity_days} 天</div>
+                    <div className="font-bold text-sm text-white/90">{item.products?.validity_days || '-'} 天</div>
                   </div>
                   <div>
                     <div className="text-xs text-white/40 mb-1">金額</div>

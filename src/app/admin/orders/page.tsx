@@ -280,10 +280,10 @@ export default function OrdersPage() {
                                         </p>
                                         {oi.e_sim_inventory && (
                                           <div className="text-xs text-white/40 font-mono space-y-0.5 mt-1">
-                                            <p>ICCID: {oi.e_sim_inventory.iccid || '-'}</p>
-                                            <p>SMDP: {oi.e_sim_inventory.smdp_address || '-'}</p>
-                                            <p>啟用碼: {oi.e_sim_inventory.activation_code || '-'}</p>
-                                            <p>eSIM 狀態: {oi.e_sim_inventory.status || '-'}</p>
+                                            <p>ICCID: {oi.e_sim_inventory?.iccid || '-'}</p>
+                                            <p>SMDP: {oi.e_sim_inventory?.smdp_address || '-'}</p>
+                                            <p>啟用碼: {oi.e_sim_inventory?.activation_code || '-'}</p>
+                                            <p>eSIM 狀態: {oi.e_sim_inventory?.status || '-'}</p>
                                           </div>
                                         )}
                                         {oi.note && <p className="text-white/40 text-xs mt-1">備註: {oi.note}</p>}
