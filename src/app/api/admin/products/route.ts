@@ -54,7 +54,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, country, data_limit, validity_days, price, is_active } = body;
+    const { name, country, data_amount, validity_days, price, is_active } = body;
 
     if (!name || !country || !validity_days || price === undefined) {
       return NextResponse.json({ error: '缺少必要欄位 (name, country, validity_days, price)' }, { status: 400 });
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       .insert({
         name,
         country,
-        data_limit: data_limit || null,
+        data_amount: data_amount || null,
         validity_days: Number(validity_days),
         price: Number(price),
         is_active: is_active !== undefined ? is_active : true
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, country, data_limit, validity_days, price, is_active } = body;
+    const { id, name, country, data_amount, validity_days, price, is_active } = body;
 
     if (!id) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
@@ -96,7 +96,7 @@ export async function PUT(request: Request) {
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (country !== undefined) updateData.country = country;
-    if (data_limit !== undefined) updateData.data_limit = data_limit;
+    if (data_amount !== undefined) updateData.data_amount = data_amount;
     if (validity_days !== undefined) updateData.validity_days = Number(validity_days);
     if (price !== undefined) updateData.price = Number(price);
     if (is_active !== undefined) updateData.is_active = is_active;

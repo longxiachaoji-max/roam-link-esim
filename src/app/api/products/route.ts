@@ -48,7 +48,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, country, data_limit, validity_days, price')
+      .select('id, name, country, data_amount, validity_days, price')
       .eq('is_active', true)
       .order('country', { ascending: true })
       .order('price', { ascending: true });
@@ -83,7 +83,7 @@ export async function GET() {
 
       grouped[item.country].plans.push({
         id: item.id,
-        data: item.data_limit || '標準方案',
+        data: item.data_amount || '標準方案',
         days: `${item.validity_days}天`,
         price: Number(item.price)
       });

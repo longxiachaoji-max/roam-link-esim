@@ -6,7 +6,7 @@ interface Product {
   id: string;
   name: string;
   country: string;
-  data_limit: string | null;
+  data_amount: string | null;
   validity_days: number;
   price: number;
   is_active: boolean;
@@ -34,7 +34,7 @@ export default function ProductsPage() {
     country: '日本',
     customCountry: '',
     useCustomCountry: false,
-    data_limit: '',
+    data_amount: '',
     validity_days: '',
     price: '',
     is_active: true
@@ -78,7 +78,7 @@ export default function ProductsPage() {
         body: JSON.stringify({
           name: formData.name,
           country,
-          data_limit: formData.data_limit || null,
+          data_amount: formData.data_amount || null,
           validity_days: Number(formData.validity_days),
           price: Number(formData.price),
           is_active: formData.is_active
@@ -105,7 +105,7 @@ export default function ProductsPage() {
       country: isCommon ? product.country : '日本',
       customCountry: isCommon ? '' : product.country,
       useCustomCountry: !isCommon,
-      data_limit: product.data_limit || '',
+      data_amount: product.data_amount || '',
       validity_days: String(product.validity_days),
       price: String(product.price),
       is_active: product.is_active
@@ -125,7 +125,7 @@ export default function ProductsPage() {
           id: editFormData.id,
           name: editFormData.name,
           country,
-          data_limit: editFormData.data_limit || null,
+          data_amount: editFormData.data_amount || null,
           validity_days: Number(editFormData.validity_days),
           price: Number(editFormData.price),
           is_active: editFormData.is_active
@@ -229,13 +229,13 @@ export default function ProductsPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-white/70 mb-1">流量規格 (data_limit)</label>
+        <label className="block text-sm font-medium text-white/70 mb-1">流量規格 (data_amount)</label>
         <input
           type="text"
           placeholder="例如：每日 1GB、總量 10GB、吃到飽"
           className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
-          value={data.data_limit}
-          onChange={(e) => setData({ ...data, data_limit: e.target.value })}
+          value={data.data_amount}
+          onChange={(e) => setData({ ...data, data_amount: e.target.value })}
         />
       </div>
 
@@ -365,7 +365,7 @@ export default function ProductsPage() {
                   <tr key={product.id} className="hover:bg-white/5 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90 font-medium">{product.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90">{product.country}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{product.data_limit || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{product.data_amount || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{product.validity_days}天</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90 font-medium">NT${product.price}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
