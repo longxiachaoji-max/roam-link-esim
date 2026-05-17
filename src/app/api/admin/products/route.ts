@@ -8,12 +8,12 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// GET - 取得所有商品（含 is_active=false），按 country 排序
+// GET - 取得所有商品，按 country 排序
 export async function GET() {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('id, name, description, price, country, data_amount, validity_days, created_at')
       .order('country', { ascending: true })
       .order('price', { ascending: true });
 
@@ -54,7 +54,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, country, data_amount, validity_days, price, is_active } = body;
+    const { name, country, data_amount, validity_days, price, description } = body;
 
     if (!name || !country || !validity_days || price === undefined) {
       return NextResponse.json({ error: '缺少必要欄位 (name, country, validity_days, price)' }, { status: 400 });
@@ -65,10 +65,10 @@ export async function POST(request: Request) {
       .insert({
         name,
         country,
-        data_amount: data_amount || null,
+        data_amount: data_amount || '',
         validity_days: Number(validity_days),
         price: Number(price),
-        is_active: is_active !== undefined ? is_active : true
+        description: description || null
       })
       .select()
       .single();
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, country, data_amount, validity_days, price, is_active } = body;
+    const { id, name, country, data_amount, validity_days, price, description } = body;
 
     if (!id) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
@@ -99,7 +99,7 @@ export async function PUT(request: Request) {
     if (data_amount !== undefined) updateData.data_amount = data_amount;
     if (validity_days !== undefined) updateData.validity_days = Number(validity_days);
     if (price !== undefined) updateData.price = Number(price);
-    if (is_active !== undefined) updateData.is_active = is_active;
+    if (description !== undefined) updateData.description = description;
 
     const { error } = await supabase
       .from('products')
@@ -126,7 +126,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
     }
 
-    // 查詢該商品下的庫存數量以回傳警告資訊
     const { data: inventoryData } = await supabase
       .from('e_sim_inventory')
       .select('id')
@@ -134,7 +133,6 @@ export async function DELETE(request: Request) {
 
     const inventoryCount = inventoryData?.length || 0;
 
-    // 先清除 order_items 中參照到該商品庫存的 inventory_id
     if (inventoryCount > 0) {
       const inventoryIds = inventoryData!.map((inv: any) => inv.id);
       await supabase
@@ -143,7 +141,6 @@ export async function DELETE(request: Request) {
         .in('inventory_id', inventoryIds);
     }
 
-    // 刪除商品（e_sim_inventory 會因 ON DELETE CASCADE 而自動刪除）
     const { error } = await supabase
       .from('products')
       .delete()

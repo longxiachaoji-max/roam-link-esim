@@ -6,10 +6,10 @@ interface Product {
   id: string;
   name: string;
   country: string;
+  description: string | null;
   data_amount: string | null;
   validity_days: number;
   price: number;
-  is_active: boolean;
   created_at: string;
   stock: { available: number; total: number };
 }
@@ -37,7 +37,7 @@ export default function ProductsPage() {
     data_amount: '',
     validity_days: '',
     price: '',
-    is_active: true
+    description: ''
   };
 
   const [formData, setFormData] = useState(emptyForm);
@@ -61,10 +61,9 @@ export default function ProductsPage() {
     fetchProducts();
   }, []);
 
-  // Stats
   const totalProducts = products.length;
-  const activeProducts = products.filter(p => p.is_active).length;
-  const inactiveProducts = products.filter(p => !p.is_active).length;
+  const withStock = products.filter(p => p.stock.available > 0).length;
+  const noStock = products.filter(p => p.stock.available === 0).length;
 
   // --- Add ---
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -81,7 +80,7 @@ export default function ProductsPage() {
           data_amount: formData.data_amount || null,
           validity_days: Number(formData.validity_days),
           price: Number(formData.price),
-          is_active: formData.is_active
+          description: formData.description || null
         })
       });
       const json = await res.json();
@@ -108,7 +107,7 @@ export default function ProductsPage() {
       data_amount: product.data_amount || '',
       validity_days: String(product.validity_days),
       price: String(product.price),
-      is_active: product.is_active
+      description: product.description || ''
     });
     setIsEditModalOpen(true);
   };
@@ -128,7 +127,7 @@ export default function ProductsPage() {
           data_amount: editFormData.data_amount || null,
           validity_days: Number(editFormData.validity_days),
           price: Number(editFormData.price),
-          is_active: editFormData.is_active
+          description: editFormData.description || null
         })
       });
       const json = await res.json();
@@ -139,22 +138,6 @@ export default function ProductsPage() {
       alert('更新失敗: ' + err.message);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  // --- Toggle Active ---
-  const toggleActive = async (product: Product) => {
-    try {
-      const res = await fetch('/api/admin/products', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: product.id, is_active: !product.is_active })
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error || '更新失敗');
-      fetchProducts();
-    } catch (err: any) {
-      alert('操作失敗: ' + err.message);
     }
   };
 
@@ -229,7 +212,7 @@ export default function ProductsPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-white/70 mb-1">流量規格 (data_amount)</label>
+        <label className="block text-sm font-medium text-white/70 mb-1">流量規格</label>
         <input
           type="text"
           placeholder="例如：每日 1GB、總量 10GB、吃到飽"
@@ -267,16 +250,15 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <label className="block text-sm font-medium text-white/70">上架狀態</label>
-        <button
-          type="button"
-          onClick={() => setData({ ...data, is_active: !data.is_active })}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${data.is_active ? 'bg-green-500' : 'bg-gray-600'}`}
-        >
-          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${data.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
-        </button>
-        <span className="text-sm text-white/50">{data.is_active ? '上架中' : '已下架'}</span>
+      <div>
+        <label className="block text-sm font-medium text-white/70 mb-1">商品描述（選填）</label>
+        <input
+          type="text"
+          placeholder="例如：高速穩定，暢遊日本"
+          className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
+          value={data.description}
+          onChange={(e) => setData({ ...data, description: e.target.value })}
+        />
       </div>
     </div>
   );
@@ -317,20 +299,20 @@ export default function ProductsPage() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-white/50">上架中</p>
-            <p className="text-2xl font-bold text-white">{activeProducts}</p>
+            <p className="text-sm font-medium text-white/50">有庫存</p>
+            <p className="text-2xl font-bold text-white">{withStock}</p>
           </div>
         </div>
 
         <div className="bg-white/5 rounded-xl border border-white/10 p-6 flex items-center backdrop-blur-sm">
           <div className="p-3 rounded-full bg-red-500/20 text-red-400 mr-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-white/50">已下架</p>
-            <p className="text-2xl font-bold text-white">{inactiveProducts}</p>
+            <p className="text-sm font-medium text-white/50">無庫存</p>
+            <p className="text-2xl font-bold text-white">{noStock}</p>
           </div>
         </div>
       </div>
@@ -347,18 +329,17 @@ export default function ProductsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">天數</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">價格</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">庫存</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-white/50 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">尚未建立任何商品</td>
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-white/50">尚未建立任何商品</td>
                 </tr>
               ) : (
                 products.map((product) => (
@@ -373,18 +354,6 @@ export default function ProductsPage() {
                         {product.stock.available}
                       </span>
                       <span className="text-white/30">/{product.stock.total}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => toggleActive(product)}
-                        className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer transition-colors ${
-                          product.is_active
-                            ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
-                            : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
-                        }`}
-                      >
-                        {product.is_active ? '上架中' : '已下架'}
-                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
@@ -487,7 +456,7 @@ export default function ProductsPage() {
               確定要刪除這個商品嗎？
             </p>
             <p className="text-red-400 text-sm mb-6">
-              ⚠️ 注意：刪除商品會<strong>連帶刪除</strong>該商品下所有的 eSIM 庫存（ON DELETE CASCADE）。此操作無法復原。
+              ⚠️ 注意：刪除商品會<strong>連帶刪除</strong>該商品下所有的 eSIM 庫存。此操作無法復原。
             </p>
             <div className="flex justify-end space-x-3">
               <button
