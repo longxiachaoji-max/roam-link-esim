@@ -12,6 +12,7 @@ export default function Home() {
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   // TopUp modal moved to /member
   const [toastMsg, setToastMsg] = useState("");
   
@@ -328,7 +329,7 @@ export default function Home() {
       {isLoginOpen && (
         <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
           <div className="bg-[#1A1A2E] w-full max-w-sm rounded-3xl p-8 shadow-2xl relative">
-            <button onClick={() => setIsLoginOpen(false)} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
+            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); }} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
             
             <h3 className="text-2xl font-black mb-6 text-center">{isRegisterMode ? '建立新帳號' : '會員登入'}</h3>
             
@@ -349,26 +350,62 @@ export default function Home() {
                 </div>
               )}
               
-              {!isRegisterMode && (
+              {!isRegisterMode && !isForgotPassword && (
                   <div className="text-right">
-                      <a href="#" className="text-xs text-cyan hover:underline">忘記密碼？</a>
+                      <button type="button" onClick={() => setIsForgotPassword(true)} className="text-xs text-cyan hover:underline">忘記密碼？</button>
                   </div>
               )}
 
-              <button type="submit" className="w-full bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 rounded-xl hover:-translate-y-1 transition-all mt-4">
-                {isRegisterMode ? '註冊' : '登入'}
-              </button>
+              {!isForgotPassword && (
+                <button type="submit" className="w-full bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 rounded-xl hover:-translate-y-1 transition-all mt-4">
+                  {isRegisterMode ? '註冊' : '登入'}
+                </button>
+              )}
             </form>
 
-            <div className="mt-6 text-center text-sm text-muted">
-              {isRegisterMode ? '已經有帳號了？' : '還沒有帳號？'}
-              <button 
-                onClick={() => setIsRegisterMode(!isRegisterMode)} 
-                className="text-cyan font-bold ml-2 hover:underline"
-              >
-                {isRegisterMode ? '返回登入' : '立即註冊'}
-              </button>
-            </div>
+            {/* 忘記密碼表單 */}
+            {isForgotPassword && (
+              <div className="mt-2">
+                <p className="text-sm text-muted mb-4">輸入您的電子郵件，我們將寄送重設密碼連結給您。</p>
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    if (!authEmail) { showToast('⚠️ 請先輸入 Email'); return; }
+                    const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+                      redirectTo: `${window.location.origin}/member`
+                    });
+                    if (error) {
+                      showToast('❌ ' + error.message);
+                    } else {
+                      showToast('✅ 重設密碼信件已寄出，請檢查信箱');
+                      setIsForgotPassword(false);
+                    }
+                  }}
+                  className="w-full bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 rounded-xl hover:-translate-y-1 transition-all"
+                >
+                  寄送重設密碼信
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setIsForgotPassword(false)} 
+                  className="w-full text-sm text-muted hover:text-white mt-3 py-2"
+                >
+                  返回登入
+                </button>
+              </div>
+            )}
+
+            {!isForgotPassword && (
+              <div className="mt-6 text-center text-sm text-muted">
+                {isRegisterMode ? '已經有帳號了？' : '還沒有帳號？'}
+                <button 
+                  onClick={() => setIsRegisterMode(!isRegisterMode)} 
+                  className="text-cyan font-bold ml-2 hover:underline"
+                >
+                  {isRegisterMode ? '返回登入' : '立即註冊'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -29,6 +29,7 @@ export default function AdminCustomersPage() {
   const [addAmount, setAddAmount] = useState("");
   const [reason, setReason] = useState("");
   const [toastMsg, setToastMsg] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const filteredCustomers = customers.filter(c => 
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -42,6 +43,8 @@ export default function AdminCustomersPage() {
 
   const handleAddTokens = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return; // 防連點
+    
     const amount = parseInt(addAmount);
     
     if (isNaN(amount) || amount === 0) {
@@ -55,6 +58,7 @@ export default function AdminCustomersPage() {
     }
 
     if (!selectedCustomer) return;
+    setIsSubmitting(true);
 
     try {
       const res = await fetch('/api/admin/customers', {
@@ -92,6 +96,8 @@ export default function AdminCustomersPage() {
       fetchCustomers();
     } catch (err: any) {
       showToast("❌ " + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -269,10 +275,11 @@ export default function AdminCustomersPage() {
               
               <button 
                 type="submit" 
-                className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className={`w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all ${isSubmitting ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-yellow to-[#f5d061] text-dark hover:-translate-y-1'}`}
               >
                 <Zap size={20} />
-                確認調整餘額
+                {isSubmitting ? '處理中...' : '確認調整餘額'}
               </button>
             </form>
           </div>
