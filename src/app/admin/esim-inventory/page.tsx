@@ -88,13 +88,13 @@ export default function EsimInventoryPage() {
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case '可使用':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-500/20 text-green-400 border border-green-500/30';
       case '已售出':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
       case '已過期':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-500/20 text-red-400 border border-red-500/30';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
     }
   };
 
@@ -241,10 +241,10 @@ export default function EsimInventoryPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">eSIM 庫存管理</h1>
+        <h1 className="text-2xl font-semibold text-white">eSIM 庫存管理</h1>
         <button 
           onClick={() => setIsAddModalOpen(true)}
-          className="bg-sky-400 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-sky-500 transition-colors shadow-sm flex items-center border-2 border-white"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
@@ -255,93 +255,93 @@ export default function EsimInventoryPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="p-3 rounded-full bg-blue-50 text-blue-600 mr-4">
+        <div className="bg-white/5 rounded-xl border border-white/10 p-6 flex items-center backdrop-blur-sm">
+          <div className="p-3 rounded-full bg-blue-500/20 text-blue-400 mr-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">總庫存量</p>
-            <p className="text-2xl font-bold text-gray-900">{esims.length}</p>
+            <p className="text-sm font-medium text-white/50">總庫存量</p>
+            <p className="text-2xl font-bold text-white">{esims.length}</p>
           </div>
         </div>
         
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="p-3 rounded-full bg-green-50 text-green-600 mr-4">
+        <div className="bg-white/5 rounded-xl border border-white/10 p-6 flex items-center backdrop-blur-sm">
+          <div className="p-3 rounded-full bg-green-500/20 text-green-400 mr-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">可使用</p>
-            <p className="text-2xl font-bold text-gray-900">{esims.filter(e => e.status === '可使用').length}</p>
+            <p className="text-sm font-medium text-white/50">可使用</p>
+            <p className="text-2xl font-bold text-white">{esims.filter(e => e.status === '可使用').length}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-          <div className="p-3 rounded-full bg-red-50 text-red-600 mr-4">
+        <div className="bg-white/5 rounded-xl border border-white/10 p-6 flex items-center backdrop-blur-sm">
+          <div className="p-3 rounded-full bg-red-500/20 text-red-400 mr-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">已售出</p>
-            <p className="text-2xl font-bold text-gray-900">{esims.filter(e => e.status === '已售出').length}</p>
+            <p className="text-sm font-medium text-white/50">已售出</p>
+            <p className="text-2xl font-bold text-white">{esims.filter(e => e.status === '已售出').length}</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg overflow-hidden">
+      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-white/10">
+            <thead className="bg-white/5">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SM-DP+ 位置</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">啟用碼</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">綁定商品</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">狀態</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">到期日</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">SM-DP+ 位置</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">啟用碼</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">綁定商品</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">到期日</th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-white/50 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-white/50">
                     載入中...
                   </td>
                 </tr>
               ) : esims.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-white/50">
                     庫存中找不到任何 eSIM。
                   </td>
                 </tr>
               ) : (
                 esims.map((esim) => (
-                  <tr key={esim.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{esim.smdpAddress}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono truncate max-w-[200px]" title={esim.activationCode}>
+                  <tr key={esim.id} className="hover:bg-white/5 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90">{esim.smdpAddress}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60 font-mono truncate max-w-[200px]" title={esim.activationCode}>
                       {esim.activationCode}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{esim.boundProduct}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90">{esim.boundProduct}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(esim.status)}`}>
                         {esim.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{esim.expiryDate}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{esim.expiryDate}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button 
                         onClick={() => openEditModal(esim)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
+                        className="text-blue-400 hover:text-blue-300 mr-4 transition-colors"
                       >
                         編輯
                       </button>
                       <button 
                         onClick={() => handleDelete(esim.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-400 hover:text-red-300 transition-colors"
                       >
                         刪除
                       </button>
