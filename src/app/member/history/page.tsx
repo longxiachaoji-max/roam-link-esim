@@ -64,8 +64,16 @@ export default function MemberHistoryPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-white">My Transaction History</h1>
+    <div className="p-8 max-w-4xl mx-auto relative">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-white">消費紀錄 (Transaction History)</h1>
+        <button 
+          onClick={() => window.history.back()} 
+          className="bg-white/10 hover:bg-white/20 text-white w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+        >
+          ✕
+        </button>
+      </div>
       <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-white">

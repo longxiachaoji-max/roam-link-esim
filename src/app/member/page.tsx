@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { X, MoreHorizontal, QrCode, Smartphone, CreditCard } from "lucide-react";
 import Link from 'next/link';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function MemberCenter() {
   const [user, setUser] = useState<any>(null);
@@ -233,9 +234,8 @@ export default function MemberCenter() {
           <div className="bg-[#1A1A2E] w-full max-w-xs rounded-[2rem] p-8 shadow-2xl relative border border-white/10 flex flex-col items-center">
             <button onClick={() => setQrCodeData(null)} className="absolute top-5 right-5 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
             <h3 className="text-xl font-bold mb-6">掃描加入 eSIM</h3>
-            <div className="bg-white p-4 rounded-2xl mb-6">
-               {/* 這裡先用 Icon 模擬 QR Code，之後可安裝 qrcode.react 套件替換 */}
-               <QrCode size={200} className="text-black" />
+            <div className="bg-white p-4 rounded-2xl mb-6 flex justify-center items-center w-[232px] h-[232px]">
+               <QRCodeSVG value={qrCodeData} size={200} />
             </div>
             <p className="text-xs text-white/50 text-center break-all w-full mb-2">LPA 碼: {qrCodeData}</p>
             <button onClick={() => {
