@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, description, price, country, data_amount, validity_days, created_at')
+      .select('id, name, description, price, country, data_amount, validity_days, is_active, created_at')
       .order('country', { ascending: true })
       .order('price', { ascending: true });
 
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, country, data_amount, validity_days, price, description } = body;
+    const { id, name, country, data_amount, validity_days, price, description, is_active } = body;
 
     if (!id) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
@@ -100,6 +100,7 @@ export async function PUT(request: Request) {
     if (validity_days !== undefined) updateData.validity_days = Number(validity_days);
     if (price !== undefined) updateData.price = Number(price);
     if (description !== undefined) updateData.description = description;
+    if (is_active !== undefined) updateData.is_active = is_active;
 
     const { error } = await supabase
       .from('products')
@@ -132,6 +133,12 @@ export async function DELETE(request: Request) {
       .eq('product_id', id);
 
     const inventoryCount = inventoryData?.length || 0;
+
+    // 清除 order_items 中的 product_id 參照 (FK 已改為 ON DELETE SET NULL，但保險起見先清)
+    await supabase
+      .from('order_items')
+      .update({ product_id: null })
+      .eq('product_id', id);
 
     if (inventoryCount > 0) {
       const inventoryIds = inventoryData!.map((inv: any) => inv.id);

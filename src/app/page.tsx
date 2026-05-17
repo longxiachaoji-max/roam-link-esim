@@ -372,7 +372,7 @@ export default function Home() {
                   onClick={async () => {
                     if (!authEmail) { showToast('⚠️ 請先輸入 Email'); return; }
                     const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
-                      redirectTo: `${window.location.origin}/member`
+                      redirectTo: `${window.location.origin}/auth/reset-password`
                     });
                     if (error) {
                       showToast('❌ ' + error.message);

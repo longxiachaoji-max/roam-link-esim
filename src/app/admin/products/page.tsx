@@ -10,6 +10,7 @@ interface Product {
   data_amount: string | null;
   validity_days: number;
   price: number;
+  is_active: boolean;
   created_at: string;
   stock: { available: number; total: number };
 }
@@ -62,8 +63,23 @@ export default function ProductsPage() {
   }, []);
 
   const totalProducts = products.length;
-  const withStock = products.filter(p => p.stock.available > 0).length;
-  const noStock = products.filter(p => p.stock.available === 0).length;
+  const activeProducts = products.filter(p => p.is_active).length;
+  const inactiveProducts = products.filter(p => !p.is_active).length;
+
+  const handleToggleActive = async (product: Product) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: product.id, is_active: !product.is_active })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '操作失敗');
+      fetchProducts();
+    } catch (err: any) {
+      alert('操作失敗: ' + err.message);
+    }
+  };
 
   // --- Add ---
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -299,8 +315,8 @@ export default function ProductsPage() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-white/50">有庫存</p>
-            <p className="text-2xl font-bold text-white">{withStock}</p>
+            <p className="text-sm font-medium text-white/50">上架中</p>
+            <p className="text-2xl font-bold text-white">{activeProducts}</p>
           </div>
         </div>
 
@@ -311,8 +327,8 @@ export default function ProductsPage() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-white/50">無庫存</p>
-            <p className="text-2xl font-bold text-white">{noStock}</p>
+            <p className="text-sm font-medium text-white/50">已下架</p>
+            <p className="text-2xl font-bold text-white">{inactiveProducts}</p>
           </div>
         </div>
       </div>
@@ -329,17 +345,18 @@ export default function ProductsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">天數</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">價格</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">庫存</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-white/50 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
+                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-white/50">尚未建立任何商品</td>
+                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">尚未建立任何商品</td>
                 </tr>
               ) : (
                 products.map((product) => (
@@ -354,6 +371,15 @@ export default function ProductsPage() {
                         {product.stock.available}
                       </span>
                       <span className="text-white/30">/{product.stock.total}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <button
+                        onClick={() => handleToggleActive(product)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${product.is_active ? 'bg-green-500' : 'bg-gray-600'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${product.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                      <span className="ml-2 text-xs text-white/40">{product.is_active ? '上架' : '下架'}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button

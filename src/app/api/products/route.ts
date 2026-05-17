@@ -49,6 +49,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('products')
       .select('id, name, country, data_amount, validity_days, price')
+      .eq('is_active', true)
       .order('country', { ascending: true })
       .order('price', { ascending: true });
 

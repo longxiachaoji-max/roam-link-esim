@@ -20,6 +20,10 @@ export default function MemberCenter() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
 
+  // Name editing
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameText, setNameText] = useState("");
+
   // Delete confirm
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -144,7 +148,57 @@ export default function MemberCenter() {
               {user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
             </div>
             <div>
-              <div className="font-bold text-lg">{user?.name || '使用者'}</div>
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={nameText}
+                    onChange={(e) => setNameText(e.target.value)}
+                    className="bg-white/5 border border-white/20 rounded-lg px-2 py-1 text-white text-base font-bold w-32 focus:outline-none focus:border-[#F05A28]/50"
+                    autoFocus
+                    placeholder="輸入名稱"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!nameText.trim()) return;
+                      try {
+                        const res = await fetch('/api/member/profile', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email: user.email, name: nameText })
+                        });
+                        const json = await res.json();
+                        if (!res.ok || json.error) throw new Error(json.error);
+                        setUser({ ...user, name: nameText.trim() });
+                        setIsEditingName(false);
+                        showToast('✅ 名稱已更新');
+                      } catch (err: any) {
+                        showToast('❌ ' + err.message);
+                      }
+                    }}
+                    className="p-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={() => setIsEditingName(false)}
+                    className="p-1.5 bg-white/5 hover:bg-white/10 text-white/50 rounded-lg transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="font-bold text-lg">{user?.name || '使用者'}</div>
+                  <button
+                    onClick={() => { setNameText(user?.name || ''); setIsEditingName(true); }}
+                    className="p-1 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 rounded-lg transition-colors"
+                    title="變更名稱"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                </div>
+              )}
               <div className="text-sm text-white/50">{user?.email}</div>
             </div>
           </div>
