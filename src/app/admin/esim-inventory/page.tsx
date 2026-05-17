@@ -32,6 +32,7 @@ export default function EsimInventoryPage() {
     iccid: '',
     smdpAddress: 'LPA:1$smdp.plus.com', // 預設常用的 SM-DP+
     activationCode: '',
+    cost: '',
     expiryDate: '2026-12-31'
   });
 
@@ -124,6 +125,7 @@ export default function EsimInventoryPage() {
     iccid: '',
     smdpAddress: '',
     activationCode: '',
+    cost: '',
     status: '',
     expiryDate: ''
   });
@@ -155,17 +157,18 @@ export default function EsimInventoryPage() {
       iccid: '', // Note: we didn't fetch iccid into EsimItem initially, so we have to re-fetch or just handle what we have
       smdpAddress: esim.smdpAddress,
       activationCode: esim.activationCode,
+      cost: '',
       status: rawStatus,
       expiryDate: formattedDate
     });
     
-    // Fetch the specific item to get the real ICCID via API
+    // Fetch the specific item to get the real ICCID and cost via API
     fetch('/api/admin/esim-inventory')
       .then(res => res.json())
       .then(json => {
         const match = json.inventory?.find((inv: any) => inv.id === esim.id);
         if (match) {
-          setEditFormData(prev => ({...prev, iccid: match.iccid || ''}));
+          setEditFormData(prev => ({...prev, iccid: match.iccid || '', cost: match.cost ? String(match.cost) : '0'}));
         }
       });
 
@@ -187,7 +190,8 @@ export default function EsimInventoryPage() {
           smdp_address: editFormData.smdpAddress,
           activation_code: editFormData.activationCode,
           status: editFormData.status,
-          expiry_date: editFormData.expiryDate
+          expiry_date: editFormData.expiryDate,
+          cost: editFormData.cost
         })
       });
       const json = await res.json();
@@ -216,7 +220,8 @@ export default function EsimInventoryPage() {
           iccid: formData.iccid,
           smdp_address: formData.smdpAddress,
           activation_code: formData.activationCode,
-          expiry_date: formData.expiryDate
+          expiry_date: formData.expiryDate,
+          cost: formData.cost
         })
       });
       const json = await res.json();
@@ -227,6 +232,7 @@ export default function EsimInventoryPage() {
       setFormData({
         ...formData,
         iccid: '',
+        cost: '',
         activationCode: '' // 只清空輸入碼的部分，保留商品和日期的預設
       });
       fetchData(); // 重新整理列表
@@ -423,6 +429,18 @@ export default function EsimInventoryPage() {
                     onChange={(e) => setFormData({...formData, expiryDate: e.target.value})}
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">成本 (NT$)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    step="1"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
+                    placeholder="例如: 150"
+                    value={formData.cost}
+                    onChange={(e) => setFormData({...formData, cost: e.target.value})}
+                  />
+                </div>
               </div>
               <div className="mt-6 flex justify-end space-x-3">
                 <button 
@@ -523,6 +541,18 @@ export default function EsimInventoryPage() {
                     className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.expiryDate}
                     onChange={(e) => setEditFormData({...editFormData, expiryDate: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">成本 (NT$)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    step="1"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
+                    placeholder="例如: 150"
+                    value={editFormData.cost}
+                    onChange={(e) => setEditFormData({...editFormData, cost: e.target.value})}
                   />
                 </div>
               </div>

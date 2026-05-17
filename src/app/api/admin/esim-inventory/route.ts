@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('e_sim_inventory')
-      .select('id, iccid, smdp_address, activation_code, status, expiry_date, product_id, products(name)')
+      .select('id, iccid, smdp_address, activation_code, status, expiry_date, cost, product_id, products(name)')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -36,12 +36,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '缺少必要欄位 (product_id, smdp_address, activation_code, expiry_date)' }, { status: 400 });
     }
 
+    const { cost } = body;
     const insertData: any = {
       product_id,
       smdp_address,
       activation_code,
       status: 'AVAILABLE',
       iccid: (iccid && iccid.trim()) ? iccid.trim() : null,
+      cost: cost !== undefined && cost !== '' ? Number(cost) : 0,
       expiry_date: new Date(expiry_date).toISOString()
     };
 
@@ -71,16 +73,20 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
     }
 
+    const { cost } = body;
+    const updateObj: any = {
+      product_id,
+      iccid: (iccid && iccid.trim()) ? iccid.trim() : null,
+      smdp_address,
+      activation_code,
+      status,
+      expiry_date: new Date(expiry_date).toISOString()
+    };
+    if (cost !== undefined) updateObj.cost = cost !== '' ? Number(cost) : 0;
+
     const { error } = await supabase
       .from('e_sim_inventory')
-      .update({
-        product_id,
-        iccid: (iccid && iccid.trim()) ? iccid.trim() : null,
-        smdp_address,
-        activation_code,
-        status,
-        expiry_date: new Date(expiry_date).toISOString()
-      })
+      .update(updateObj)
       .eq('id', id);
 
     if (error) {

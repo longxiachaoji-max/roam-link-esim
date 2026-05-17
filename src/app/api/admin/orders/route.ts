@@ -40,7 +40,8 @@ export async function GET() {
             iccid,
             smdp_address,
             activation_code,
-            status
+            status,
+            cost
           )
         )
       `)

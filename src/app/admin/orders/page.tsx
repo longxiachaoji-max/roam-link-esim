@@ -7,6 +7,7 @@ interface ESimInventory {
   smdp_address: string | null;
   activation_code: string | null;
   status: string | null;
+  cost: number | null;
 }
 
 interface Product {
@@ -95,6 +96,30 @@ export default function OrdersPage() {
   const completedOrders = orders.filter(o => o.order_status === 'COMPLETED').length;
   const pendingOrders = orders.filter(o => o.order_status === 'PENDING').length;
 
+  // 計算毛利
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const calcProfit = (filterFn: (d: Date) => boolean) => {
+    let revenue = 0;
+    let cost = 0;
+    for (const order of orders) {
+      const orderDate = new Date(order.created_at);
+      if (!filterFn(orderDate)) continue;
+      // 營收 = total_amount (現金) + tokens_used (代幣折抵)
+      revenue += Number(order.total_amount || 0) + Number(order.tokens_used || 0);
+      // 成本 = 加總各 order_item 的 eSIM 成本
+      for (const item of order.order_items || []) {
+        cost += Number(item.e_sim_inventory?.cost || 0);
+      }
+    }
+    return { revenue, cost, profit: revenue - cost };
+  };
+
+  const monthlyProfit = calcProfit(d => d.getMonth() === currentMonth && d.getFullYear() === currentYear);
+  const yearlyProfit = calcProfit(d => d.getFullYear() === currentYear);
+
   // Flatten orders to rows: one row per order_item
   const flatRows = orders.flatMap(order =>
     order.order_items.length > 0
@@ -115,6 +140,28 @@ export default function OrdersPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-white">訂單管理</h1>
+      </div>
+
+      {/* Profit Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-900/5 rounded-xl border border-emerald-500/20 p-6 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm font-medium text-emerald-400/70">📅 {currentMonth + 1}月份毛利</p>
+            <p className="text-xs text-white/30">營收 NT${monthlyProfit.revenue.toLocaleString()} − 成本 NT${monthlyProfit.cost.toLocaleString()}</p>
+          </div>
+          <p className={`text-3xl font-black ${monthlyProfit.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            NT$ {monthlyProfit.profit.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-gradient-to-br from-blue-500/10 to-blue-900/5 rounded-xl border border-blue-500/20 p-6 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm font-medium text-blue-400/70">📊 {currentYear} 年度毛利</p>
+            <p className="text-xs text-white/30">營收 NT${yearlyProfit.revenue.toLocaleString()} − 成本 NT${yearlyProfit.cost.toLocaleString()}</p>
+          </div>
+          <p className={`text-3xl font-black ${yearlyProfit.profit >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+            NT$ {yearlyProfit.profit.toLocaleString()}
+          </p>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -220,7 +267,7 @@ export default function OrdersPage() {
                         {truncate(item?.e_sim_inventory?.activation_code, 20)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-white/90 font-medium">
-                        {isFirst ? `NT$${order.total_amount}` : ''}
+                        {isFirst ? `NT$${Number(order.total_amount || 0) + Number(order.tokens_used || 0)}` : ''}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm">
                         {isFirst ? (
