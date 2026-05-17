@@ -204,11 +204,19 @@ export default function Home() {
         <div className="flex items-center gap-4">
             {user ? (
                 <div className="flex items-center gap-3">
-                    <div className="text-right block sm:block cursor-pointer" onClick={() => window.location.href="/member"}>
-                        <div className="text-xs text-muted">{user.email}</div>
-                        <div className="text-sm font-bold text-yellow">💰 NT$ {user.token_balance}</div>
-                    </div>
-                    <button onClick={handleLogout} className="text-xs text-muted hover:text-white border border-white/10 px-2 py-1 rounded">登出</button>
+                    <a 
+                      href="/member"
+                      className="flex items-center gap-2.5 bg-gradient-to-r from-yellow/15 to-coral/10 hover:from-yellow/25 hover:to-coral/20 border border-yellow/30 hover:border-yellow/50 px-4 py-2 rounded-full transition-all hover:-translate-y-0.5 hover:shadow-[0_4px_15px_rgba(245,189,97,0.2)] group"
+                    >
+                      <div className="w-7 h-7 bg-gradient-to-br from-coral to-yellow rounded-full flex items-center justify-center text-xs font-black text-dark shadow-md">
+                        {user.name?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-[10px] text-white/50 leading-tight">會員中心</div>
+                        <div className="text-sm font-black text-yellow leading-tight">NT$ {user.token_balance}</div>
+                      </div>
+                    </a>
+                    <button onClick={handleLogout} className="text-xs text-muted hover:text-white border border-white/10 hover:border-white/30 px-2.5 py-1.5 rounded-full transition-colors">登出</button>
                 </div>
             ) : (
                 <button 
@@ -484,9 +492,9 @@ export default function Home() {
             </div>
             <h3 className="text-2xl font-black mb-2">訂購成功！</h3>
             <p className="text-muted mb-8">您可以在會員中心查看您的 eSIM QR Code 與安裝說明。</p>
-            <button onClick={() => setIsSuccessOpen(false)} className="bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 px-8 rounded-full hover:-translate-y-1 transition-all">
+            <a href="/member" className="inline-block bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 px-8 rounded-full hover:-translate-y-1 transition-all">
               前往會員中心查看
-            </button>
+            </a>
           </div>
         </div>
       )}
