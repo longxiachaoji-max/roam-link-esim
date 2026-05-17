@@ -285,16 +285,16 @@ export default function MemberCenter() {
                 </div>
 
                 {/* Action Buttons */}
-                {!deleted && item.e_sim_inventory && (
+                {item.e_sim_inventory && (
                   <div className="flex gap-3 mb-3">
                      <a 
-                       href={`https://esimsetup.apple.com/esim_activate?smdp_address=${item.e_sim_inventory.smdp_address}&activation_code=${item.e_sim_inventory.activation_code}`}
-                       className="flex-1 bg-[#1a2c3a] border border-cyan/20 hover:bg-cyan/20 text-cyan py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                       href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
+                       className={`flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${deleted ? 'opacity-60' : 'hover:bg-cyan/20 text-cyan'}`}
                      >
                        <Smartphone size={16} /> 一鍵安裝
                      </a>
                      <button 
-                       className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                       className={`flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${deleted ? 'opacity-60' : 'hover:bg-white/10'}`}
                        onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
                      >
                        <QrCode size={16} /> 顯示 QRCODE
