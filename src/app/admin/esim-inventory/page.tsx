@@ -356,11 +356,11 @@ export default function EsimInventoryPage() {
 
       {/* Add eSIM Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-md w-full p-6 text-white">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">新增 eSIM 庫存</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-xl font-bold text-white">新增 eSIM 庫存</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-white/50 hover:text-white transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -369,57 +369,57 @@ export default function EsimInventoryPage() {
             <form onSubmit={handleAddSubmit}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">綁定商品</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">綁定商品</label>
                   <select 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={formData.productId}
                     onChange={(e) => setFormData({...formData, productId: e.target.value})}
                   >
-                    <option value="" disabled>請選擇商品</option>
+                    <option value="" disabled className="text-black">請選擇商品</option>
                     {products.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id} className="text-black">{p.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">ICCID</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">ICCID</label>
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
                     placeholder="例如: 8901234567890123456x"
                     value={formData.iccid}
                     onChange={(e) => setFormData({...formData, iccid: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SM-DP+ 位置</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">SM-DP+ 位置</label>
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={formData.smdpAddress}
                     onChange={(e) => setFormData({...formData, smdpAddress: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">啟用碼 (Activation Code)</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">啟用碼 (Activation Code)</label>
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
                     placeholder="例如: ABCDE-12345"
                     value={formData.activationCode}
                     onChange={(e) => setFormData({...formData, activationCode: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">到期日</label>
                   <input 
                     type="date" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({...formData, expiryDate: e.target.value})}
                   />
@@ -429,14 +429,14 @@ export default function EsimInventoryPage() {
                 <button 
                   type="button" 
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none"
+                  className="px-4 py-2 border border-white/20 rounded-md text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white focus:outline-none transition-colors"
                 >
                   取消
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 transition-colors"
                 >
                   {isSubmitting ? '處理中...' : '確認新增'}
                 </button>
@@ -448,11 +448,11 @@ export default function EsimInventoryPage() {
 
       {/* Edit eSIM Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-md w-full p-6 text-white">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">編輯 eSIM 庫存</h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-xl font-bold text-white">編輯 eSIM 庫存</h2>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-white/50 hover:text-white transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -461,68 +461,68 @@ export default function EsimInventoryPage() {
             <form onSubmit={handleEditSubmit}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">綁定商品</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">綁定商品</label>
                   <select 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.productId}
                     onChange={(e) => setEditFormData({...editFormData, productId: e.target.value})}
                   >
-                    <option value="" disabled>請選擇商品</option>
+                    <option value="" disabled className="text-black">請選擇商品</option>
                     {products.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id} className="text-black">{p.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">狀態</label>
                   <select 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.status}
                     onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
                   >
-                    <option value="AVAILABLE">可使用</option>
-                    <option value="SOLD">已售出</option>
-                    <option value="EXPIRED">已過期</option>
+                    <option value="AVAILABLE" className="text-black">可使用</option>
+                    <option value="SOLD" className="text-black">已售出</option>
+                    <option value="EXPIRED" className="text-black">已過期</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">ICCID</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">ICCID</label>
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.iccid}
                     onChange={(e) => setEditFormData({...editFormData, iccid: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SM-DP+ 位置</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">SM-DP+ 位置</label>
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.smdpAddress}
                     onChange={(e) => setEditFormData({...editFormData, smdpAddress: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">啟用碼 (Activation Code)</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">啟用碼 (Activation Code)</label>
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.activationCode}
                     onChange={(e) => setEditFormData({...editFormData, activationCode: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">到期日</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">到期日</label>
                   <input 
                     type="date" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
+                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.expiryDate}
                     onChange={(e) => setEditFormData({...editFormData, expiryDate: e.target.value})}
                   />
@@ -532,14 +532,14 @@ export default function EsimInventoryPage() {
                 <button 
                   type="button" 
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none"
+                  className="px-4 py-2 border border-white/20 rounded-md text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white focus:outline-none transition-colors"
                 >
                   取消
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 transition-colors"
                 >
                   {isSubmitting ? '處理中...' : '儲存變更'}
                 </button>
