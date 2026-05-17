@@ -4,9 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // 國家 → flag emoji + region 映射
 const COUNTRY_MAP: Record<string, { flag: string; region: string }> = {
@@ -43,9 +43,10 @@ function getCountryInfo(country: string) {
   return COUNTRY_MAP[country] || { flag: '🌍', region: '其他' };
 }
 
-// GET - 公開 API：回傳 is_active=true 的商品，按國家分組
+// GET - 公開 API：回傳 is_active=true 的商品，按國家分組，同流量合併天數選項，依銷量排序
 export async function GET() {
   try {
+    // 1. 取得所有 active 商品
     const { data, error } = await supabase
       .from('products')
       .select('id, name, country, data_amount, validity_days, price')
@@ -61,37 +62,73 @@ export async function GET() {
       return NextResponse.json({ products: [], regions: [] });
     }
 
-    // 按國家分組，格式與前端現有結構相容
+    // 2. 從 order_items 計算各 product_id 銷售次數
+    const salesMap: Record<string, number> = {};
+    const { data: salesData } = await supabase
+      .from('order_items')
+      .select('product_id');
+
+    if (salesData) {
+      for (const row of salesData) {
+        salesMap[row.product_id] = (salesMap[row.product_id] || 0) + 1;
+      }
+    }
+
+    // 3. 按國家分組
     const grouped: Record<string, {
       country: string;
       region: string;
       flag: string;
-      plans: { id: string; data: string; days: string; price: number }[];
+      totalSales: number;
+      plansMap: Record<string, { data: string; options: { id: string; days: number; price: number }[] }>;
     }> = {};
 
     for (const item of data) {
       const { flag, region } = getCountryInfo(item.country);
+      const productSales = salesMap[item.id] || 0;
 
       if (!grouped[item.country]) {
         grouped[item.country] = {
           country: item.country,
           region,
           flag,
-          plans: []
+          totalSales: 0,
+          plansMap: {}
         };
       }
 
-      grouped[item.country].plans.push({
+      grouped[item.country].totalSales += productSales;
+
+      const dataKey = item.data_amount || '標準方案';
+      if (!grouped[item.country].plansMap[dataKey]) {
+        grouped[item.country].plansMap[dataKey] = {
+          data: dataKey,
+          options: []
+        };
+      }
+
+      grouped[item.country].plansMap[dataKey].options.push({
         id: item.id,
-        data: item.data_amount || '標準方案',
-        days: `${item.validity_days}天`,
+        days: item.validity_days,
         price: Number(item.price)
       });
     }
 
-    const products = Object.values(grouped);
+    // 4. 整理輸出格式：options 按 days 排序，國家按 totalSales 降序
+    const products = Object.values(grouped)
+      .map(g => ({
+        country: g.country,
+        flag: g.flag,
+        region: g.region,
+        totalSales: g.totalSales,
+        plans: Object.values(g.plansMap).map(plan => ({
+          data: plan.data,
+          options: plan.options.sort((a, b) => a.days - b.days)
+        }))
+      }))
+      .sort((a, b) => b.totalSales - a.totalSales);
 
-    // 收集所有出現的 regions（用於前端 filter tabs）
+    // 5. 收集所有出現的 regions
     const regionSet = new Set(products.map(p => p.region));
     const regions = ['全部', ...Array.from(regionSet).sort()];
 

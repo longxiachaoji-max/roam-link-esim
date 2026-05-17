@@ -27,6 +27,11 @@ export default function Home() {
   const [regions, setRegions] = useState<string[]>(["全部", "亞洲", "歐洲", "美洲", "大洋洲"]);
   const [productsLoading, setProductsLoading] = useState(true);
 
+  // 展開狀態管理
+  const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+  // 天數選擇狀態: key = "country|data", value = index in options
+  const [selectedDays, setSelectedDays] = useState<Record<string, number>>({});
+
   // 網站標語設定
   const [siteSettings, setSiteSettings] = useState({
     hero_badge: '一飛通全球漫遊 · 2026 全新上線',
@@ -300,40 +305,103 @@ export default function Home() {
               <p className="text-4xl mb-4">📡</p>
               <p className="text-muted text-lg">暫無方案，敬請期待</p>
             </div>
-          ) : filteredProducts.map((product, idx) => (
-            <div key={idx} className="bg-card-bg border border-white/10 rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all cursor-pointer group">
-              <div className="p-6 relative">
-                <span className="text-5xl block mb-2">{product.flag}</span>
-                <h3 className="text-xl font-bold">{product.country}</h3>
-                <p className="text-muted text-sm">{product.region}</p>
-                <div className="absolute top-6 right-6 bg-yellow text-dark text-xs font-black px-2 py-1 rounded-full">
-                  熱銷
+          ) : filteredProducts.map((product, idx) => {
+            const isExpanded = expandedCountries.has(product.country);
+            const visiblePlans = isExpanded ? product.plans : product.plans.slice(0, 3);
+            const hasMore = product.plans.length > 3;
+
+            return (
+              <div key={idx} className="bg-card-bg border border-white/10 rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all group">
+                <div className="p-6 relative">
+                  <span className="text-5xl block mb-2">{product.flag}</span>
+                  <h3 className="text-xl font-bold">{product.country}</h3>
+                  <p className="text-muted text-sm">{product.region}</p>
+                  {product.totalSales > 0 && (
+                    <div className="absolute top-6 right-6 bg-yellow text-dark text-xs font-black px-2 py-1 rounded-full">
+                      熱銷
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 pb-6 flex flex-col gap-3">
+                  {visiblePlans.map((plan: any, pIdx: number) => {
+                    const planKey = `${product.country}|${plan.data}`;
+                    const selIdx = selectedDays[planKey] ?? 0;
+                    const currentOption = plan.options[selIdx] || plan.options[0];
+                    const hasMultiple = plan.options.length > 1;
+
+                    return (
+                      <div key={pIdx} className="bg-white/5 border border-white/5 rounded-xl p-3 hover:border-coral/50 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="font-bold text-sm">{plan.data}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="font-black text-coral">
+                              <span className="text-[10px] text-muted font-normal mr-0.5">NT$</span>
+                              {currentOption.price}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart(product, {
+                                  id: currentOption.id,
+                                  data: plan.data,
+                                  days: `${currentOption.days}天`,
+                                  price: currentOption.price
+                                });
+                              }}
+                              className="bg-coral text-white w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#ff2d4f] hover:scale-110 transition-all"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        {hasMultiple ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {plan.options.map((opt: any, oIdx: number) => (
+                              <button
+                                key={oIdx}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedDays(prev => ({ ...prev, [planKey]: oIdx }));
+                                }}
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                                  oIdx === selIdx
+                                    ? 'bg-coral text-white'
+                                    : 'bg-white/5 text-muted hover:bg-white/10'
+                                }`}
+                              >
+                                {opt.days}天
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-muted text-xs">{currentOption.days}天</div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {hasMore && (
+                    <button
+                      onClick={() => {
+                        setExpandedCountries(prev => {
+                          const next = new Set(prev);
+                          if (next.has(product.country)) {
+                            next.delete(product.country);
+                          } else {
+                            next.add(product.country);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="text-white/40 hover:text-white/60 text-xs font-medium text-center py-2 transition-colors"
+                    >
+                      {isExpanded ? '▲ 收起' : `▼ 顯示更多方案 (${product.plans.length - 3})`}
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="px-6 pb-6 flex flex-col gap-3">
-                {product.plans.map((plan: any, pIdx: number) => (
-                  <div key={pIdx} className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl p-3 hover:border-coral hover:bg-coral/10 transition-colors">
-                    <div>
-                      <div className="font-bold text-sm">{plan.data}</div>
-                      <div className="text-muted text-xs">{plan.days}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="font-black text-coral">
-                        <span className="text-[10px] text-muted font-normal mr-0.5">NT$</span>
-                        {plan.price}
-                      </div>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); addToCart(product, plan); }}
-                        className="bg-coral text-white w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#ff2d4f] hover:scale-110 transition-all"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
