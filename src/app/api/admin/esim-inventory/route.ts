@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('e_sim_inventory')
-      .select('id, iccid, smdp_address, activation_code, status, expiry_date, cost, product_id, products(name)')
+      .select('id, iccid, smdp_address, activation_code, status, expiry_date, cost, product_id, products(name, country, data_amount)')
       .order('created_at', { ascending: false });
 
     if (error) {

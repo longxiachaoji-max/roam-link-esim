@@ -10,7 +10,10 @@ interface EsimItem {
   smdpAddress: string;
   activationCode: string;
   boundProduct: string;
-  status: string; // "可使用" | "已售出" | "已過期"
+  country: string;
+  dataAmount: string;
+  cost: number;
+  status: string;
   expiryDate: string;
 }
 
@@ -57,6 +60,9 @@ export default function EsimInventoryPage() {
             smdpAddress: item.smdp_address,
             activationCode: item.activation_code,
             boundProduct: item.products?.name || '未知商品',
+            country: item.products?.country || '未分類',
+            dataAmount: item.products?.data_amount || '其他',
+            cost: Number(item.cost || 0),
             status: displayStatus,
             expiryDate: new Date(item.expiry_date).toLocaleDateString(),
           };
@@ -118,6 +124,21 @@ export default function EsimInventoryPage() {
   };
 
   // Edit states
+  // Collapse state
+  const [collapsedCountries, setCollapsedCountries] = useState<Set<string>>(new Set());
+  const toggleCountry = (c: string) => {
+    setCollapsedCountries(prev => {
+      const n = new Set(prev);
+      if (n.has(c)) n.delete(c); else n.add(c);
+      return n;
+    });
+  };
+  const FLAG_MAP: Record<string, string> = {
+    '日本':'🇯🇵','韓國':'🇰🇷','台灣':'🇹🇼','泰國':'🇹🇭','美國':'🇺🇸','法國':'🇫🇷',
+    '英國':'🇬🇧','德國':'🇩🇪','澳洲':'🇦🇺','越南':'🇻🇳','新加坡':'🇸🇬','香港':'🇭🇰',
+    '加拿大':'🇨🇦','義大利':'🇮🇹','馬來西亞':'🇲🇾','中國':'🇨🇳'
+  };
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
     id: '',
@@ -298,67 +319,81 @@ export default function EsimInventoryPage() {
         </div>
       </div>
 
-      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-white/10">
-            <thead className="bg-white/5">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">SM-DP+ 位置</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">啟用碼</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">綁定商品</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">到期日</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-white/50 uppercase tracking-wider">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-white/50">
-                    載入中...
-                  </td>
-                </tr>
-              ) : esims.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-white/50">
-                    庫存中找不到任何 eSIM。
-                  </td>
-                </tr>
-              ) : (
-                esims.map((esim) => (
-                  <tr key={esim.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90">{esim.smdpAddress}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60 font-mono truncate max-w-[200px]" title={esim.activationCode}>
-                      {esim.activationCode}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90">{esim.boundProduct}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(esim.status)}`}>
-                        {esim.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{esim.expiryDate}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button 
-                        onClick={() => openEditModal(esim)}
-                        className="text-blue-400 hover:text-blue-300 mr-4 transition-colors"
-                      >
-                        編輯
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(esim.id)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        刪除
-                      </button>
-                    </td>
-                  </tr>
-                ))
+      {/* Grouped Inventory */}
+      {loading ? (
+        <div className="text-center py-8 text-white/50">載入中...</div>
+      ) : esims.length === 0 ? (
+        <div className="text-center py-8 text-white/50">庫存中找不到任何 eSIM。</div>
+      ) : (() => {
+        const byCountry: Record<string, EsimItem[]> = {};
+        for (const e of esims) {
+          if (!byCountry[e.country]) byCountry[e.country] = [];
+          byCountry[e.country].push(e);
+        }
+        return Object.entries(byCountry).map(([country, items]) => {
+          const byData: Record<string, EsimItem[]> = {};
+          for (const e of items) {
+            if (!byData[e.dataAmount]) byData[e.dataAmount] = [];
+            byData[e.dataAmount].push(e);
+          }
+          const avail = items.filter(e => e.status === '可使用').length;
+          const sold = items.filter(e => e.status === '已售出').length;
+          return (
+            <div key={country} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm mb-4">
+              <button
+                onClick={() => toggleCountry(country)}
+                className="w-full flex items-center justify-between px-6 py-4 bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{FLAG_MAP[country] || '🌍'}</span>
+                  <div className="text-left">
+                    <h3 className="text-lg font-bold text-white">{country}</h3>
+                    <p className="text-xs text-white/40">
+                      {items.length} 筆 · <span className="text-green-400">{avail} 可用</span> · <span className="text-blue-400">{sold} 已售</span>
+                    </p>
+                  </div>
+                </div>
+                <span className={`text-white/40 transition-transform ${collapsedCountries.has(country) ? '' : 'rotate-180'}`}>▼</span>
+              </button>
+              {!collapsedCountries.has(country) && (
+                <div className="divide-y divide-white/5">
+                  {Object.entries(byData).map(([dataAmount, dataItems]) => {
+                    const dAvail = dataItems.filter(e => e.status === '可使用').length;
+                    return (
+                      <div key={dataAmount}>
+                        <div className="px-6 py-2 bg-white/[0.02] flex items-center gap-2">
+                          <span className="text-xs font-bold text-cyan-400/80">⚡</span>
+                          <span className="text-sm font-bold text-white/70">{dataAmount}</span>
+                          <span className="text-xs text-white/30">· {dataItems.length} 筆 · {dAvail} 可用</span>
+                        </div>
+                        {dataItems.map((esim) => (
+                          <div key={esim.id} className="flex items-center justify-between px-6 py-2.5 hover:bg-white/5 transition-colors gap-2">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${getStatusBadgeClass(esim.status)}`}>
+                                {esim.status}
+                              </span>
+                              <span className="text-sm text-white/70 truncate" title={esim.boundProduct}>{esim.boundProduct}</span>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0 text-xs">
+                              <span className="text-white/40 font-mono truncate max-w-[120px]" title={esim.activationCode}>
+                                {esim.activationCode.length > 12 ? esim.activationCode.slice(0, 12) + '…' : esim.activationCode}
+                              </span>
+                              {esim.cost > 0 && <span className="text-yellow-400/70">NT${esim.cost}</span>}
+                              <span className="text-white/30">{esim.expiryDate}</span>
+                              <button onClick={() => openEditModal(esim)} className="text-blue-400 hover:text-blue-300 transition-colors">編輯</button>
+                              <button onClick={() => handleDelete(esim.id)} className="text-red-400 hover:text-red-300 transition-colors">刪除</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+          );
+        });
+      })()}
 
       {/* Add eSIM Modal */}
       {isAddModalOpen && (
