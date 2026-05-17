@@ -36,6 +36,8 @@ export async function GET(request: Request) {
         order_items (
           id, 
           price,
+          note,
+          user_deleted_at,
           products ( id, name, country, data_amount, validity_days ),
           e_sim_inventory ( id, iccid, smdp_address, activation_code, status )
         )

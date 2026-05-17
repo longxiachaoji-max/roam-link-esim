@@ -32,20 +32,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { product_id, iccid, smdp_address, activation_code, expiry_date } = body;
 
-    if (!product_id || !iccid || !smdp_address || !activation_code || !expiry_date) {
-      return NextResponse.json({ error: '缺少必要欄位' }, { status: 400 });
+    if (!product_id || !smdp_address || !activation_code || !expiry_date) {
+      return NextResponse.json({ error: '缺少必要欄位 (product_id, smdp_address, activation_code, expiry_date)' }, { status: 400 });
+    }
+
+    const insertData: any = {
+      product_id,
+      smdp_address,
+      activation_code,
+      status: 'AVAILABLE',
+      expiry_date: new Date(expiry_date).toISOString()
+    };
+    // ICCID 為選填，有填才存
+    if (iccid && iccid.trim()) {
+      insertData.iccid = iccid.trim();
     }
 
     const { data, error } = await supabase
       .from('e_sim_inventory')
-      .insert({
-        product_id,
-        iccid,
-        smdp_address,
-        activation_code,
-        status: 'AVAILABLE',
-        expiry_date: new Date(expiry_date).toISOString()
-      })
+      .insert(insertData)
       .select()
       .single();
 

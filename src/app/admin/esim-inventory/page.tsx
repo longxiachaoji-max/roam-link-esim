@@ -383,12 +383,11 @@ export default function EsimInventoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">ICCID</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">ICCID <span className="text-white/30">(選填)</span></label>
                   <input 
                     type="text" 
-                    required
                     className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
-                    placeholder="例如: 8901234567890123456x"
+                    placeholder="例如: 8901234567890123456x (可留空)"
                     value={formData.iccid}
                     onChange={(e) => setFormData({...formData, iccid: e.target.value})}
                   />
@@ -488,10 +487,9 @@ export default function EsimInventoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">ICCID</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">ICCID <span className="text-white/30">(選填)</span></label>
                   <input 
                     type="text" 
-                    required
                     className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
                     value={editFormData.iccid}
                     onChange={(e) => setEditFormData({...editFormData, iccid: e.target.value})}

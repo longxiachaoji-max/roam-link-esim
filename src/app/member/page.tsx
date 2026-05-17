@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, CreditCard } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, CreditCard, Trash2, Edit3, Check } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -15,17 +15,31 @@ export default function MemberCenter() {
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
+  
+  // Note editing
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+
+  // Delete confirm
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
   };
 
+  const fetchOrders = async (email: string) => {
+    const res = await fetch(`/api/member/orders?email=${email}`);
+    if (res.ok) {
+      const data = await res.json();
+      setOrders(data.orders || []);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
-        // Fetch Profile
         const { data: customer } = await supabase
           .from('customers')
           .select('*')
@@ -35,20 +49,73 @@ export default function MemberCenter() {
         if (customer) {
           setUser(customer);
         }
-
-        // Fetch Orders via API
-        const res = await fetch(`/api/member/orders?email=${session.user.email}`);
-        if (res.ok) {
-          const data = await res.json();
-          setOrders(data.orders || []);
-        }
+        await fetchOrders(session.user.email);
       } else {
-        window.location.href = '/'; // Redirect home if not logged in
+        window.location.href = '/';
       }
       setIsLoading(false);
     };
     init();
   }, []);
+
+  // Country flag mapping
+  const getFlag = (country: string) => {
+    const flags: Record<string, string> = {
+      '日本': '🇯🇵', '韓國': '🇰🇷', '泰國': '🇹🇭', '越南': '🇻🇳',
+      '新加坡': '🇸🇬', '馬來西亞': '🇲🇾', '中國': '🇨🇳', '香港': '🇭🇰',
+      '台灣': '🇹🇼', '美國': '🇺🇸', '加拿大': '🇨🇦', '法國': '🇫🇷',
+      '英國': '🇬🇧', '德國': '🇩🇪', '義大利': '🇮🇹', '澳洲': '🇦🇺',
+    };
+    return flags[country] || '🌍';
+  };
+
+  // Soft delete handler
+  const handleSoftDelete = async (orderItemId: string) => {
+    try {
+      const res = await fetch('/api/member/esim', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: orderItemId,
+          email: user.email,
+          action: 'soft_delete'
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '操作失敗');
+      showToast('🗑️ 已標記刪除，將於 1 天後自動移除');
+      setDeleteConfirmId(null);
+      await fetchOrders(user.email);
+    } catch (err: any) {
+      showToast('❌ ' + err.message);
+    }
+  };
+
+  // Note update handler
+  const handleNoteUpdate = async (orderItemId: string, note: string) => {
+    try {
+      const res = await fetch('/api/member/esim', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: orderItemId,
+          email: user.email,
+          action: 'update_note',
+          note
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '操作失敗');
+      showToast('✅ 備註已更新');
+      setEditingNoteId(null);
+      await fetchOrders(user.email);
+    } catch (err: any) {
+      showToast('❌ ' + err.message);
+    }
+  };
+
+  // Check if item is soft-deleted
+  const isSoftDeleted = (item: any) => !!item.user_deleted_at;
 
   if (isLoading) {
     return <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center text-white">載入中...</div>;
@@ -112,76 +179,141 @@ export default function MemberCenter() {
         {/* eSIM List */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">我的 eSIM</h2>
-          <span className="text-sm text-white/50">共 {orders.length} 筆</span>
+          <span className="text-sm text-white/50">共 {orders.reduce((sum, o) => sum + o.order_items.filter((i: any) => !isSoftDeleted(i)).length, 0)} 筆</span>
         </div>
 
         <div className="space-y-4">
-          {orders.map(order => order.order_items.map((item: any) => (
-            <div key={item.id} className="bg-[#1a1a24] rounded-3xl p-5 border border-white/5 shadow-lg">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl shadow-inner">
-                     {item.products.country === '日本' ? '🇯🇵' : 
-                      item.products.country === '韓國' ? '🇰🇷' : 
-                      item.products.country === '泰國' ? '🇹🇭' : '🌍'}
+          {orders.map(order => order.order_items.map((item: any) => {
+            const deleted = isSoftDeleted(item);
+            
+            return (
+              <div key={item.id} className={`rounded-3xl p-5 border shadow-lg transition-all ${
+                deleted 
+                  ? 'bg-[#1a1a24]/50 border-white/5 opacity-50' 
+                  : 'bg-[#1a1a24] border-white/5'
+              }`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl shadow-inner">
+                       {getFlag(item.products.country)}
+                    </div>
+                    <div>
+                      <div className="font-bold text-lg">{item.products.name}</div>
+                      <div className="text-xs text-white/40 mb-0.5">#{order.id.split('-')[0].toUpperCase()}</div>
+                      <div className="text-xs text-white/40">訂購：{new Date(order.created_at).toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {deleted ? (
+                      <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-1 rounded-lg text-xs font-bold">
+                        待移除
+                      </div>
+                    ) : (
+                      <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold">
+                        {item.e_sim_inventory ? '使用中' : '處理中'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Soft delete warning */}
+                {deleted && (
+                  <div className="bg-red-500/5 border border-red-500/10 rounded-xl p-3 mb-4 text-center">
+                    <p className="text-red-400 text-xs font-medium">⚠️ 此 eSIM 已標記刪除，將於 1 天後自動移除，此操作無法復原</p>
+                    <p className="text-white/30 text-xs mt-1">刪除時間：{new Date(item.user_deleted_at).toLocaleString()}</p>
+                  </div>
+                )}
+
+                {/* Note / Memo */}
+                <div className="mb-4">
+                  {editingNoteId === item.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="例如：老婆的日本旅行、2026東京出差"
+                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[#F05A28]/50"
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleNoteUpdate(item.id, noteText)}
+                        className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-xl transition-colors"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        onClick={() => setEditingNoteId(null)}
+                        className="p-2 bg-white/5 hover:bg-white/10 text-white/50 rounded-xl transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (deleted) return;
+                        setEditingNoteId(item.id);
+                        setNoteText(item.note || '');
+                      }}
+                      className={`flex items-center gap-2 text-xs ${deleted ? 'text-white/20 cursor-not-allowed' : 'text-white/40 hover:text-white/60 cursor-pointer'} transition-colors`}
+                    >
+                      <Edit3 size={12} />
+                      {item.note ? (
+                        <span className="text-white/60">📝 {item.note}</span>
+                      ) : (
+                        <span>新增備註（旅行、使用者...）</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {/* Plan Info */}
+                <div className="flex justify-between border-t border-white/5 pt-4 mb-5 px-2">
+                  <div>
+                    <div className="text-xs text-white/40 mb-1">方案</div>
+                    <div className="font-bold text-sm text-white/90">{item.products.data_amount || 'N/A'}</div>
                   </div>
                   <div>
-                    <div className="font-bold text-lg">{item.products.name}</div>
-                    <div className="text-xs text-white/40 mb-0.5">#{order.id.split('-')[0].toUpperCase()}</div>
-                    <div className="text-xs text-white/40">訂購：{new Date(order.created_at).toLocaleString()}</div>
+                    <div className="text-xs text-white/40 mb-1">天數</div>
+                    <div className="font-bold text-sm text-white/90">{item.products.validity_days} 天</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-white/40 mb-1">金額</div>
+                    <div className="font-bold text-sm text-white/90">NT${item.price}</div>
                   </div>
                 </div>
-                <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold">
-                  {item.e_sim_inventory ? '使用中' : '處理中'}
-                </div>
-              </div>
 
-              {/* Data Usage Fake Bar */}
-              <div className="mb-5 mt-6">
-                <div className="flex justify-between text-xs mb-2">
-                  <span className="text-white/50 font-medium">已使用流量</span>
-                  <span className="text-white/70 font-medium">0GB / {item.products.data_amount || '無限'}</span>
-                </div>
-                <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-gradient-to-r from-[#F05A28] to-[#f5bd61] h-1.5 rounded-full" style={{width: '5%'}}></div>
-                </div>
-              </div>
+                {/* Action Buttons */}
+                {!deleted && item.e_sim_inventory && (
+                  <div className="flex gap-3 mb-3">
+                     <a 
+                       href={`https://esimsetup.apple.com/esim_activate?smdp_address=${item.e_sim_inventory.smdp_address}&activation_code=${item.e_sim_inventory.activation_code}`}
+                       className="flex-1 bg-[#1a2c3a] border border-cyan/20 hover:bg-cyan/20 text-cyan py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                     >
+                       <Smartphone size={16} /> 一鍵安裝
+                     </a>
+                     <button 
+                       className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                       onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
+                     >
+                       <QrCode size={16} /> 顯示 QRCODE
+                     </button>
+                  </div>
+                )}
 
-              {/* Plan Info */}
-              <div className="flex justify-between border-t border-white/5 pt-4 mb-5 px-2">
-                <div>
-                  <div className="text-xs text-white/40 mb-1">方案</div>
-                  <div className="font-bold text-sm text-white/90">{item.products.data_amount || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-white/40 mb-1">天數</div>
-                  <div className="font-bold text-sm text-white/90">{item.products.validity_days} 天</div>
-                </div>
-                <div>
-                  <div className="text-xs text-white/40 mb-1">金額</div>
-                  <div className="font-bold text-sm text-white/90">NT${item.price}</div>
-                </div>
+                {/* Delete button */}
+                {!deleted && (
+                  <button
+                    onClick={() => setDeleteConfirmId(item.id)}
+                    className="w-full bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 text-white/40 hover:text-red-400 py-2.5 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <Trash2 size={14} /> 刪除此 eSIM
+                  </button>
+                )}
               </div>
-
-              {/* Action Buttons */}
-              {item.e_sim_inventory && (
-                <div className="flex gap-3">
-                   <a 
-                     href={`https://esimsetup.apple.com/esim_activate?smdp_address=${item.e_sim_inventory.smdp_address}&activation_code=${item.e_sim_inventory.activation_code}`}
-                     className="flex-1 bg-[#1a2c3a] border border-cyan/20 hover:bg-cyan/20 text-cyan py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-                   >
-                     <Smartphone size={16} /> 一鍵安裝
-                   </a>
-                   <button 
-                     className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-                     onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
-                   >
-                     <QrCode size={16} /> 顯示 QRCODE
-                   </button>
-                </div>
-              )}
-            </div>
-          )))}
+            );
+          }))}
           {orders.length === 0 && (
             <div className="text-center py-10 text-white/40">
               目前沒有 eSIM 訂單紀錄
@@ -189,6 +321,33 @@ export default function MemberCenter() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-center px-4">
+          <div className="bg-[#1A1A2E] w-full max-w-sm rounded-[2rem] p-8 shadow-2xl relative border border-white/10">
+            <h3 className="text-xl font-bold mb-3 text-center">確認刪除</h3>
+            <p className="text-white/60 text-sm text-center mb-2">確定要刪除這個 eSIM 嗎？</p>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-6">
+              <p className="text-red-400 text-xs text-center font-medium">⚠️ 刪除後將反灰顯示，並於 1 天後自動移除，此操作無法復原。</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-2xl transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleSoftDelete(deleteConfirmId)}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-2xl transition-all"
+              >
+                確認刪除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top-up Modal */}
       {isTopUpOpen && (
@@ -228,7 +387,7 @@ export default function MemberCenter() {
         </div>
       )}
 
-      {/* QR Code Modal (Placeholder) */}
+      {/* QR Code Modal */}
       {qrCodeData && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-center px-4 transition-opacity">
           <div className="bg-[#1A1A2E] w-full max-w-xs rounded-[2rem] p-8 shadow-2xl relative border border-white/10 flex flex-col items-center">
