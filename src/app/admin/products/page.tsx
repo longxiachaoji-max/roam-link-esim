@@ -29,6 +29,15 @@ export default function ProductsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const emptyForm = {
     name: '',
@@ -333,75 +342,95 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Products Table */}
-      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-white/10">
-            <thead className="bg-white/5">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">名稱</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">國家</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">流量</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">天數</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">價格</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">庫存</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-white/50 uppercase tracking-wider">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
-                </tr>
-              ) : products.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">尚未建立任何商品</td>
-                </tr>
-              ) : (
-                products.map((product) => (
-                  <tr key={product.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90 font-medium">{product.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90">{product.country}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{product.data_amount || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/60">{product.validity_days}天</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white/90 font-medium">NT${product.price}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={product.stock.available > 0 ? 'text-green-400' : 'text-red-400'}>
-                        {product.stock.available}
-                      </span>
-                      <span className="text-white/30">/{product.stock.total}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => handleToggleActive(product)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${product.is_active ? 'bg-green-500' : 'bg-gray-600'}`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${product.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
-                      </button>
-                      <span className="ml-2 text-xs text-white/40">{product.is_active ? '上架' : '下架'}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => openEditModal(product)}
-                        className="text-blue-400 hover:text-blue-300 mr-4 transition-colors"
-                      >
-                        編輯
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmId(product.id)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        刪除
-                      </button>
-                    </td>
-                  </tr>
-                ))
+      {/* Products - Grouped by Country & Data */}
+      {loading ? (
+        <div className="text-center py-8 text-white/50">載入中...</div>
+      ) : products.length === 0 ? (
+        <div className="text-center py-8 text-white/50">尚未建立任何商品</div>
+      ) : (() => {
+        // 按國家分組
+        const byCountry: Record<string, Product[]> = {};
+        for (const p of products) {
+          if (!byCountry[p.country]) byCountry[p.country] = [];
+          byCountry[p.country].push(p);
+        }
+
+        return Object.entries(byCountry).map(([country, countryProducts]) => {
+          // 按流量分組
+          const byData: Record<string, Product[]> = {};
+          for (const p of countryProducts) {
+            const key = p.data_amount || '其他';
+            if (!byData[key]) byData[key] = [];
+            byData[key].push(p);
+          }
+
+          const countryActive = countryProducts.filter(p => p.is_active).length;
+          const countryTotal = countryProducts.length;
+
+          return (
+            <div key={country} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm mb-4">
+              {/* Country Header */}
+              <button
+                onClick={() => toggleGroup(country)}
+                className="w-full flex items-center justify-between px-6 py-4 bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">
+                    {({'日本':'🇯🇵','韓國':'🇰🇷','台灣':'🇹🇼','泰國':'🇹🇭','美國':'🇺🇸','法國':'🇫🇷','英國':'🇬🇧','德國':'🇩🇪','澳洲':'🇦🇺','越南':'🇻🇳','新加坡':'🇸🇬','香港':'🇭🇰','加拿大':'🇨🇦','義大利':'🇮🇹'} as Record<string,string>)[country] || '🌍'}
+                  </span>
+                  <div className="text-left">
+                    <h3 className="text-lg font-bold text-white">{country}</h3>
+                    <p className="text-xs text-white/40">{Object.keys(byData).length} 種方案 · {countryActive}/{countryTotal} 上架</p>
+                  </div>
+                </div>
+                <span className={`text-white/40 transition-transform ${collapsedGroups.has(country) ? '' : 'rotate-180'}`}>▼</span>
+              </button>
+
+              {/* Country Content */}
+              {!collapsedGroups.has(country) && (
+                <div className="divide-y divide-white/5">
+                  {Object.entries(byData).map(([dataAmount, dataProducts]) => (
+                    <div key={dataAmount}>
+                      {/* Data Amount Header */}
+                      <div className="px-6 py-2 bg-white/[0.02] flex items-center gap-2">
+                        <span className="text-xs font-bold text-cyan-400/80">⚡</span>
+                        <span className="text-sm font-bold text-white/70">{dataAmount}</span>
+                        <span className="text-xs text-white/30">· {dataProducts.length} 個天數方案</span>
+                      </div>
+                      {/* Products in this group */}
+                      {dataProducts
+                        .sort((a, b) => a.validity_days - b.validity_days)
+                        .map((product) => (
+                        <div key={product.id} className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors">
+                          <div className="flex items-center gap-6 flex-1 min-w-0">
+                            <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
+                            <span className="text-sm text-white/90 font-medium truncate">{product.name}</span>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <span className="text-sm font-bold text-white/90">NT${product.price}</span>
+                            <span className="text-xs w-12 text-center">
+                              <span className={product.stock.available > 0 ? 'text-green-400' : 'text-red-400'}>{product.stock.available}</span>
+                              <span className="text-white/30">/{product.stock.total}</span>
+                            </span>
+                            <button
+                              onClick={() => handleToggleActive(product)}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${product.is_active ? 'bg-green-500' : 'bg-gray-600'}`}
+                            >
+                              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${product.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                            </button>
+                            <button onClick={() => openEditModal(product)} className="text-blue-400 hover:text-blue-300 text-xs transition-colors">編輯</button>
+                            <button onClick={() => setDeleteConfirmId(product.id)} className="text-red-400 hover:text-red-300 text-xs transition-colors">刪除</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+          );
+        });
+      })()}
 
       {/* Add Product Modal */}
       {isAddModalOpen && (
