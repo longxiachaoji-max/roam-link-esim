@@ -372,7 +372,7 @@ export default function EsimInventoryPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">綁定商品</label>
                   <select 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={formData.productId}
                     onChange={(e) => setFormData({...formData, productId: e.target.value})}
                   >
@@ -387,7 +387,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     placeholder="例如: 8901234567890123456x"
                     value={formData.iccid}
                     onChange={(e) => setFormData({...formData, iccid: e.target.value})}
@@ -398,7 +398,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={formData.smdpAddress}
                     onChange={(e) => setFormData({...formData, smdpAddress: e.target.value})}
                   />
@@ -408,7 +408,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     placeholder="例如: ABCDE-12345"
                     value={formData.activationCode}
                     onChange={(e) => setFormData({...formData, activationCode: e.target.value})}
@@ -419,7 +419,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="date" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({...formData, expiryDate: e.target.value})}
                   />
@@ -464,7 +464,7 @@ export default function EsimInventoryPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">綁定商品</label>
                   <select 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={editFormData.productId}
                     onChange={(e) => setEditFormData({...editFormData, productId: e.target.value})}
                   >
@@ -478,7 +478,7 @@ export default function EsimInventoryPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">狀態</label>
                   <select 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={editFormData.status}
                     onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
                   >
@@ -492,7 +492,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={editFormData.iccid}
                     onChange={(e) => setEditFormData({...editFormData, iccid: e.target.value})}
                   />
@@ -502,7 +502,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={editFormData.smdpAddress}
                     onChange={(e) => setEditFormData({...editFormData, smdpAddress: e.target.value})}
                   />
@@ -512,7 +512,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="text" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={editFormData.activationCode}
                     onChange={(e) => setEditFormData({...editFormData, activationCode: e.target.value})}
                   />
@@ -522,7 +522,7 @@ export default function EsimInventoryPage() {
                   <input 
                     type="date" 
                     required
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-black bg-white"
                     value={editFormData.expiryDate}
                     onChange={(e) => setEditFormData({...editFormData, expiryDate: e.target.value})}
                   />
