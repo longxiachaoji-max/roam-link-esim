@@ -41,12 +41,9 @@ export async function POST(request: Request) {
       smdp_address,
       activation_code,
       status: 'AVAILABLE',
+      iccid: (iccid && iccid.trim()) ? iccid.trim() : null,
       expiry_date: new Date(expiry_date).toISOString()
     };
-    // ICCID 為選填，有填才存
-    if (iccid && iccid.trim()) {
-      insertData.iccid = iccid.trim();
-    }
 
     const { data, error } = await supabase
       .from('e_sim_inventory')
@@ -78,7 +75,7 @@ export async function PUT(request: Request) {
       .from('e_sim_inventory')
       .update({
         product_id,
-        iccid,
+        iccid: (iccid && iccid.trim()) ? iccid.trim() : null,
         smdp_address,
         activation_code,
         status,
