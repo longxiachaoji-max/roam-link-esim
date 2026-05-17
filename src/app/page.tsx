@@ -21,16 +21,29 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState("");
   const [authConfirmPassword, setAuthConfirmPassword] = useState("");
 
-  const regions = ["全部", "亞洲", "歐洲", "美洲", "大洋洲"];
-  
-  const products = [
-    { country: '日本', region: '亞洲', flag: '🇯🇵', plans: [ { data: '每日 1GB', days: '5天', price: 350 }, { data: '總量 10GB', days: '10天', price: 600 } ] },
-    { country: '韓國', region: '亞洲', flag: '🇰🇷', plans: [ { data: '每日 2GB', days: '5天', price: 420 }, { data: '吃到飽', days: '7天', price: 750 } ] },
-    { country: '泰國', region: '亞洲', flag: '🇹🇭', plans: [ { data: '總量 15GB', days: '8天', price: 299 } ] },
-    { country: '美國', region: '美洲', flag: '🇺🇸', plans: [ { data: '總量 10GB', days: '15天', price: 890 }, { data: '吃到飽', days: '30天', price: 1800 } ] },
-    { country: '法國', region: '歐洲', flag: '🇫🇷', plans: [ { data: '總量 5GB', days: '7天', price: 550 } ] },
-    { country: '澳洲', region: '大洋洲', flag: '🇦🇺', plans: [ { data: '每日 1GB', days: '10天', price: 720 } ] }
-  ];
+  // 從資料庫動態載入商品
+  const [products, setProducts] = useState<any[]>([]);
+  const [regions, setRegions] = useState<string[]>(["全部", "亞洲", "歐洲", "美洲", "大洋洲"]);
+  const [productsLoading, setProductsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch('/api/products');
+        const json = await res.json();
+        if (json.products) {
+          setProducts(json.products);
+        }
+        if (json.regions && json.regions.length > 0) {
+          setRegions(json.regions);
+        }
+      } catch (err) {
+        console.error('Error fetching products:', err);
+      }
+      setProductsLoading(false);
+    };
+    fetchProducts();
+  }, []);
 
   const filteredProducts = activeRegion === "全部" 
     ? products 
@@ -148,16 +161,13 @@ export default function Home() {
     try {
       // 由於購物車可能有多個商品，我們逐一呼叫 API
       for (const item of cart) {
-        // 在真實場景中 productId 需要從真實資料庫獲取，這裡我們假設有一個 dummy UUID 或不傳遞報錯，
-        // 但為了串接測試，我們暫時需要先從資料庫獲取 product id 或使用現有的商品名稱 mapping
-        // TODO: 完整的 productId mapping，先嘗試只透過 API 傳送
         const res = await fetch('/api/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: user.email,
             name: user.name || user.email.split('@')[0],
-            productId: item.id || '2967ce20-f463-448a-ba0d-0fc4e9afbeec', // 需要真實 UUID
+            productId: item.id,
             useTokens: true,
             paymentMethod: 'TOKENS'
           })
@@ -259,7 +269,17 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product, idx) => (
+          {productsLoading ? (
+            <div className="col-span-full text-center py-20">
+              <div className="inline-block w-8 h-8 border-2 border-white/20 border-t-coral rounded-full animate-spin mb-4"></div>
+              <p className="text-muted">載入方案中...</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="col-span-full text-center py-20">
+              <p className="text-4xl mb-4">📡</p>
+              <p className="text-muted text-lg">暫無方案，敬請期待</p>
+            </div>
+          ) : filteredProducts.map((product, idx) => (
             <div key={idx} className="bg-card-bg border border-white/10 rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all cursor-pointer group">
               <div className="p-6 relative">
                 <span className="text-5xl block mb-2">{product.flag}</span>
@@ -270,7 +290,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="px-6 pb-6 flex flex-col gap-3">
-                {product.plans.map((plan, pIdx) => (
+                {product.plans.map((plan: any, pIdx: number) => (
                   <div key={pIdx} className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl p-3 hover:border-coral hover:bg-coral/10 transition-colors">
                     <div>
                       <div className="font-bold text-sm">{plan.data}</div>

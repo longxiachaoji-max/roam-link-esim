@@ -37,45 +37,47 @@ export default function EsimInventoryPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    // 1. Fetch inventory
-    const { data: inventoryData, error: inventoryError } = await supabase
-      .from('e_sim_inventory')
-      .select('id, iccid, smdp_address, activation_code, status, expiry_date, products(name)')
-      .order('created_at', { ascending: false });
+    try {
+      // 1. Fetch inventory via API route (uses service_role key)
+      const invRes = await fetch('/api/admin/esim-inventory');
+      const invJson = await invRes.json();
 
-    if (inventoryError) {
-      console.error('Error fetching inventory:', inventoryError);
-    } else if (inventoryData) {
-      const formattedData: EsimItem[] = inventoryData.map((item: any) => {
-        let displayStatus = '未知';
-        if (item.status === 'AVAILABLE') displayStatus = '可使用';
-        else if (item.status === 'SOLD') displayStatus = '已售出';
-        else if (item.status === 'EXPIRED') displayStatus = '已過期';
+      if (invJson.error) {
+        console.error('Error fetching inventory:', invJson.error);
+      } else if (invJson.inventory) {
+        const formattedData: EsimItem[] = invJson.inventory.map((item: any) => {
+          let displayStatus = '未知';
+          if (item.status === 'AVAILABLE') displayStatus = '可使用';
+          else if (item.status === 'SOLD') displayStatus = '已售出';
+          else if (item.status === 'EXPIRED') displayStatus = '已過期';
 
-        return {
-          id: item.id,
-          smdpAddress: item.smdp_address,
-          activationCode: item.activation_code,
-          boundProduct: item.products?.name || '未知商品',
-          status: displayStatus,
-          expiryDate: new Date(item.expiry_date).toLocaleDateString(),
-        };
-      });
-      setEsims(formattedData);
-    }
-
-    // 2. Fetch products for dropdown
-    const { data: productsData, error: productsError } = await supabase
-      .from('products')
-      .select('id, name');
-    
-    if (productsError) {
-      console.error('Error fetching products:', productsError);
-    } else if (productsData) {
-      setProducts(productsData);
-      if (productsData.length > 0 && !formData.productId) {
-        setFormData(prev => ({ ...prev, productId: productsData[0].id }));
+          return {
+            id: item.id,
+            smdpAddress: item.smdp_address,
+            activationCode: item.activation_code,
+            boundProduct: item.products?.name || '未知商品',
+            status: displayStatus,
+            expiryDate: new Date(item.expiry_date).toLocaleDateString(),
+          };
+        });
+        setEsims(formattedData);
       }
+
+      // 2. Fetch products for dropdown (anon key is fine for read-only products)
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name');
+      
+      if (productsError) {
+        console.error('Error fetching products:', productsError);
+      } else if (productsData) {
+        setProducts(productsData);
+        if (productsData.length > 0 && !formData.productId) {
+          setFormData(prev => ({ ...prev, productId: productsData[0].id }));
+        }
+      }
+    } catch (err) {
+      console.error('Fetch error:', err);
     }
 
     setLoading(false);
@@ -99,17 +101,14 @@ export default function EsimInventoryPage() {
   };
 
 
-  // Delete handler
+  // Delete handler - 透過 API route 使用 service_role key
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除這筆 eSIM 庫存嗎？')) return;
     
     try {
-      const { error } = await supabase
-        .from('e_sim_inventory')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
+      const res = await fetch(`/api/admin/esim-inventory?id=${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '刪除失敗');
       fetchData(); // Refresh list after successful deletion
     } catch (error: any) {
       console.error('Error deleting eSIM:', error);
@@ -160,15 +159,13 @@ export default function EsimInventoryPage() {
       expiryDate: formattedDate
     });
     
-    // Fetch the specific item to get the real ICCID
-    supabase
-      .from('e_sim_inventory')
-      .select('iccid')
-      .eq('id', esim.id)
-      .single()
-      .then(({data}) => {
-        if (data) {
-          setEditFormData(prev => ({...prev, iccid: data.iccid}));
+    // Fetch the specific item to get the real ICCID via API
+    fetch('/api/admin/esim-inventory')
+      .then(res => res.json())
+      .then(json => {
+        const match = json.inventory?.find((inv: any) => inv.id === esim.id);
+        if (match) {
+          setEditFormData(prev => ({...prev, iccid: match.iccid || ''}));
         }
       });
 
@@ -180,19 +177,21 @@ export default function EsimInventoryPage() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('e_sim_inventory')
-        .update({
+      const res = await fetch('/api/admin/esim-inventory', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editFormData.id,
           product_id: editFormData.productId,
           iccid: editFormData.iccid,
           smdp_address: editFormData.smdpAddress,
           activation_code: editFormData.activationCode,
           status: editFormData.status,
-          expiry_date: new Date(editFormData.expiryDate).toISOString()
+          expiry_date: editFormData.expiryDate
         })
-        .eq('id', editFormData.id);
-
-      if (error) throw error;
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '更新失敗');
 
       setIsEditModalOpen(false);
       fetchData();
@@ -209,18 +208,19 @@ export default function EsimInventoryPage() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('e_sim_inventory')
-        .insert({
+      const res = await fetch('/api/admin/esim-inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           product_id: formData.productId,
           iccid: formData.iccid,
           smdp_address: formData.smdpAddress,
           activation_code: formData.activationCode,
-          status: 'AVAILABLE',
-          expiry_date: new Date(formData.expiryDate).toISOString()
-        });
-
-      if (error) throw error;
+          expiry_date: formData.expiryDate
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '新增失敗');
 
       // 新增成功
       setIsAddModalOpen(false);
