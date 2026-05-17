@@ -27,7 +27,20 @@ export default function Home() {
   const [regions, setRegions] = useState<string[]>(["全部", "亞洲", "歐洲", "美洲", "大洋洲"]);
   const [productsLoading, setProductsLoading] = useState(true);
 
+  // 網站標語設定
+  const [siteSettings, setSiteSettings] = useState({
+    hero_badge: '一飛通全球漫遊 · 2026 全新上線',
+    hero_title: '隨時隨地，全球無縫連線',
+    hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
+    section_title: '熱門目的地'
+  });
+
   useEffect(() => {
+    // 載入網站設定
+    fetch('/api/settings').then(r => r.json()).then(json => {
+      if (json.settings) setSiteSettings(json.settings);
+    }).catch(() => {});
+
     const fetchProducts = async () => {
       try {
         const res = await fetch('/api/products');
@@ -245,21 +258,20 @@ export default function Home() {
       {/* 首頁區塊 */}
       <section className="text-center pt-20 pb-16 px-6">
         <div className="inline-block bg-yellow/15 border border-yellow text-yellow px-4 py-1.5 rounded-full text-sm font-bold mb-6 animate-fade-in-up">
-          一飛通全球漫遊 · 2026 全新上線
+                    {siteSettings.hero_badge}
         </div>
         <h1 className="text-4xl md:text-6xl font-black leading-tight mb-6 animate-fade-in-up animation-delay-100">
-          隨時隨地，<br className="md:hidden" />
-          <span className="bg-gradient-to-br from-coral via-yellow to-cyan text-transparent bg-clip-text">全球無縫連線</span>
+          <span className="bg-gradient-to-br from-coral via-yellow to-cyan text-transparent bg-clip-text">{siteSettings.hero_title}</span>
         </h1>
         <p className="text-muted text-lg max-w-lg mx-auto mb-8 animate-fade-in-up animation-delay-200">
-          無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。
+          {siteSettings.hero_subtitle}
         </p>
       </section>
 
       {/* 商品區塊 */}
       <section id="products" className="max-w-6xl mx-auto px-6 py-16">
         <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-6">
-          <h2 className="text-3xl font-black">熱門目的地</h2>
+          <h2 className="text-3xl font-black">{siteSettings.section_title}</h2>
           <div className="flex flex-wrap gap-2 justify-center">
             {regions.map(region => (
               <button
