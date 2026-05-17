@@ -45,7 +45,7 @@ export default function MemberHistoryPage() {
         }
         const data = await response.json();
         setTransactions(data);
-      } catch (err: any)
+      } catch (err: any) {
         setError(err.message);
       } finally {
         setLoading(false);

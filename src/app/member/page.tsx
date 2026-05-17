@@ -139,7 +139,7 @@ export default function MemberCenter() {
               <div className="mb-5 mt-6">
                 <div className="flex justify-between text-xs mb-2">
                   <span className="text-white/50 font-medium">已使用流量</span>
-                  <span className="text-white/70 font-medium">0GB / {item.products.data_limit || '無限'}</span>
+                  <span className="text-white/70 font-medium">0GB / {item.products.data_amount || '無限'}</span>
                 </div>
                 <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
                   <div className="bg-gradient-to-r from-[#F05A28] to-[#f5bd61] h-1.5 rounded-full" style={{width: '5%'}}></div>
@@ -150,7 +150,7 @@ export default function MemberCenter() {
               <div className="flex justify-between border-t border-white/5 pt-4 mb-5 px-2">
                 <div>
                   <div className="text-xs text-white/40 mb-1">方案</div>
-                  <div className="font-bold text-sm text-white/90">{item.products.data_limit || 'N/A'}</div>
+                  <div className="font-bold text-sm text-white/90">{item.products.data_amount || 'N/A'}</div>
                 </div>
                 <div>
                   <div className="text-xs text-white/40 mb-1">天數</div>
