@@ -98,10 +98,14 @@ export default function Home() {
     setShowHiddenGem(Math.random() < 0.3);
   }, []);
 
+  // 過濾區域，並過濾金探子方案 (方案層級，不是國家層級)
   const filteredProducts = (activeRegion === "全部" 
     ? products 
     : products.filter(p => p.region === activeRegion)
-  ).filter(p => !p.isHiddenGem || showHiddenGem);
+  ).map(p => ({
+    ...p,
+    plans: p.plans.filter((plan: any) => !plan.isHiddenGem || showHiddenGem)
+  })).filter(p => p.plans.length > 0);
 
   const addToCart = (product: any, plan: any) => {
     const item = { ...product, ...plan, uid: Date.now() };
@@ -404,20 +408,16 @@ export default function Home() {
             const hasMore = product.plans.length > 3;
 
             return (
-              <div key={idx} className={`bg-card-bg border rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all group ${product.isHiddenGem ? 'border-yellow/40 hover:border-yellow/60 animate-pulse-slow' : 'border-white/10 hover:border-white/20'}`}>
+              <div key={idx} className="bg-card-bg border border-white/10 rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all group">
                 <div className="p-6 relative">
                   <span className="text-5xl block mb-2">{product.flag}</span>
                   <h3 className="text-xl font-bold">{product.country}</h3>
                   <p className="text-muted text-sm">{product.region}</p>
-                  {product.isHiddenGem ? (
-                    <div className="absolute top-6 right-6 bg-gradient-to-r from-yellow to-amber-400 text-dark text-xs font-black px-2 py-1 rounded-full animate-bounce">
-                      ✨ 金探子
-                    </div>
-                  ) : product.totalSales > 0 ? (
+                  {product.totalSales > 0 && (
                     <div className="absolute top-6 right-6 bg-yellow text-dark text-xs font-black px-2 py-1 rounded-full">
                       熱銷
                     </div>
-                  ) : null}
+                  )}
                 </div>
                 <div className="px-6 pb-6 flex flex-col gap-3">
                   {visiblePlans.map((plan: any, pIdx: number) => {
@@ -427,9 +427,12 @@ export default function Home() {
                     const hasMultiple = plan.options.length > 1;
 
                     return (
-                      <div key={pIdx} className="bg-white/5 border border-white/5 rounded-xl p-3 hover:border-coral/50 transition-colors">
+                      <div key={pIdx} className={`rounded-xl p-3 transition-colors ${plan.isHiddenGem ? 'bg-yellow-500/5 border border-yellow-500/30 hover:border-yellow-500/50' : 'bg-white/5 border border-white/5 hover:border-coral/50'}`}>
                         <div className="flex items-center justify-between mb-2">
-                          <div className="font-bold text-sm">{plan.data}</div>
+                          <div className="font-bold text-sm flex items-center gap-1.5">
+                            {plan.isHiddenGem && <span className="animate-bounce">✨</span>}
+                            {plan.data}
+                          </div>
                           <div className="flex items-center gap-3">
                             <div className="font-black text-coral">
                               <span className="text-[10px] text-muted font-normal mr-0.5">NT$</span>

@@ -98,7 +98,7 @@ export async function GET() {
           plansMap: {}
         };
       }
-      if (item.is_hidden_gem) grouped[item.country].isHiddenGem = true;
+      // is_hidden_gem 標記在方案層級，不在國家層級
 
       grouped[item.country].totalSales += productSales;
 
@@ -115,6 +115,10 @@ export async function GET() {
         days: item.validity_days,
         price: Number(item.price)
       });
+      // 標記此方案是否為金探子
+      if (item.is_hidden_gem) {
+        (grouped[item.country].plansMap[dataKey] as any).isHiddenGem = true;
+      }
     }
 
     // 4. 整理輸出格式：options 按 days 排序，國家按 totalSales 降序
@@ -124,9 +128,10 @@ export async function GET() {
         flag: g.flag,
         region: g.region,
         totalSales: g.totalSales,
-        isHiddenGem: g.isHiddenGem,
+        isHiddenGem: false, // 不再在國家層級標記
         plans: Object.values(g.plansMap).map(plan => ({
           data: plan.data,
+          isHiddenGem: (plan as any).isHiddenGem || false,
           options: plan.options.sort((a, b) => a.days - b.days)
         }))
       }))
