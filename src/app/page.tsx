@@ -281,6 +281,13 @@ export default function Home() {
         <div className="flex items-center gap-4">
             {user ? (
                 <div className="flex items-center gap-3">
+                    <a
+                      href="/games"
+                      className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white text-lg"
+                      title="遊戲中心"
+                    >
+                      🎮
+                    </a>
                     <a 
                       href="/member"
                       className="flex items-center gap-2.5 bg-gradient-to-r from-yellow/15 to-coral/10 hover:from-yellow/25 hover:to-coral/20 border border-yellow/30 hover:border-yellow/50 px-4 py-2 rounded-full transition-all hover:-translate-y-0.5 hover:shadow-[0_4px_15px_rgba(245,189,97,0.2)] group"

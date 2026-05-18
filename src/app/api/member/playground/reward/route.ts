@@ -9,10 +9,42 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {
-    const { email, game } = await request.json();
+    const { email, game, difficulty } = await request.json();
 
     if (!email || !game) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
+    }
+
+    // Only hard difficulty earns rewards
+    if (difficulty !== 'hard') {
+      return NextResponse.json({
+        success: true,
+        reward: 0,
+        message: '恭喜過關！'
+      });
+    }
+
+    const rewardAmount = 3;
+
+    // Check if already claimed today (using UTC start of day)
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const todayStr = today.toISOString();
+
+    const { data: history, error: historyError } = await supabase
+      .from('topup_history')
+      .select('id')
+      .eq('customer_email', email)
+      .like('remark', '遊樂場過關獎勵%')
+      .gte('created_at', todayStr);
+
+    if (history && history.length > 0) {
+      // Already claimed today
+      return NextResponse.json({ 
+        success: true, 
+        reward: 0, 
+        message: '🎉 過關了！\n\n但您今日已領取過遊樂場獎勵，明天再來挑戰賺儲值金吧！'
+      });
     }
 
     // 取得使用者目前餘額
@@ -26,8 +58,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '找不到會員' }, { status: 404 });
     }
 
-    // 發放 5 元儲值金 (或 10 元) 作為獎勵
-    const rewardAmount = 5;
     const newBalance = (customer.token_balance || 0) + rewardAmount;
 
     // 更新餘額
@@ -40,18 +70,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '更新餘額失敗' }, { status: 500 });
     }
 
-    // 可以紀錄發放日誌 (Topup History)
+    const difficultyLabel = difficulty === 'easy' ? '簡單' : difficulty === 'medium' ? '普通' : '困難';
+
     await supabase.from('topup_history').insert([
       {
         customer_email: email,
         amount: rewardAmount,
         type: 'bonus',
         status: 'completed',
-        remark: `遊樂場過關獎勵 (${game})`
+        remark: `遊樂場過關獎勵 (${game} - ${difficultyLabel})`
       }
     ]);
 
-    return NextResponse.json({ success: true, reward: rewardAmount, newBalance });
+    return NextResponse.json({ 
+      success: true, 
+      reward: rewardAmount, 
+      newBalance,
+      message: `恭喜過關！\n成功獲得 ${rewardAmount} 元儲值金！`
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

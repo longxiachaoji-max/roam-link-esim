@@ -281,7 +281,7 @@ export default function MemberCenter() {
               <h3 className="text-base font-bold text-white mb-1">🎮 旅行遊樂場</h3>
               <p className="text-xs text-white/60">玩小遊戲過關，賺取免費儲值金！</p>
             </div>
-            <Link href="/member/playground/sudoku" className="bg-white/10 hover:bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-full border border-white/10 transition-all flex items-center gap-1">
+            <Link href="/games" className="bg-white/10 hover:bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-full border border-white/10 transition-all flex items-center gap-1">
               開始遊戲 <span className="text-xs">▶</span>
             </Link>
           </div>
