@@ -460,21 +460,31 @@ export default function MemberCenter() {
                 📋 複製
               </button>
               <button onClick={async () => {
+                  const installUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData!)}`;
+                  const siteUrl = window.location.origin;
+                  const shareText = [
+                    '\ud83c\udf10 Roam Link eSIM \u5b89\u88dd\u8cc7\u8a0a',
+                    '',
+                    '\ud83d\udcf1 iOS 17.4+ \u4e00\u9375\u5b89\u88dd\uff1a',
+                    installUrl,
+                    '',
+                    '\ud83d\udcdd LPA \u78bc (\u624b\u52d5\u8f38\u5165)\uff1a',
+                    qrCodeData,
+                    '',
+                    '\ud83d\uded2 \u8cfc\u8ce3\u7db2\u7ad9\uff1a',
+                    siteUrl
+                  ].join('\n');
                   if (navigator.share) {
                     try {
-                      await navigator.share({
-                        title: 'eSIM 安裝資訊',
-                        text: `掃描 QR Code 或使用以下 LPA 碼安裝 eSIM:\n${qrCodeData}`,
-                        url: `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData)}`
-                      });
-                    } catch(e) { /* user cancelled */ }
+                      await navigator.share({ title: 'Roam Link eSIM', text: shareText });
+                    } catch(e) { /* cancelled */ }
                   } else {
-                    navigator.clipboard.writeText(`eSIM 安裝資訊:\n${qrCodeData}\n\u5b89裝連結: https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData)}`);
-                    showToast('✅ 已複製安裝資訊');
+                    navigator.clipboard.writeText(shareText);
+                    showToast('\u2705 \u5df2\u8907\u88fd\u5b8c\u6574\u5b89\u88dd\u8cc7\u8a0a');
                   }
                 }} 
                 className="bg-[#F05A28]/20 hover:bg-[#F05A28]/30 text-[#F05A28] text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5">
-                <Share2 size={14} /> 分享給親友
+                <Share2 size={14} /> \u5206\u4eab\u7d66\u89aa\u53cb
               </button>
             </div>
           </div>
