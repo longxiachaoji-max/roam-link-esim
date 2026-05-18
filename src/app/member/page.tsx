@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, CreditCard, Trash2, Edit3, Check } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, CreditCard, Trash2, Edit3, Check, Share2 } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -345,7 +345,7 @@ export default function MemberCenter() {
                        href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
                        className={`flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${deleted ? 'opacity-60' : 'hover:bg-cyan/20 text-cyan'}`}
                      >
-                       <Smartphone size={16} /> 一鍵安裝
+                       <Smartphone size={16} /> iOS 17.4+ 一鍵安裝
                      </a>
                      <button 
                        className={`flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${deleted ? 'opacity-60' : 'hover:bg-white/10'}`}
@@ -451,13 +451,32 @@ export default function MemberCenter() {
                <QRCodeSVG value={qrCodeData} size={200} />
             </div>
             <p className="text-xs text-white/50 text-center break-all w-full mb-2">LPA 碼: {qrCodeData}</p>
-            <button onClick={() => {
-                navigator.clipboard.writeText(qrCodeData);
-                showToast('✅ 複製成功');
-              }} 
-              className="bg-white/10 hover:bg-white/20 text-white text-sm font-bold py-2 px-4 rounded-xl transition-colors">
-              複製文字
-            </button>
+            <div className="flex gap-3">
+              <button onClick={() => {
+                  navigator.clipboard.writeText(qrCodeData);
+                  showToast('✅ 複製成功');
+                }} 
+                className="bg-white/10 hover:bg-white/20 text-white text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5">
+                📋 複製
+              </button>
+              <button onClick={async () => {
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: 'eSIM 安裝資訊',
+                        text: `掃描 QR Code 或使用以下 LPA 碼安裝 eSIM:\n${qrCodeData}`,
+                        url: `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData)}`
+                      });
+                    } catch(e) { /* user cancelled */ }
+                  } else {
+                    navigator.clipboard.writeText(`eSIM 安裝資訊:\n${qrCodeData}\n\u5b89裝連結: https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData)}`);
+                    showToast('✅ 已複製安裝資訊');
+                  }
+                }} 
+                className="bg-[#F05A28]/20 hover:bg-[#F05A28]/30 text-[#F05A28] text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5">
+                <Share2 size={14} /> 分享給親友
+              </button>
+            </div>
           </div>
         </div>
       )}

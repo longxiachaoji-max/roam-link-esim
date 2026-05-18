@@ -7,13 +7,15 @@ interface SiteSettings {
   hero_title: string;
   hero_subtitle: string;
   section_title: string;
+  usage_guide: string;
 }
 
 const DEFAULTS: SiteSettings = {
   hero_badge: '一飛通全球漫遊 · 2026 全新上線',
   hero_title: '隨時隨地，全球無縫連線',
   hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
-  section_title: '熱門目的地'
+  section_title: '熱門目的地',
+  usage_guide: ''
 };
 
 export default function SettingsPage() {
@@ -153,6 +155,25 @@ export default function SettingsPage() {
             placeholder="例如：熱門目的地"
             value={settings.section_title}
             onChange={(e) => setSettings({ ...settings, section_title: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* Usage Guide Section */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm space-y-6 mt-6">
+        <div>
+          <label className="block text-sm font-medium text-white/70 mb-2">
+            使用說明 <span className="text-white/30">(Markdown 格式)</span>
+          </label>
+          <p className="text-xs text-white/30 mb-3">
+            支援 Markdown 語法：# 標題、** 粗體、- 列表、![alt](url) 圖片、換行
+          </p>
+          <textarea
+            rows={12}
+            className="w-full border-white/20 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-3 border text-white bg-black/40 placeholder:text-white/30 resize-y font-mono"
+            placeholder={"# 如何使用 eSIM\n\n1. 購買方案後，前往會員中心\n2. 找到您的 eSIM QR Code\n3. 使用手機掃描 QR Code\n\n![示意圖](https://example.com/guide.png)"}
+            value={settings.usage_guide}
+            onChange={(e) => setSettings({ ...settings, usage_guide: e.target.value })}
           />
         </div>
 

@@ -30,13 +30,14 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { hero_badge, hero_title, hero_subtitle, section_title } = body;
+    const { hero_badge, hero_title, hero_subtitle, section_title, usage_guide } = body;
 
     const updateData: any = { updated_at: new Date().toISOString() };
     if (hero_badge !== undefined) updateData.hero_badge = hero_badge;
     if (hero_title !== undefined) updateData.hero_title = hero_title;
     if (hero_subtitle !== undefined) updateData.hero_subtitle = hero_subtitle;
     if (section_title !== undefined) updateData.section_title = section_title;
+    if (usage_guide !== undefined) updateData.usage_guide = usage_guide;
 
     const { error } = await supabase
       .from('site_settings')

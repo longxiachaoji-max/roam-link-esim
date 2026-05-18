@@ -21,6 +21,7 @@ export default function Home() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authConfirmPassword, setAuthConfirmPassword] = useState("");
+  const [authPromoCode, setAuthPromoCode] = useState("");
 
   // 從資料庫動態載入商品
   const [products, setProducts] = useState<any[]>([]);
@@ -37,8 +38,35 @@ export default function Home() {
     hero_badge: '一飛通全球漫遊 · 2026 全新上線',
     hero_title: '隨時隨地，全球無縫連線',
     hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
-    section_title: '熱門目的地'
+    section_title: '熱門目的地',
+    usage_guide: ''
   });
+
+  // 分頁切換
+  const [activeTab, setActiveTab] = useState<'plans' | 'guide'>('plans');
+
+  // 簡易 Markdown 轉 HTML
+  const renderMarkdown = (md: string) => {
+    if (!md) return '';
+    let html = md
+      // 圖片
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="max-w-full rounded-xl my-4" />')
+      // 標題
+      .replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-white mt-6 mb-2">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-white mt-8 mb-3">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-black text-white mt-8 mb-4">$1</h1>')
+      // 粗體
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
+      // 列表
+      .replace(/^- (.+)$/gm, '<li class="text-muted ml-4 list-disc">$1</li>')
+      // 換行
+      .replace(/\n/g, '<br />');
+    // 包裝連續的 li
+    html = html.replace(/(<li[^>]*>.*?<\/li>(<br \/>)?)+/g, (match) => {
+      return '<ul class="my-3">' + match.replace(/<br \/>/g, '') + '</ul>';
+    });
+    return html;
+  };
 
   useEffect(() => {
     // 載入網站設定
@@ -162,8 +190,27 @@ export default function Home() {
       // 這裡如果 Supabase 開啟了 Email Confirm，會需要收信驗證。
       // 開發期建議到 Supabase 關閉 Confirm email 功能。
       showToast("✅ 註冊成功，請登入測試。");
+      // 如果有填推薦碼，嘗試兑換
+      if (authPromoCode.trim()) {
+        try {
+          const promoRes = await fetch('/api/promo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: authEmail, code: authPromoCode.trim() }),
+          });
+          const promoJson = await promoRes.json();
+          if (promoRes.ok && promoJson.success) {
+            showToast(`✅ 註冊成功！推薦碼已兑換 NT$${promoJson.addedTokens}`);
+          } else {
+            showToast("✅ 註冊成功！推薦碼無效或已過期，但不影響註冊");
+          }
+        } catch {
+          showToast("✅ 註冊成功！推薦碼兑換失敗，但不影響註冊");
+        }
+      }
       setIsRegisterMode(false);
-      setAuthConfirmPassword(""); // 清空
+      setAuthConfirmPassword("");
+      setAuthPromoCode(""); // 清空
     }
   };
 
@@ -278,6 +325,46 @@ export default function Home() {
         <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-6">
           <h2 className="text-3xl font-black">{siteSettings.section_title}</h2>
           <div className="flex flex-wrap gap-2 justify-center">
+            <button
+              onClick={() => setActiveTab('plans')}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                activeTab === 'plans'
+                  ? 'bg-coral/20 border-coral text-coral border'
+                  : 'bg-transparent border-white/10 text-muted border hover:bg-white/5'
+              }`}
+            >
+              eSIM 方案
+            </button>
+            <button
+              onClick={() => setActiveTab('guide')}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                activeTab === 'guide'
+                  ? 'bg-coral/20 border-coral text-coral border'
+                  : 'bg-transparent border-white/10 text-muted border hover:bg-white/5'
+              }`}
+            >
+              使用說明
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'guide' ? (
+          <div className="bg-card-bg border border-white/10 rounded-3xl p-8 md:p-12">
+            {siteSettings.usage_guide ? (
+              <div
+                className="prose prose-invert max-w-none text-muted leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(siteSettings.usage_guide) }}
+              />
+            ) : (
+              <div className="text-center py-20">
+                <p className="text-4xl mb-4">📖</p>
+                <p className="text-muted text-lg">使用說明即將推出</p>
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
+        <div className="flex flex-wrap gap-2 justify-center mb-8">
             {regions.map(region => (
               <button
                 key={region}
@@ -291,7 +378,6 @@ export default function Home() {
                 {region}
               </button>
             ))}
-          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -403,6 +489,8 @@ export default function Home() {
             );
           })}
         </div>
+        </>
+        )}
       </section>
 
       {/* 登入 / 註冊對話框 */}
@@ -424,10 +512,16 @@ export default function Home() {
               </div>
 
               {isRegisterMode && (
+                <>
                 <div>
                   <label className="block text-sm text-muted mb-2">確認密碼</label>
                   <input required type="password" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} placeholder="••••••••" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan" />
                 </div>
+                <div>
+                  <label className="block text-sm text-muted mb-2">推薦碼（選填）</label>
+                  <input type="text" value={authPromoCode} onChange={(e) => setAuthPromoCode(e.target.value.toUpperCase())} placeholder="輸入推薦碼可獲得優惠" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan font-mono placeholder:font-sans" />
+                </div>
+                </>
               )}
               
               {!isRegisterMode && !isForgotPassword && (

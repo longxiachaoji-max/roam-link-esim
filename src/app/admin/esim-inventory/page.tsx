@@ -116,7 +116,10 @@ export default function EsimInventoryPage() {
       // 2. Fetch products for dropdown (anon key is fine for read-only products)
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, name');
+        .select('id, name, country, data_amount')
+        .order('country', { ascending: true })
+        .order('data_amount', { ascending: true })
+        .order('name', { ascending: true });
       
       if (productsError) {
         console.error('Error fetching products:', productsError);
@@ -555,7 +558,7 @@ export default function EsimInventoryPage() {
                   >
                     <option value="" disabled className="text-black">請選擇商品</option>
                     {products.map(p => (
-                      <option key={p.id} value={p.id} className="text-black">{p.name}</option>
+                      <option key={p.id} value={p.id} className="text-black">[{(p as any).country}] {(p as any).data_amount} - {p.name}</option>
                     ))}
                   </select>
                 </div>
@@ -658,7 +661,7 @@ export default function EsimInventoryPage() {
                   >
                     <option value="" disabled className="text-black">請選擇商品</option>
                     {products.map(p => (
-                      <option key={p.id} value={p.id} className="text-black">{p.name}</option>
+                      <option key={p.id} value={p.id} className="text-black">[{(p as any).country}] {(p as any).data_amount} - {p.name}</option>
                     ))}
                   </select>
                 </div>
