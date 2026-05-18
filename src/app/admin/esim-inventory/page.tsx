@@ -29,6 +29,49 @@ export default function EsimInventoryPage() {
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchPreview, setBatchPreview] = useState<any[]>([]);
+  const [batchResult, setBatchResult] = useState<any>(null);
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+
+  const parseBatchEsim = (text: string) => {
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    if (lines.length === 0) return [];
+    const startIdx = lines[0].includes('SM-DP') || lines[0].includes('smdp') || lines[0].includes('商品') ? 1 : 0;
+    return lines.slice(startIdx).map(line => {
+      const cols = line.split('\t');
+      return {
+        product_name: cols[0]?.trim() || '',
+        smdp_address: cols[1]?.trim() || '',
+        activation_code: cols[2]?.trim() || '',
+        iccid: cols[3]?.trim() || '',
+        cost: cols[4]?.trim() || '',
+        expiry_date: cols[5]?.trim() || '',
+      };
+    }).filter(r => r.smdp_address && r.activation_code);
+  };
+
+  const handleBatchEsimSubmit = async () => {
+    if (isBatchSubmitting || batchPreview.length === 0) return;
+    setIsBatchSubmitting(true);
+    setBatchResult(null);
+    try {
+      const res = await fetch('/api/admin/esim-inventory/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: batchPreview })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '匯入失敗');
+      setBatchResult(json);
+      fetchData();
+    } catch (err: any) {
+      setBatchResult({ error: err.message });
+    } finally {
+      setIsBatchSubmitting(false);
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     productId: '',
@@ -269,15 +312,23 @@ export default function EsimInventoryPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-white">eSIM 庫存管理</h1>
-        <button 
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-          </svg>
-          新增 eSIM
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setIsBatchOpen(true); setBatchText(''); setBatchPreview([]); setBatchResult(null); }}
+            className="bg-white/10 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-white/20 transition-colors flex items-center gap-1"
+          >
+            📋 批量匯入
+          </button>
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            新增 eSIM
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -394,6 +445,91 @@ export default function EsimInventoryPage() {
           );
         });
       })()}
+
+      {/* Batch Import Modal */}
+      {isBatchOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-2xl w-full p-6 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">📋 批量匯入 eSIM</h2>
+              <button onClick={() => setIsBatchOpen(false)} className="text-white/50 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → SM-DP+ → 啟用碼 → ICCID(選填) → 成本(選填) → 到期日(選填)</span></p>
+            <p className="text-xs text-white/30 mb-3">商品名稱會自動比對現有商品，啟用碼重複的會自動排除</p>
+
+            <textarea
+              rows={8}
+              className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 mb-3 resize-none"
+              placeholder="從 Google 試算表複製貼上... 台灣5G 1天	smdp.example.com	ACTIVATION123	ICCID123	50	2026-12-31"
+              value={batchText}
+              onChange={(e) => {
+                setBatchText(e.target.value);
+                setBatchPreview(parseBatchEsim(e.target.value));
+                setBatchResult(null);
+              }}
+            />
+
+            {batchPreview.length > 0 && !batchResult && (
+              <div className="mb-4">
+                <p className="text-sm text-white/60 mb-2">預覽：{batchPreview.length} 筆 eSIM</p>
+                <div className="max-h-48 overflow-y-auto bg-black/30 rounded-lg border border-white/10">
+                  <table className="w-full text-xs">
+                    <thead><tr className="text-white/40 border-b border-white/10">
+                      <th className="px-2 py-1.5 text-left">商品</th>
+                      <th className="px-2 py-1.5 text-left">SM-DP+</th>
+                      <th className="px-2 py-1.5 text-left">啟用碼</th>
+                      <th className="px-2 py-1.5 text-left">ICCID</th>
+                      <th className="px-2 py-1.5 text-right">成本</th>
+                    </tr></thead>
+                    <tbody>{batchPreview.map((r, i) => (
+                      <tr key={i} className="border-b border-white/5">
+                        <td className="px-2 py-1.5 text-white/60 truncate max-w-[120px]">{r.product_name || '-'}</td>
+                        <td className="px-2 py-1.5 text-white/60 truncate max-w-[120px]">{r.smdp_address}</td>
+                        <td className="px-2 py-1.5 text-white/80 font-mono truncate max-w-[100px]">{r.activation_code}</td>
+                        <td className="px-2 py-1.5 text-white/40">{r.iccid || '-'}</td>
+                        <td className="px-2 py-1.5 text-right text-white/60">{r.cost || '-'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {batchResult && (
+              <div className={`p-4 rounded-lg mb-4 text-sm ${batchResult.error ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
+                {batchResult.error ? (
+                  <p>❌ {batchResult.error}</p>
+                ) : (
+                  <div>
+                    <p className="font-bold mb-1">✅ 匯入完成</p>
+                    <p>成功新增: {batchResult.inserted} 筆</p>
+                    {batchResult.skipped > 0 && <p>跳過 (重複/無效): {batchResult.skipped} 筆</p>}
+                    {batchResult.skippedItems?.map((s: any, i: number) => (
+                      <p key={i} className="text-xs text-yellow-400/70 mt-1">  → {s.activation_code}: {s.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setIsBatchOpen(false)} className="px-4 py-2 border border-white/20 rounded-lg text-sm text-white/70 hover:bg-white/10">關閉</button>
+              {!batchResult?.inserted && (
+                <button
+                  onClick={handleBatchEsimSubmit}
+                  disabled={isBatchSubmitting || batchPreview.length === 0}
+                  className={`px-6 py-2 rounded-lg text-sm font-bold ${isBatchSubmitting || batchPreview.length === 0 ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                >
+                  {isBatchSubmitting ? '匯入中...' : `確認匯入 ${batchPreview.length} 筆`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add eSIM Modal */}
       {isAddModalOpen && (

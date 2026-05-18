@@ -29,6 +29,49 @@ export default function ProductsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchPreview, setBatchPreview] = useState<any[]>([]);
+  const [batchResult, setBatchResult] = useState<any>(null);
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+
+  const parseBatchText = (text: string) => {
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    if (lines.length === 0) return [];
+    // 跳過標題行 (包含「商品名稱」或「國家」)
+    const startIdx = lines[0].includes('商品名稱') || lines[0].includes('國家') ? 1 : 0;
+    return lines.slice(startIdx).map(line => {
+      const cols = line.split('\t');
+      return {
+        name: cols[0]?.trim() || '',
+        country: cols[1]?.trim() || '',
+        data_amount: cols[2]?.trim() || '',
+        validity_days: cols[3]?.trim() || '',
+        price: cols[4]?.trim() || '',
+      };
+    }).filter(r => r.name && r.country);
+  };
+
+  const handleBatchSubmit = async () => {
+    if (isBatchSubmitting || batchPreview.length === 0) return;
+    setIsBatchSubmitting(true);
+    setBatchResult(null);
+    try {
+      const res = await fetch('/api/admin/products/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: batchPreview })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '匯入失敗');
+      setBatchResult(json);
+      fetchProducts();
+    } catch (err: any) {
+      setBatchResult({ error: err.message });
+    } finally {
+      setIsBatchSubmitting(false);
+    }
+  };
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const toggleGroup = (key: string) => {
@@ -292,15 +335,23 @@ export default function ProductsPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-white">商品管理</h1>
-        <button
-          onClick={() => { setFormData(emptyForm); setIsAddModalOpen(true); }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-          </svg>
-          新增商品
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setIsBatchOpen(true); setBatchText(''); setBatchPreview([]); setBatchResult(null); }}
+            className="bg-white/10 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-white/20 transition-colors flex items-center gap-1"
+          >
+            📋 批量匯入
+          </button>
+          <button
+            onClick={() => { setFormData(emptyForm); setIsAddModalOpen(true); }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            新增商品
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -498,6 +549,91 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Import Modal */}
+      {isBatchOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-2xl w-full p-6 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">📋 批量匯入商品</h2>
+              <button onClick={() => setIsBatchOpen(false)} className="text-white/50 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → 國家 → 流量規格 → 有效天數 → 價格</span></p>
+            <p className="text-xs text-white/30 mb-3">第一行如果是標題會自動跳過，重複的商品 (同名稱+國家+天數) 會自動排除</p>
+
+            <textarea
+              rows={8}
+              className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 mb-3 resize-none"
+              placeholder="從 Google 試算表複製貼上... 台灣5G 高速上網 1天	台灣	每日1GB	1	56"
+              value={batchText}
+              onChange={(e) => {
+                setBatchText(e.target.value);
+                setBatchPreview(parseBatchText(e.target.value));
+                setBatchResult(null);
+              }}
+            />
+
+            {batchPreview.length > 0 && !batchResult && (
+              <div className="mb-4">
+                <p className="text-sm text-white/60 mb-2">預覽：{batchPreview.length} 筆商品</p>
+                <div className="max-h-48 overflow-y-auto bg-black/30 rounded-lg border border-white/10">
+                  <table className="w-full text-xs">
+                    <thead><tr className="text-white/40 border-b border-white/10">
+                      <th className="px-3 py-1.5 text-left">名稱</th>
+                      <th className="px-3 py-1.5 text-left">國家</th>
+                      <th className="px-3 py-1.5 text-left">流量</th>
+                      <th className="px-3 py-1.5 text-right">天數</th>
+                      <th className="px-3 py-1.5 text-right">價格</th>
+                    </tr></thead>
+                    <tbody>{batchPreview.map((r, i) => (
+                      <tr key={i} className="border-b border-white/5">
+                        <td className="px-3 py-1.5 text-white/80">{r.name}</td>
+                        <td className="px-3 py-1.5 text-white/60">{r.country}</td>
+                        <td className="px-3 py-1.5 text-white/60">{r.data_amount}</td>
+                        <td className="px-3 py-1.5 text-right text-white/60">{r.validity_days}</td>
+                        <td className="px-3 py-1.5 text-right text-white/80">NT${r.price}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {batchResult && (
+              <div className={`p-4 rounded-lg mb-4 text-sm ${batchResult.error ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
+                {batchResult.error ? (
+                  <p>❌ {batchResult.error}</p>
+                ) : (
+                  <div>
+                    <p className="font-bold mb-1">✅ 匯入完成</p>
+                    <p>成功新增: {batchResult.inserted} 筆</p>
+                    {batchResult.skipped > 0 && <p>跳過 (重複/無效): {batchResult.skipped} 筆</p>}
+                    {batchResult.skippedItems?.map((s: any, i: number) => (
+                      <p key={i} className="text-xs text-yellow-400/70 mt-1">  → {s.name}: {s.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setIsBatchOpen(false)} className="px-4 py-2 border border-white/20 rounded-lg text-sm text-white/70 hover:bg-white/10">關閉</button>
+              {!batchResult?.inserted && (
+                <button
+                  onClick={handleBatchSubmit}
+                  disabled={isBatchSubmitting || batchPreview.length === 0}
+                  className={`px-6 py-2 rounded-lg text-sm font-bold ${isBatchSubmitting || batchPreview.length === 0 ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                >
+                  {isBatchSubmitting ? '匯入中...' : `確認匯入 ${batchPreview.length} 筆`}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
