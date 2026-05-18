@@ -5,96 +5,67 @@ import { supabase } from "@/lib/supabase";
 import { X, Trophy } from "lucide-react";
 import Link from "next/link";
 
-// ─────────────────── Multiple Puzzles Per Difficulty ───────────────────
+// ─────────────────── Sudoku Generator ───────────────────
 
-const EASY_PUZZLES = [
-  {
-    puzzle: [
-      [5,3,0,0,7,0,0,0,0],[6,0,0,1,9,5,0,0,0],[0,9,8,0,0,0,0,6,0],
-      [8,0,0,0,6,0,0,0,3],[4,0,0,8,0,3,0,0,1],[7,0,0,0,2,0,0,0,6],
-      [0,6,0,0,0,0,2,8,0],[0,0,0,4,1,9,0,0,5],[0,0,0,0,8,0,0,7,9]
-    ],
-    solution: [
-      [5,3,4,6,7,8,9,1,2],[6,7,2,1,9,5,3,4,8],[1,9,8,3,4,2,5,6,7],
-      [8,5,9,7,6,1,4,2,3],[4,2,6,8,5,3,7,9,1],[7,1,3,9,2,4,8,5,6],
-      [9,6,1,5,3,7,2,8,4],[2,8,7,4,1,9,6,3,5],[3,4,5,2,8,6,1,7,9]
-    ]
-  },
-  {
-    puzzle: [
-      [0,0,3,0,2,0,6,0,0],[9,0,0,3,0,5,0,0,1],[0,0,1,8,0,6,4,0,0],
-      [0,0,8,1,0,2,9,0,0],[7,0,0,0,0,0,0,0,8],[0,0,6,7,0,8,2,0,0],
-      [0,0,2,6,0,9,5,0,0],[8,0,0,2,0,3,0,0,9],[0,0,5,0,1,0,3,0,0]
-    ],
-    solution: [
-      [4,8,3,9,2,1,6,5,7],[9,6,7,3,4,5,8,2,1],[2,5,1,8,7,6,4,9,3],
-      [5,4,8,1,3,2,9,7,6],[7,2,9,5,6,4,1,3,8],[1,3,6,7,9,8,2,4,5],
-      [3,7,2,6,8,9,5,1,4],[8,1,4,2,5,3,7,6,9],[6,9,5,4,1,7,3,8,2]
-    ]
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-];
+  return a;
+}
 
-const MEDIUM_PUZZLES = [
-  {
-    puzzle: [
-      [0,0,0,2,6,0,7,0,1],[6,8,0,0,7,0,0,9,0],[1,9,0,0,0,4,5,0,0],
-      [8,2,0,1,0,0,0,4,0],[0,0,4,6,0,2,9,0,0],[0,5,0,0,0,3,0,2,8],
-      [0,0,9,3,0,0,0,7,4],[0,4,0,0,5,0,0,3,6],[7,0,3,0,1,8,0,0,0]
-    ],
-    solution: [
-      [4,3,5,2,6,9,7,8,1],[6,8,2,5,7,1,4,9,3],[1,9,7,8,3,4,5,6,2],
-      [8,2,6,1,9,5,3,4,7],[3,7,4,6,8,2,9,1,5],[9,5,1,7,4,3,6,2,8],
-      [5,1,9,3,2,6,8,7,4],[2,4,8,9,5,7,1,3,6],[7,6,3,4,1,8,2,5,9]
-    ]
-  },
-  {
-    puzzle: [
-      [0,0,0,6,0,0,4,0,0],[7,0,0,0,0,3,6,0,0],[0,0,0,0,9,1,0,8,0],
-      [0,0,0,0,0,0,0,0,0],[0,5,0,1,8,0,0,0,3],[0,0,0,3,0,6,0,4,5],
-      [0,4,0,2,0,0,0,6,0],[9,0,3,0,0,0,0,0,0],[0,2,0,0,0,0,1,0,0]
-    ],
-    solution: [
-      [5,8,1,6,7,2,4,3,9],[7,9,2,8,4,3,6,5,1],[3,6,4,5,9,1,7,8,2],
-      [4,3,8,9,5,7,2,1,6],[2,5,6,1,8,4,9,7,3],[1,7,9,3,2,6,8,4,5],
-      [8,4,5,2,1,9,3,6,7],[9,1,3,7,6,8,5,2,4],[6,2,7,4,3,5,1,9,8]
-    ]
-  }
-];
+function isValid(board: number[][], row: number, col: number, num: number): boolean {
+  if (board[row].includes(num)) return false;
+  for (let r = 0; r < 9; r++) if (board[r][col] === num) return false;
+  const br = Math.floor(row / 3) * 3, bc = Math.floor(col / 3) * 3;
+  for (let r = br; r < br + 3; r++)
+    for (let c = bc; c < bc + 3; c++)
+      if (board[r][c] === num) return false;
+  return true;
+}
 
-const HARD_PUZZLES = [
-  {
-    puzzle: [
-      [0,0,0,0,0,0,0,0,0],[0,0,0,0,0,3,0,8,5],[0,0,1,0,2,0,0,0,0],
-      [0,0,0,5,0,7,0,0,0],[0,0,4,0,0,0,1,0,0],[0,9,0,0,0,0,0,0,0],
-      [5,0,0,0,0,0,0,7,3],[0,0,2,0,1,0,0,0,0],[0,0,0,0,4,0,0,0,9]
-    ],
-    solution: [
-      [9,8,7,6,5,4,3,2,1],[2,4,6,1,7,3,9,8,5],[3,5,1,9,2,8,7,4,6],
-      [1,2,8,5,3,7,6,9,4],[6,3,4,8,9,2,1,5,7],[7,9,5,4,6,1,8,3,2],
-      [5,1,9,2,8,6,4,7,3],[4,7,2,3,1,9,5,6,8],[8,6,3,7,4,5,2,1,9]
-    ]
-  },
-  {
-    puzzle: [
-      [0,2,0,0,0,0,0,0,0],[0,0,0,6,0,0,0,0,3],[0,7,4,0,8,0,0,0,0],
-      [0,0,0,0,0,3,0,0,2],[0,8,0,0,4,0,0,1,0],[6,0,0,5,0,0,0,0,0],
-      [0,0,0,0,1,0,7,8,0],[5,0,0,0,0,9,0,0,0],[0,0,0,0,0,0,0,4,0]
-    ],
-    solution: [
-      [1,2,6,4,3,7,9,5,8],[8,9,5,6,2,1,4,7,3],[3,7,4,9,8,5,1,2,6],
-      [4,5,7,1,9,3,8,6,2],[9,8,3,2,4,6,5,1,7],[6,1,2,5,7,8,3,9,4],
-      [2,6,9,3,1,4,7,8,5],[5,4,8,7,6,9,2,3,1],[7,3,1,8,5,2,6,4,9]
-    ]
+function fillBoard(board: number[][]): boolean {
+  for (let row = 0; row < 9; row++) {
+    for (let col = 0; col < 9; col++) {
+      if (board[row][col] === 0) {
+        for (const num of shuffle([1,2,3,4,5,6,7,8,9])) {
+          if (isValid(board, row, col, num)) {
+            board[row][col] = num;
+            if (fillBoard(board)) return true;
+            board[row][col] = 0;
+          }
+        }
+        return false;
+      }
+    }
   }
-];
+  return true;
+}
+
+function generatePuzzle(difficulty: string): { puzzle: number[][], solution: number[][] } {
+  // 產生完整解答
+  const solution = Array.from({ length: 9 }, () => Array(9).fill(0));
+  fillBoard(solution);
+
+  // 按難度決定挖空數量
+  const emptyCells = difficulty === "easy" ? 35 : difficulty === "medium" ? 46 : 55;
+  const puzzle = solution.map(row => [...row]);
+
+  // 隨機挖空
+  const positions = shuffle(Array.from({ length: 81 }, (_, i) => i));
+  for (let i = 0; i < emptyCells; i++) {
+    const pos = positions[i];
+    puzzle[Math.floor(pos / 9)][pos % 9] = 0;
+  }
+
+  return { puzzle, solution };
+}
 
 type Difficulty = "easy" | "medium" | "hard";
 
-function getRandomPuzzle(diff: Difficulty) {
-  const list = diff === "easy" ? EASY_PUZZLES : diff === "medium" ? MEDIUM_PUZZLES : HARD_PUZZLES;
-  const idx = Math.floor(Math.random() * list.length);
-  return list[idx];
-}
+// getRandomPuzzle 已由 generatePuzzle 取代
 
 const MAX_CHANCES = 3;
 
@@ -125,7 +96,7 @@ export default function SudokuGame() {
   };
 
   const startGame = (diff: Difficulty) => {
-    const p = getRandomPuzzle(diff);
+    const p = generatePuzzle(diff);
     setDifficulty(diff);
     setPuzzle(p.puzzle.map(r => [...r]));
     setSolution(p.solution.map(r => [...r]));
@@ -137,7 +108,7 @@ export default function SudokuGame() {
   };
 
   const resetGame = () => {
-    const p = getRandomPuzzle(difficulty);
+    const p = generatePuzzle(difficulty);
     setPuzzle(p.puzzle.map(r => [...r]));
     setSolution(p.solution.map(r => [...r]));
     setBoard(p.puzzle.map(r => [...r]));
