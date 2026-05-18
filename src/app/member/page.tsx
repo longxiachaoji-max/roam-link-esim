@@ -447,7 +447,7 @@ export default function MemberCenter() {
           <div className="bg-[#1A1A2E] w-full max-w-xs rounded-[2rem] p-8 shadow-2xl relative border border-white/10 flex flex-col items-center">
             <button onClick={() => setQrCodeData(null)} className="absolute top-5 right-5 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
             <h3 className="text-xl font-bold mb-6">掃描加入 eSIM</h3>
-            <div className="bg-white p-4 rounded-2xl mb-6 flex justify-center items-center w-[232px] h-[232px]">
+            <div className="qr-share-area bg-white p-4 rounded-2xl mb-6 flex justify-center items-center w-[232px] h-[232px]">
                <QRCodeSVG value={qrCodeData} size={200} />
             </div>
             <p className="text-xs text-white/50 text-center break-all w-full mb-2">LPA 碼: {qrCodeData}</p>
@@ -462,29 +462,44 @@ export default function MemberCenter() {
               <button onClick={async () => {
                   const installUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData!)}`;
                   const siteUrl = window.location.origin;
-                  const shareText = [
-                    '\ud83c\udf10 Roam Link eSIM \u5b89\u88dd\u8cc7\u8a0a',
-                    '',
-                    '\ud83d\udcf1 iOS 17.4+ \u4e00\u9375\u5b89\u88dd\uff1a',
-                    installUrl,
-                    '',
-                    '\ud83d\udcdd LPA \u78bc (\u624b\u52d5\u8f38\u5165)\uff1a',
-                    qrCodeData,
-                    '',
-                    '\ud83d\uded2 \u8cfc\u8ce3\u7db2\u7ad9\uff1a',
-                    siteUrl
-                  ].join('\n');
+                  const shareText = `Roam Link eSIM 安裝資訊\n\niOS 17.4+ 一鍵安裝:\n${installUrl}\n\nLPA 碼:\n${qrCodeData}\n\n購買網站: ${siteUrl}`;
+                  // 嘗試生成 QR Code 圖片並分享
+                  const svgEl = document.querySelector('.qr-share-area svg') as SVGElement | null;
+                  let shareFile: File | null = null;
+                  if (svgEl) {
+                    try {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = 400; canvas.height = 400;
+                      const ctx = canvas.getContext('2d')!;
+                      ctx.fillStyle = 'white';
+                      ctx.fillRect(0, 0, 400, 400);
+                      const svgData = new XMLSerializer().serializeToString(svgEl);
+                      const img = new Image();
+                      await new Promise<void>((resolve, reject) => {
+                        img.onload = () => resolve();
+                        img.onerror = reject;
+                        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                      });
+                      ctx.drawImage(img, 20, 20, 360, 360);
+                      const blob = await new Promise<Blob>((r) => canvas.toBlob(b => r(b!), 'image/png'));
+                      shareFile = new File([blob], 'esim-qrcode.png', { type: 'image/png' });
+                    } catch(e) { /* fallback to text only */ }
+                  }
                   if (navigator.share) {
                     try {
-                      await navigator.share({ title: 'Roam Link eSIM', text: shareText });
+                      const shareData: ShareData = { title: 'Roam Link eSIM', text: shareText };
+                      if (shareFile && navigator.canShare?.({ files: [shareFile] })) {
+                        shareData.files = [shareFile];
+                      }
+                      await navigator.share(shareData);
                     } catch(e) { /* cancelled */ }
                   } else {
                     navigator.clipboard.writeText(shareText);
-                    showToast('\u2705 \u5df2\u8907\u88fd\u5b8c\u6574\u5b89\u88dd\u8cc7\u8a0a');
+                    showToast('✅ 已複製安裝資訊');
                   }
                 }} 
                 className="bg-[#F05A28]/20 hover:bg-[#F05A28]/30 text-[#F05A28] text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5">
-                <Share2 size={14} /> \u5206\u4eab\u7d66\u89aa\u53cb
+                <Share2 size={14} /> 分享給親友
               </button>
             </div>
           </div>
