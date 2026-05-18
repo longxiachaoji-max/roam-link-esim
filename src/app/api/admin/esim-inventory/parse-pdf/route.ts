@@ -21,41 +21,59 @@ export async function POST(req: NextRequest) {
     
     let items = [];
 
-    // 方法 1: 尋找 LPA 格式的字串 (e.g. LPA:1$smdp.plus.com$ACTIVATION-CODE)
-    const lpaRegex = /LPA:1\$([^$]+)\$([a-zA-Z0-9-]+)/gi;
-    let match;
-    const lpaSet = new Set();
-    while ((match = lpaRegex.exec(text)) !== null) {
-      const smdp = match[1].trim();
-      const code = match[2].trim();
-      if (!lpaSet.has(code)) {
-        items.push({
-          smdp_address: smdp,
-          activation_code: code,
-          iccid: '',
-        });
-        lpaSet.add(code);
-      }
-    }
-
     // 尋找 ICCID (通常是 19 或 20 位的數字，開頭為 89)
     const iccidRegex = /89[0-9]{17,18}/g;
     const iccids = [...text.matchAll(iccidRegex)].map(m => m[0]);
+
+    // 方法 1: 尋找明確的 SM-DP+ Address 和 Activation Code 標籤
+    const smdpRegex = /SM-DP\+\s*Address\s*:?\s*([a-zA-Z0-9.-]+)/gi;
+    const actRegex = /Activation\s*Code\s*:?\s*([a-zA-Z0-9-]+)/gi;
     
+    let smdpMatches = [...text.matchAll(smdpRegex)];
+    let actMatches = [...text.matchAll(actRegex)];
+    
+    if (smdpMatches.length > 0 && actMatches.length > 0) {
+      // 假設它們是成對出現的
+      const count = Math.min(smdpMatches.length, actMatches.length);
+      for (let i = 0; i < count; i++) {
+        items.push({
+          smdp_address: smdpMatches[i][1].trim(),
+          activation_code: actMatches[i][1].trim(),
+          iccid: '',
+        });
+      }
+    }
+
+    // 方法 2: 尋找 LPA 格式的字串 (e.g. LPA:1$smdp.plus.com$ACTIVATION-CODE)
+    // 允許內部有換行或空白（因為 PDF 掃描可能斷行）
+    if (items.length === 0) {
+      const lpaRegex = /LPA:1\$([a-zA-Z0-9.-\s]+)\$([a-zA-Z0-9-\s]+)/gi;
+      let match;
+      const lpaSet = new Set();
+      while ((match = lpaRegex.exec(text)) !== null) {
+        const smdp = match[1].replace(/\s+/g, '');
+        // 如果 Activation Code 後面接著其他文字，可能會被抓進來，這裡假設它是一連串英數字
+        let code = match[2].replace(/\s+/g, '');
+        // 防止把後面的 iOS 或 Android 字眼抓進來
+        code = code.replace(/iOS.*|Android.*/i, '');
+        
+        if (!lpaSet.has(code)) {
+          items.push({
+            smdp_address: smdp,
+            activation_code: code,
+            iccid: '',
+          });
+          lpaSet.add(code);
+        }
+      }
+    }
+
     // 如果有找到 ICCID，盡量按順序對應到找到的 eSIM 上
-    // (這是一個猜測性的對應，因為 PDF 裡的排列順序可能會對齊)
     items.forEach((item, index) => {
       if (iccids[index]) {
         item.iccid = iccids[index];
       }
     });
-
-    // 方法 2: 如果沒有抓到 LPA 格式，嘗試找一般的文字欄位
-    // 這邊保留簡單擴充，但大部分供應商的 PDF 掃描結果都會有 LPA 字串或是分開的欄位
-    if (items.length === 0) {
-      // 假設廠商是用文字寫 SM-DP+ Address: xxxx \n Activation Code: xxxx
-      // 這裡可以依據實際測試到的 PDF 再進一步強化 Regex
-    }
 
     return NextResponse.json({ 
       success: true, 
