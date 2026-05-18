@@ -13,12 +13,12 @@ export async function POST(request: Request) {
     const { email, code } = body;
 
     if (!email || !code) {
-      return NextResponse.json({ error: 'Email and promo code are required' }, { status: 400 });
+      return NextResponse.json({ error: '請輸入 Email 和兌換碼' }, { status: 400 });
     }
 
     const supabase = getSupabase();
 
-    // 1. Get customer by email
+    // 1. 取得客戶
     const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select('*')
@@ -26,64 +26,82 @@ export async function POST(request: Request) {
       .single();
 
     if (customerError || !customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+      return NextResponse.json({ error: '找不到此客戶' }, { status: 404 });
     }
 
-    // 2. Validate promo code
+    // 2. 驗證兌換碼
     const { data: promo, error: promoError } = await supabase
       .from('promo_codes')
       .select('*')
-      .eq('code', code)
+      .eq('code', code.toUpperCase())
       .single();
 
     if (promoError || !promo) {
-      return NextResponse.json({ error: 'Invalid promo code' }, { status: 400 });
+      return NextResponse.json({ error: '無效的兌換碼' }, { status: 400 });
     }
 
-    // Check expiration
+    // 檢查到期
     if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'Promo code has expired' }, { status: 400 });
+      return NextResponse.json({ error: '此兌換碼已過期' }, { status: 400 });
     }
 
-    // Check usage limits
+    // 檢查總使用次數
     if (promo.used_count >= promo.max_uses) {
-      return NextResponse.json({ error: 'Promo code usage limit reached' }, { status: 400 });
+      return NextResponse.json({ error: '此兌換碼已達使用上限' }, { status: 400 });
     }
 
-    // Note: In a production environment, you should track which user has used which code 
-    // to prevent the same user from using the same code multiple times. 
-    // We'll skip that table constraint for this demo schema unless there's a user_promo_usages table.
+    // 3. 檢查此用戶的兌換次數
+    const maxPerUser = promo.max_uses_per_user || 1;
+    const { data: userRedemptions } = await supabase
+      .from('promo_redemptions')
+      .select('id')
+      .eq('customer_id', customer.id)
+      .eq('promo_code_id', promo.id);
 
-    // 3. Update customer token balance
+    const userUsedCount = userRedemptions?.length || 0;
+    if (userUsedCount >= maxPerUser) {
+      return NextResponse.json({ error: `您已兌換過此代碼 (每人限 ${maxPerUser} 次)` }, { status: 400 });
+    }
+
+    // 4. 更新客戶餘額
     const newBalance = customer.token_balance + promo.reward_tokens;
-    const { error: updateCustomerError } = await supabase
+    const { error: updateError } = await supabase
       .from('customers')
       .update({ token_balance: newBalance })
       .eq('id', customer.id);
 
-    if (updateCustomerError) throw updateCustomerError;
+    if (updateError) throw updateError;
 
-    // 4. Increment promo code used_count
-    const { error: updatePromoError } = await supabase
+    // 5. 增加 promo 使用次數
+    await supabase
       .from('promo_codes')
       .update({ used_count: promo.used_count + 1 })
       .eq('id', promo.id);
 
-    if (updatePromoError) {
-      // Rollback is tricky without RPC/transactions in raw REST, but we try our best.
-      // Assuming it succeeds for simplicity.
-      console.error('Failed to increment promo used_count', updatePromoError);
-    }
+    // 6. 記錄兌換紀錄
+    await supabase
+      .from('promo_redemptions')
+      .insert({ customer_id: customer.id, promo_code_id: promo.id });
+
+    // 7. 記錄到 token_transactions (如果有此表)
+    await supabase
+      .from('token_transactions')
+      .insert({
+        customer_id: customer.id,
+        amount: promo.reward_tokens,
+        balance_after: newBalance,
+        reason: `兌換代碼: ${promo.code}`
+      });
 
     return NextResponse.json({
       success: true,
-      message: 'Promo code redeemed successfully',
+      message: `成功兌換！獲得 ${promo.reward_tokens} 點`,
       addedTokens: promo.reward_tokens,
       newBalance
     });
 
   } catch (error: any) {
     console.error('Promo redemption error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || '系統錯誤' }, { status: 500 });
   }
 }

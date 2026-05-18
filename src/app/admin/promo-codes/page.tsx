@@ -7,6 +7,7 @@ interface PromoCode {
   code: string;
   reward_tokens: number;
   max_uses: number;
+  max_uses_per_user: number;
   used_count: number;
   expires_at: string | null;
   reward_type: string;
@@ -27,6 +28,7 @@ export default function PromoCodesPage() {
   const [formCode, setFormCode] = useState('');
   const [formRewardTokens, setFormRewardTokens] = useState('');
   const [formMaxUses, setFormMaxUses] = useState('1');
+  const [formMaxPerUser, setFormMaxPerUser] = useState('1');
   const [formExpiresAt, setFormExpiresAt] = useState('');
 
   const showToast = (msg: string) => {
@@ -83,7 +85,7 @@ export default function PromoCodesPage() {
         body: JSON.stringify({
           code: formCode,
           reward_tokens: Number(formRewardTokens),
-          max_uses: Number(formMaxUses) || 1,
+          max_uses: Number(formMaxUses) || 1, max_uses_per_user: Number(formMaxPerUser) || 1,
           expires_at: formExpiresAt || null,
         }),
       });
@@ -105,6 +107,7 @@ export default function PromoCodesPage() {
     setFormCode(code.code);
     setFormRewardTokens(String(code.reward_tokens));
     setFormMaxUses(String(code.max_uses));
+    setFormMaxPerUser(String(code.max_uses_per_user || 1));
     setFormExpiresAt(code.expires_at ? code.expires_at.slice(0, 16) : '');
     setIsEditModalOpen(true);
   };
@@ -120,7 +123,7 @@ export default function PromoCodesPage() {
           id: editingCode.id,
           code: formCode,
           reward_tokens: Number(formRewardTokens),
-          max_uses: Number(formMaxUses) || 1,
+          max_uses: Number(formMaxUses) || 1, max_uses_per_user: Number(formMaxPerUser) || 1,
           expires_at: formExpiresAt || null,
         }),
       });
@@ -223,6 +226,7 @@ export default function PromoCodesPage() {
                       </td>
                       <td className="p-4 text-yellow-400 font-bold">NT$ {code.reward_tokens}</td>
                       <td className="p-4 text-white/70">{code.used_count} / {code.max_uses}</td>
+                      <td className="p-4 text-white/50 text-sm">{code.max_uses_per_user || 1}次/人</td>
                       <td className="p-4 text-white/50">{formatDate(code.expires_at)}</td>
                       <td className="p-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold border ${label.cls}`}>
@@ -309,6 +313,16 @@ export default function PromoCodesPage() {
                 />
               </div>
               <div>
+                <label className="block text-sm text-white/50 mb-1">每人可兌換次數</label>
+                <input
+                  type="number"
+                  value={formMaxPerUser}
+                  onChange={(e) => setFormMaxPerUser(e.target.value)}
+                  placeholder="1"
+                  className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-white text-sm placeholder:text-white/30"
+                />
+              </div>
+              <div>
                 <label className="block text-sm text-white/50 mb-1">到期日（選填）</label>
                 <input
                   type="datetime-local"
@@ -365,6 +379,16 @@ export default function PromoCodesPage() {
                   value={formMaxUses}
                   onChange={(e) => setFormMaxUses(e.target.value)}
                   className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-white/50 mb-1">每人可兌換次數</label>
+                <input
+                  type="number"
+                  value={formMaxPerUser}
+                  onChange={(e) => setFormMaxPerUser(e.target.value)}
+                  placeholder="1"
+                  className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-white text-sm placeholder:text-white/30"
                 />
               </div>
               <div>

@@ -30,6 +30,7 @@ export default function Home() {
 
   // 展開狀態管理
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+  const [showHiddenGem, setShowHiddenGem] = useState(false);
   // 天數選擇狀態: key = "country|data", value = index in options
   const [selectedDays, setSelectedDays] = useState<Record<string, number>>({});
 
@@ -92,9 +93,15 @@ export default function Home() {
     fetchProducts();
   }, []);
 
-  const filteredProducts = activeRegion === "全部" 
+  // 金探子隨機出現 (30% 機率)
+  useEffect(() => {
+    setShowHiddenGem(Math.random() < 0.3);
+  }, []);
+
+  const filteredProducts = (activeRegion === "全部" 
     ? products 
-    : products.filter(p => p.region === activeRegion);
+    : products.filter(p => p.region === activeRegion)
+  ).filter(p => !p.isHiddenGem || showHiddenGem);
 
   const addToCart = (product: any, plan: any) => {
     const item = { ...product, ...plan, uid: Date.now() };
@@ -397,16 +404,20 @@ export default function Home() {
             const hasMore = product.plans.length > 3;
 
             return (
-              <div key={idx} className="bg-card-bg border border-white/10 rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all group">
+              <div key={idx} className={`bg-card-bg border rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] transition-all group ${product.isHiddenGem ? 'border-yellow/40 hover:border-yellow/60 animate-pulse-slow' : 'border-white/10 hover:border-white/20'}`}>
                 <div className="p-6 relative">
                   <span className="text-5xl block mb-2">{product.flag}</span>
                   <h3 className="text-xl font-bold">{product.country}</h3>
                   <p className="text-muted text-sm">{product.region}</p>
-                  {product.totalSales > 0 && (
+                  {product.isHiddenGem ? (
+                    <div className="absolute top-6 right-6 bg-gradient-to-r from-yellow to-amber-400 text-dark text-xs font-black px-2 py-1 rounded-full animate-bounce">
+                      ✨ 金探子
+                    </div>
+                  ) : product.totalSales > 0 ? (
                     <div className="absolute top-6 right-6 bg-yellow text-dark text-xs font-black px-2 py-1 rounded-full">
                       熱銷
                     </div>
-                  )}
+                  ) : null}
                 </div>
                 <div className="px-6 pb-6 flex flex-col gap-3">
                   {visiblePlans.map((plan: any, pIdx: number) => {

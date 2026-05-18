@@ -49,7 +49,7 @@ export async function GET() {
     // 1. 取得所有 active 商品
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, country, data_amount, validity_days, price')
+      .select('id, name, country, data_amount, validity_days, price, is_hidden_gem')
       .eq('is_active', true)
       .order('country', { ascending: true })
       .order('price', { ascending: true });
@@ -80,6 +80,7 @@ export async function GET() {
       region: string;
       flag: string;
       totalSales: number;
+      isHiddenGem: boolean;
       plansMap: Record<string, { data: string; options: { id: string; days: number; price: number }[] }>;
     }> = {};
 
@@ -93,9 +94,11 @@ export async function GET() {
           region,
           flag,
           totalSales: 0,
+          isHiddenGem: false,
           plansMap: {}
         };
       }
+      if (item.is_hidden_gem) grouped[item.country].isHiddenGem = true;
 
       grouped[item.country].totalSales += productSales;
 
@@ -121,6 +124,7 @@ export async function GET() {
         flag: g.flag,
         region: g.region,
         totalSales: g.totalSales,
+        isHiddenGem: g.isHiddenGem,
         plans: Object.values(g.plansMap).map(plan => ({
           data: plan.data,
           options: plan.options.sort((a, b) => a.days - b.days)

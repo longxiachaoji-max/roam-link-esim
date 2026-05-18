@@ -27,6 +27,10 @@ export default function MemberCenter() {
   // Delete confirm
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Promo code redeem
+  const [promoCode, setPromoCode] = useState('');
+  const [isRedeeming, setIsRedeeming] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
@@ -227,6 +231,46 @@ export default function MemberCenter() {
             <Link href="/member/history" className="bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 rounded-2xl transition-all text-center">
                 消費紀錄
             </Link>
+          </div>
+        </div>
+
+        {/* Promo Code Redeem */}
+        <div className="bg-[#1a1a24] rounded-2xl p-5 border border-white/5 mb-10">
+          <h3 className="text-sm font-bold text-white/70 mb-3">🎁 兌換代碼</h3>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="輸入兌換碼"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-[#F05A28]/50 uppercase"
+            />
+            <button
+              disabled={isRedeeming || !promoCode.trim()}
+              onClick={async () => {
+                if (isRedeeming || !promoCode.trim()) return;
+                setIsRedeeming(true);
+                try {
+                  const res = await fetch('/api/promo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email, code: promoCode })
+                  });
+                  const json = await res.json();
+                  if (!res.ok || json.error) throw new Error(json.error);
+                  showToast(`\ud83c\udf89 ${json.message}`);
+                  setUser({ ...user, token_balance: json.newBalance });
+                  setPromoCode('');
+                } catch (err: any) {
+                  showToast('\u274c ' + err.message);
+                } finally {
+                  setIsRedeeming(false);
+                }
+              }}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${isRedeeming || !promoCode.trim() ? 'bg-white/5 text-white/30 cursor-not-allowed' : 'bg-[#F05A28] hover:bg-[#d94f22] text-white'}`}
+            >
+              {isRedeeming ? '...' : '兌換'}
+            </button>
           </div>
         </div>
 
