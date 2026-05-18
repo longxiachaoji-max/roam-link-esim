@@ -34,6 +34,45 @@ export default function EsimInventoryPage() {
   const [batchPreview, setBatchPreview] = useState<any[]>([]);
   const [batchResult, setBatchResult] = useState<any>(null);
   const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+  const [isPdfParsing, setIsPdfParsing] = useState(false);
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsPdfParsing(true);
+    setBatchResult(null);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const res = await fetch('/api/admin/esim-inventory/parse-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64 })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'PDF 解析失敗');
+        
+        if (data.items && data.items.length > 0) {
+          // 將解析結果轉換為文字框內容方便預覽與修改
+          const text = data.items.map((i: any) => 
+            `自動解析\t${i.smdp_address}\t${i.activation_code}\t${i.iccid || ''}\t0\t`
+          ).join('\n');
+          setBatchText(text);
+          setBatchPreview(parseBatchEsim(text));
+        } else {
+          alert('PDF 中沒有找到符合格式的 eSIM 資料 (需包含 LPA:1$... 字串)');
+        }
+      };
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsPdfParsing(false);
+      e.target.value = ''; // 讓同一個檔案可以重複選取
+    }
+  };
 
   const parseBatchEsim = (text: string) => {
     const lines = text.trim().split('\n').filter(l => l.trim());
@@ -461,7 +500,14 @@ export default function EsimInventoryPage() {
             </div>
 
             <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → SM-DP+ → 啟用碼 → ICCID(選填) → 成本(選填) → 到期日(選填)</span></p>
-            <p className="text-xs text-white/30 mb-3">商品名稱會自動比對現有商品，啟用碼重複的會自動排除</p>
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-xs text-white/30">商品名稱會自動比對現有商品，啟用碼重複的會自動排除</p>
+              
+              <label className={`cursor-pointer px-3 py-1.5 rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 text-xs font-bold border border-purple-500/30 transition-colors flex items-center gap-1 ${isPdfParsing ? 'opacity-50 pointer-events-none' : ''}`}>
+                {isPdfParsing ? '⏳ 讀取中...' : '📄 匯入 PDF (自動解析)'}
+                <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
+              </label>
+            </div>
 
             <textarea
               rows={8}
