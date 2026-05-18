@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const rewardAmount = 3;
+    const rewardAmount = 1;
 
     // Check if already claimed today (using UTC start of day)
     const today = new Date();
