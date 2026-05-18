@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="8" fill="#16162A"/>
+  <!-- Signal bars / Connectivity -->
+  <path d="M8 22V18" stroke="#00D4FF" stroke-width="3" stroke-linecap="round"/>
+  <path d="M16 22V10" stroke="#FF4E6A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M24 22V6" stroke="#00D4FF" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Roam / Globe arc -->
+  <path d="M5 16C5 11.2201 8.24357 7.1512 12.6397 5.76007" stroke="#FFD93D" stroke-width="2" stroke-linecap="round"/>
+  <path d="M27 16C27 20.7799 23.7564 24.8488 19.3603 26.2399" stroke="#00D4FF" stroke-width="2" stroke-linecap="round"/>
+</svg>
