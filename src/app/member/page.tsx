@@ -297,15 +297,11 @@ export default function MemberCenter() {
         </div>
 
         <div className="space-y-4">
-          {orders.map(order => order.order_items.map((item: any) => {
-            const deleted = isSoftDeleted(item);
+          {orders.map(order => order.order_items.filter((item: any) => !isSoftDeleted(item)).map((item: any) => {
+            const deleted = false;
             
             return (
-              <div key={item.id} className={`rounded-3xl p-5 border shadow-lg transition-all ${
-                deleted 
-                  ? 'bg-[#1a1a24]/50 border-white/5 opacity-50' 
-                  : 'bg-[#1a1a24] border-white/5'
-              }`}>
+              <div key={item.id} className="rounded-3xl p-5 border shadow-lg transition-all bg-[#1a1a24] border-white/5">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl shadow-inner">
@@ -318,25 +314,11 @@ export default function MemberCenter() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {deleted ? (
-                      <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-1 rounded-lg text-xs font-bold">
-                        待移除
-                      </div>
-                    ) : (
-                      <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold">
-                        {item.e_sim_inventory ? '使用中' : '處理中'}
-                      </div>
-                    )}
+                    <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold">
+                      {item.e_sim_inventory ? '使用中' : '處理中'}
+                    </div>
                   </div>
                 </div>
-
-                {/* Soft delete warning */}
-                {deleted && (
-                  <div className="bg-red-500/5 border border-red-500/10 rounded-xl p-3 mb-4 text-center">
-                    <p className="text-red-400 text-xs font-medium">⚠️ 此 eSIM 已標記刪除，將於 1 天後自動移除，此操作無法復原</p>
-                    <p className="text-white/30 text-xs mt-1">刪除時間：{new Date(item.user_deleted_at).toLocaleString()}</p>
-                  </div>
-                )}
 
                 {/* Note / Memo */}
                 <div className="mb-4">
@@ -366,11 +348,10 @@ export default function MemberCenter() {
                   ) : (
                     <button
                       onClick={() => {
-                        if (deleted) return;
                         setEditingNoteId(item.id);
                         setNoteText(item.note || '');
                       }}
-                      className={`flex items-center gap-2 text-xs ${deleted ? 'text-white/20 cursor-not-allowed' : 'text-white/40 hover:text-white/60 cursor-pointer'} transition-colors`}
+                      className="flex items-center gap-2 text-xs text-white/40 hover:text-white/60 cursor-pointer transition-colors"
                     >
                       <Edit3 size={12} />
                       {item.note ? (
@@ -403,12 +384,12 @@ export default function MemberCenter() {
                   <div className="flex gap-3 mb-3">
                      <a 
                        href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
-                       className={`flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${deleted ? 'opacity-60' : 'hover:bg-cyan/20 text-cyan'}`}
+                       className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
                      >
                        <Smartphone size={16} /> iOS 17.4+ 一鍵安裝
                      </a>
                      <button 
-                       className={`flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${deleted ? 'opacity-60' : 'hover:bg-white/10'}`}
+                       className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
                        onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
                      >
                        <QrCode size={16} /> 顯示 QRCODE
@@ -417,14 +398,12 @@ export default function MemberCenter() {
                 )}
 
                 {/* Delete button */}
-                {!deleted && (
-                  <button
-                    onClick={() => setDeleteConfirmId(item.id)}
-                    className="w-full bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 text-white/40 hover:text-red-400 py-2.5 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all"
-                  >
-                    <Trash2 size={14} /> 刪除此 eSIM
-                  </button>
-                )}
+                <button
+                  onClick={() => setDeleteConfirmId(item.id)}
+                  className="w-full bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 text-white/40 hover:text-red-400 py-2.5 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Trash2 size={14} /> 刪除此 eSIM
+                </button>
               </div>
             );
           }))}
@@ -443,7 +422,7 @@ export default function MemberCenter() {
             <h3 className="text-xl font-bold mb-3 text-center">確認刪除</h3>
             <p className="text-white/60 text-sm text-center mb-2">確定要刪除這個 eSIM 嗎？</p>
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-6">
-              <p className="text-red-400 text-xs text-center font-medium">⚠️ 刪除後將反灰顯示，並於 1 天後自動移除，此操作無法復原。</p>
+              <p className="text-red-400 text-xs text-center font-medium">⚠️ 刪除後紀錄將立即從會員中心消失，並於 1 天後自動從系統移除，此操作無法復原。</p>
             </div>
             <div className="flex gap-3">
               <button
