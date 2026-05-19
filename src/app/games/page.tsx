@@ -68,14 +68,14 @@ export default function GamesLobby() {
         >
           <X size={20} className="text-white/70" />
         </button>
-        <span className="font-bold tracking-wider">遊戲中心</span>
+        <span className="font-bold tracking-wider">旅遊玩伴</span>
         <div className="w-9" />
       </div>
 
       <div className="p-4 md:max-w-md md:mx-auto">
         {/* Title */}
         <div className="mb-8 mt-4">
-          <h1 className="text-3xl font-black text-[#F05A28] mb-1">🎮 遊戲中心</h1>
+          <h1 className="text-3xl font-black text-[#F05A28] mb-1">🎮 旅遊玩伴</h1>
           <p className="text-white/50 text-sm">玩小遊戲，贏取免費儲值金！</p>
         </div>
 
@@ -98,7 +98,7 @@ export default function GamesLobby() {
               {/* Hard reward badge */}
               {game.hasHardReward && (
                 <div className="inline-flex items-center gap-1.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold px-3 py-1 rounded-full mb-5">
-                  🪙 困難模式每日可獲得 3 點儲值金
+                  🪙 困難模式每日可獲得 1 點儲值金
                 </div>
               )}
 

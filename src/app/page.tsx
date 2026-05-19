@@ -360,7 +360,7 @@ export default function Home() {
               href="/games"
               className="px-4 py-1.5 rounded-full text-sm font-medium bg-transparent border-white/10 text-muted border hover:bg-white/5 transition-all"
             >
-              🎮 遊戲中心
+              🎮 旅遊玩伴
             </a>
           </div>
         </div>
