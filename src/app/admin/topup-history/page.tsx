@@ -8,11 +8,24 @@ interface Transaction {
   id: string;
   customer_id: string;
   amount: number;
-  transaction_type: 'topup' | 'purchase';
+  transaction_type?: 'topup' | 'purchase';
   created_at: string;
   customers: {
     email: string;
   } | null;
+}
+
+function getTransactionDisplay(tx: Transaction) {
+  const amount = Number(tx.amount || 0);
+  const isDebit = tx.transaction_type === 'purchase' || amount < 0;
+
+  return {
+    label: isDebit ? 'purchase' : 'topup',
+    sign: isDebit ? '-' : '+',
+    amount: Math.abs(amount),
+    badgeVariant: isDebit ? 'destructive' : 'default',
+    amountClass: isDebit ? 'text-red-400' : 'text-emerald-400',
+  } as const;
 }
 
 export default function TopupHistoryPage() {
@@ -63,23 +76,27 @@ export default function TopupHistoryPage() {
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
-              {transactions.map((tx) => (
-                <tr key={tx.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-400">{tx.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">{tx.customers?.email || 'N/A'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant={tx.transaction_type === 'topup' ? 'default' : 'destructive'}>
-                      {tx.transaction_type}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                    {tx.transaction_type === 'topup' ? '+' : '-'}{Math.abs(tx.amount)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                    {new Date(tx.created_at).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
+              {transactions.map((tx) => {
+                const display = getTransactionDisplay(tx);
+
+                return (
+                  <tr key={tx.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-400">{tx.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{tx.customers?.email || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge variant={display.badgeVariant}>
+                        {display.label}
+                      </Badge>
+                    </td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${display.amountClass}`}>
+                      {display.sign}{display.amount}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                      {new Date(tx.created_at).toLocaleString()}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

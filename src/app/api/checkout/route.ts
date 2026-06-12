@@ -145,6 +145,7 @@ export async function POST(request: Request) {
         .insert([{
           customer_id: customer.id,
           amount: -tokensUsed,
+          transaction_type: 'purchase',
           balance_after: newBalance,
           reason: `購買 eSIM (訂單 #${order.id.split('-')[0]})`
         }]);

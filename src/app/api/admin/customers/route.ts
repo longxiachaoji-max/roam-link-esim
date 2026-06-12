@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       .insert([{
         customer_id: customerId,
         amount: amount,
+        transaction_type: amount < 0 ? 'purchase' : 'topup',
         balance_after: newBalance,
         reason: reason
       }]);

@@ -89,6 +89,7 @@ export async function POST(request: Request) {
       .insert({
         customer_id: customer.id,
         amount: promo.reward_tokens,
+        transaction_type: 'topup',
         balance_after: newBalance,
         reason: `兌換代碼: ${promo.code}`
       });

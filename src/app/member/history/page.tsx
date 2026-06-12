@@ -9,10 +9,23 @@ interface Transaction {
   id: string;
   customer_id: string;
   amount: number;
-  transaction_type: 'topup' | 'purchase';
+  transaction_type?: 'topup' | 'purchase';
   created_at: string;
   reason: string;
   balance_after: number;
+}
+
+function getTransactionDisplay(tx: Transaction) {
+  const amount = Number(tx.amount || 0);
+  const isDebit = tx.transaction_type === 'purchase' || amount < 0;
+
+  return {
+    label: isDebit ? 'Purchase' : 'Top-up',
+    sign: isDebit ? '-' : '+',
+    amount: Math.abs(amount),
+    badgeVariant: isDebit ? 'destructive' : 'default',
+    amountClass: isDebit ? 'text-red-400' : 'text-emerald-400',
+  } as const;
 }
 
 export default function MemberHistoryPage() {
@@ -91,27 +104,31 @@ export default function MemberHistoryPage() {
                   <td colSpan={4} className="text-center py-10 text-gray-400">You have no transactions yet.</td>
                 </tr>
               ) : (
-                transactions.map((tx) => (
-                  <tr key={tx.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                      {new Date(tx.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex items-center gap-2">
-                         <Badge variant={tx.amount > 0 ? 'default' : 'destructive'}>
-                           {tx.amount > 0 ? 'Top-up' : 'Purchase'}
-                         </Badge>
-                         <span>{tx.reason}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                       {tx.amount > 0 ? '+' : ''}{tx.amount}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                      {tx.balance_after}
-                    </td>
-                  </tr>
-                ))
+                transactions.map((tx) => {
+                  const display = getTransactionDisplay(tx);
+
+                  return (
+                    <tr key={tx.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                        {new Date(tx.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex items-center gap-2">
+                           <Badge variant={display.badgeVariant}>
+                             {display.label}
+                           </Badge>
+                           <span>{tx.reason}</span>
+                        </div>
+                      </td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${display.amountClass}`}>
+                         {display.sign}{display.amount}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                        {tx.balance_after}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
