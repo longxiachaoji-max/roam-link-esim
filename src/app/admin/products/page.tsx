@@ -27,6 +27,7 @@ type QuickDraft = {
   name: string;
   country: string;
   data_amount: string;
+  hotspot_sharing: string;
   validity_days: string;
   price: string;
   description: string;
@@ -103,10 +104,11 @@ export default function ProductsPage() {
     return {
       name: `${quickForm.baseName.trim()}${days}天(${hotspot})${suffix}`.trim(),
       country: quickForm.country,
-      data_amount: `${quickForm.dataPrefix.trim()}(${hotspot})`.trim(),
+      data_amount: quickForm.dataPrefix.trim(),
+      hotspot_sharing: hotspot,
       validity_days: days,
       price: prices[index] || '',
-      description: quickForm.description.trim()
+      description: quickForm.description.trim() || hotspot
     };
   }).filter(item => item.name && item.country && item.validity_days);
 
@@ -144,12 +146,15 @@ export default function ProductsPage() {
     const startIdx = lines[0].includes('商品名稱') || lines[0].includes('國家') ? 1 : 0;
     return lines.slice(startIdx).map(line => {
       const cols = line.split('\t');
+      const hasHotspotColumn = cols.length >= 6;
       return {
         name: cols[0]?.trim() || '',
         country: cols[1]?.trim() || '',
         data_amount: cols[2]?.trim() || '',
-        validity_days: cols[3]?.trim() || '',
-        price: cols[4]?.trim() || '',
+        hotspot_sharing: hasHotspotColumn ? cols[3]?.trim() || '' : '',
+        validity_days: hasHotspotColumn ? cols[4]?.trim() || '' : cols[3]?.trim() || '',
+        price: hasHotspotColumn ? cols[5]?.trim() || '' : cols[4]?.trim() || '',
+        description: hasHotspotColumn ? cols[3]?.trim() || '' : '',
       };
     }).filter(r => r.name && r.country);
   };
@@ -475,10 +480,10 @@ export default function ProductsPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-white/70 mb-1">商品描述（選填）</label>
+        <label className="block text-sm font-medium text-white/70 mb-1">熱點分享（選填）</label>
         <input
           type="text"
-          placeholder="例如：高速穩定，暢遊日本"
+          placeholder="例如：熱點分享總量2GB、每日熱點2GB"
           className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
           value={data.description}
           onChange={(e) => setData({ ...data, description: e.target.value })}
@@ -826,12 +831,12 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">商品描述（選填）</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">熱點分享（選填）</label>
                   <input
                     className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
                     value={quickForm.description}
                     onChange={(e) => setQuickForm({ ...quickForm, description: e.target.value })}
-                    placeholder="例如：KDDI 原生線路"
+                    placeholder={hotspotText}
                   />
                 </div>
               </div>
@@ -847,7 +852,7 @@ export default function ProductsPage() {
                     </tr></thead>
                     <tbody>{quickPreview.map((item, i) => (
                       <tr key={`${item.name}-${i}`} className="border-b border-white/5">
-                        <td className="px-3 py-2 text-white/80">{item.name}<div className="text-white/40 mt-0.5">{item.data_amount}</div></td>
+                        <td className="px-3 py-2 text-white/80">{item.name}<div className="text-white/40 mt-0.5">{item.data_amount}</div><div className="text-cyan-300/80 mt-0.5">{item.description}</div></td>
                         <td className="px-3 py-2 text-right text-white/60">{item.validity_days}</td>
                         <td className={`px-3 py-2 text-right ${item.price ? 'text-white/80' : 'text-red-300'}`}>{item.price ? `NT${item.price}` : '缺價格'}</td>
                       </tr>
@@ -884,7 +889,7 @@ export default function ProductsPage() {
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-xl font-bold text-white">批量替換商品文字</h2>
-                <p className="text-xs text-white/40 mt-1">先預覽再更新，適合改熱點規格、線路名稱或方案描述</p>
+                <p className="text-xs text-white/40 mt-1">先預覽再更新，適合改熱點分享、線路名稱或方案文字</p>
               </div>
               <button onClick={() => setIsReplaceOpen(false)} className="text-white/50 hover:text-white transition-colors">
                 <X className="w-6 h-6" />
@@ -910,10 +915,10 @@ export default function ProductsPage() {
                   value={replaceForm.field}
                   onChange={(e) => setReplaceForm({ ...replaceForm, field: e.target.value as ReplaceField })}
                 >
-                  <option value="all" className="text-black">商品名稱 + 流量規格 + 描述</option>
+                  <option value="all" className="text-black">商品名稱 + 流量規格 + 熱點分享</option>
                   <option value="name" className="text-black">只改商品名稱</option>
                   <option value="data_amount" className="text-black">只改流量規格</option>
-                  <option value="description" className="text-black">只改商品描述</option>
+                  <option value="description" className="text-black">只改熱點分享</option>
                 </select>
               </div>
               <div>
@@ -993,13 +998,13 @@ export default function ProductsPage() {
               </button>
             </div>
 
-            <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → 國家 → 流量規格 → 有效天數 → 價格</span></p>
-            <p className="text-xs text-white/30 mb-3">第一行如果是標題會自動跳過，重複的商品 (同名稱+國家+天數) 會自動排除</p>
+            <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → 國家 → 流量規格 → 熱點分享 → 有效天數 → 價格</span></p>
+            <p className="text-xs text-white/30 mb-3">舊的 5 欄格式仍可匯入；第一行如果是標題會自動跳過，重複的商品 (同名稱+國家+天數) 會自動排除</p>
 
             <textarea
               rows={8}
               className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 mb-3 resize-none"
-              placeholder="從 Google 試算表複製貼上... 台灣5G 高速上網 1天	台灣	每日1GB	1	56"
+              placeholder="從 Google 試算表複製貼上... 日本 KDDI 5G不限速吃到飽3天	日本	KIDD原生網路不限速上網吃到飽	熱點分享總量2GB	3	399"
               value={batchText}
               onChange={(e) => {
                 setBatchText(e.target.value);
@@ -1017,6 +1022,7 @@ export default function ProductsPage() {
                       <th className="px-3 py-1.5 text-left">名稱</th>
                       <th className="px-3 py-1.5 text-left">國家</th>
                       <th className="px-3 py-1.5 text-left">流量</th>
+                      <th className="px-3 py-1.5 text-left">熱點</th>
                       <th className="px-3 py-1.5 text-right">天數</th>
                       <th className="px-3 py-1.5 text-right">價格</th>
                     </tr></thead>
@@ -1025,6 +1031,7 @@ export default function ProductsPage() {
                         <td className="px-3 py-1.5 text-white/80">{r.name}</td>
                         <td className="px-3 py-1.5 text-white/60">{r.country}</td>
                         <td className="px-3 py-1.5 text-white/60">{r.data_amount}</td>
+                        <td className="px-3 py-1.5 text-cyan-300/80">{r.hotspot_sharing}</td>
                         <td className="px-3 py-1.5 text-right text-white/60">{r.validity_days}</td>
                         <td className="px-3 py-1.5 text-right text-white/80">NT${r.price}</td>
                       </tr>

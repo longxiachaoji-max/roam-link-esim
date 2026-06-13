@@ -43,13 +43,19 @@ function getCountryInfo(country: string) {
   return COUNTRY_MAP[country] || { flag: '🌍', region: '其他' };
 }
 
+function getHotspotSharing(description: string | null, name: string) {
+  if (description?.trim()) return description.trim();
+  const match = name.match(/[（(]([^）)]*熱點[^）)]*)[）)]/);
+  return match?.[1]?.trim() || '';
+}
+
 // GET - 公開 API：回傳 is_active=true 的商品，按國家分組，同流量合併天數選項，依銷量排序
 export async function GET() {
   try {
     // 1. 取得所有 active 商品
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, country, data_amount, validity_days, price, is_hidden_gem')
+      .select('id, name, country, data_amount, description, validity_days, price, is_hidden_gem')
       .eq('is_active', true)
       .order('country', { ascending: true })
       .order('price', { ascending: true });
@@ -81,7 +87,7 @@ export async function GET() {
       flag: string;
       totalSales: number;
       isHiddenGem: boolean;
-      plansMap: Record<string, { data: string; options: { id: string; days: number; price: number }[] }>;
+      plansMap: Record<string, { data: string; options: { id: string; days: number; price: number; hotspot_sharing: string }[] }>;
     }> = {};
 
     for (const item of data) {
@@ -113,7 +119,8 @@ export async function GET() {
       grouped[item.country].plansMap[dataKey].options.push({
         id: item.id,
         days: item.validity_days,
-        price: Number(item.price)
+        price: Number(item.price),
+        hotspot_sharing: getHotspotSharing(item.description, item.name)
       });
       // 標記此方案是否為金探子
       if (item.is_hidden_gem) {

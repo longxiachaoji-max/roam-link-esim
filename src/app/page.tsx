@@ -434,10 +434,15 @@ export default function Home() {
 
                     return (
                       <div key={pIdx} className={`rounded-xl p-3 transition-colors ${plan.isHiddenGem ? 'bg-yellow-500/5 border border-yellow-500/30 hover:border-yellow-500/50' : 'bg-white/5 border border-white/5 hover:border-coral/50'}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-bold text-sm flex items-center gap-1.5">
-                            {plan.isHiddenGem && <span className="animate-bounce">✨</span>}
-                            {plan.data}
+                        <div className="flex items-start justify-between mb-2 gap-3">
+                          <div className="min-w-0 font-bold text-sm flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                            <span className="flex items-center gap-1.5">
+                              {plan.isHiddenGem && <span className="animate-bounce">✨</span>}
+                              <span>{plan.data}</span>
+                            </span>
+                            {currentOption.hotspot_sharing && (
+                              <span className="text-cyan font-medium">{currentOption.hotspot_sharing}</span>
+                            )}
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="font-black text-coral">
@@ -450,6 +455,7 @@ export default function Home() {
                                 addToCart(product, {
                                   id: currentOption.id,
                                   data: plan.data,
+                                  hotspot_sharing: currentOption.hotspot_sharing,
                                   days: `${currentOption.days}天`,
                                   price: currentOption.price
                                 });
@@ -630,6 +636,7 @@ export default function Home() {
                       <span className="text-3xl">{item.flag}</span>
                       <div>
                         <div className="font-bold">{item.country} {item.data}</div>
+                        {item.hotspot_sharing && <div className="text-sm text-cyan">{item.hotspot_sharing}</div>}
                         <div className="text-sm text-muted">{item.days}</div>
                       </div>
                     </div>
