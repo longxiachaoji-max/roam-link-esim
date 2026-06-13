@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ClipboardList, Plus, Replace, Sparkles, X } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -22,6 +23,47 @@ const COMMON_COUNTRIES = [
   '澳洲', '紐西蘭'
 ];
 
+type QuickDraft = {
+  name: string;
+  country: string;
+  data_amount: string;
+  validity_days: string;
+  price: string;
+  description: string;
+};
+
+type ReplaceField = 'name' | 'data_amount' | 'description' | 'all';
+
+type QuickResult = {
+  error?: string;
+  inserted?: number;
+  skipped?: number;
+};
+
+type ReplaceResult = {
+  error?: string;
+  updated?: number;
+};
+
+const QUICK_DEFAULTS = {
+  country: '日本',
+  baseName: '日本 KDDI 不限速吃到飽',
+  days: '3,5,7,10,15',
+  prices: '399,599,799,1299,1799',
+  hotspotMode: 'total',
+  hotspotGb: '4',
+  suffix: '原生網路',
+  dataPrefix: '不限速上網吃到飽',
+  description: ''
+};
+
+const REPLACE_DEFAULTS = {
+  country: '全部',
+  field: 'all' as ReplaceField,
+  findText: '每日熱點2GB',
+  replaceText: '熱點總量4GB'
+};
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +76,66 @@ export default function ProductsPage() {
   const [batchPreview, setBatchPreview] = useState<any[]>([]);
   const [batchResult, setBatchResult] = useState<any>(null);
   const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+  const [isQuickOpen, setIsQuickOpen] = useState(false);
+  const [quickForm, setQuickForm] = useState(QUICK_DEFAULTS);
+  const [quickResult, setQuickResult] = useState<QuickResult | null>(null);
+  const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
+  const [isReplaceOpen, setIsReplaceOpen] = useState(false);
+  const [replaceForm, setReplaceForm] = useState(REPLACE_DEFAULTS);
+  const [replaceResult, setReplaceResult] = useState<ReplaceResult | null>(null);
+  const [isReplaceSubmitting, setIsReplaceSubmitting] = useState(false);
+
+  const splitList = (value: string) => value
+    .split(/[,，\n]/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  const hotspotText = quickForm.hotspotMode === 'daily'
+    ? `每日熱點${quickForm.hotspotGb || 0}GB`
+    : quickForm.hotspotMode === 'total'
+      ? `熱點總量${quickForm.hotspotGb || 0}GB`
+      : quickForm.hotspotGb.trim();
+
+  const quickPreview: QuickDraft[] = splitList(quickForm.days).map((days, index) => {
+    const prices = splitList(quickForm.prices);
+    const suffix = quickForm.suffix ? quickForm.suffix.trim() : '';
+    const hotspot = hotspotText.trim();
+    return {
+      name: `${quickForm.baseName.trim()}${days}天(${hotspot})${suffix}`.trim(),
+      country: quickForm.country,
+      data_amount: `${quickForm.dataPrefix.trim()}(${hotspot})`.trim(),
+      validity_days: days,
+      price: prices[index] || '',
+      description: quickForm.description.trim()
+    };
+  }).filter(item => item.name && item.country && item.validity_days);
+
+  const replaceInText = (value: string | null, findText: string, replaceText: string) => {
+    if (!value || !findText) return value || '';
+    return value.split(findText).join(replaceText);
+  };
+
+  const replaceFields: Exclude<ReplaceField, 'all'>[] = replaceForm.field === 'all'
+    ? ['name', 'data_amount', 'description']
+    : [replaceForm.field];
+
+  const replacePreview = products
+    .filter(product => replaceForm.country === '全部' || product.country === replaceForm.country)
+    .map(product => {
+      const updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description'>> = {};
+      let changed = false;
+
+      for (const field of replaceFields) {
+        const nextValue = replaceInText(product[field], replaceForm.findText, replaceForm.replaceText);
+        if (nextValue !== (product[field] || '')) {
+          updates[field] = nextValue;
+          changed = true;
+        }
+      }
+
+      return changed ? { product, updates } : null;
+    })
+    .filter(Boolean) as { product: Product; updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description'>> }[];
 
   const parseBatchText = (text: string) => {
     const lines = text.trim().split('\n').filter(l => l.trim());
@@ -70,6 +172,59 @@ export default function ProductsPage() {
       setBatchResult({ error: err.message });
     } finally {
       setIsBatchSubmitting(false);
+    }
+  };
+
+  const handleQuickSubmit = async () => {
+    if (isQuickSubmitting || quickPreview.length === 0) return;
+    const invalid = quickPreview.filter(item => !item.price || Number.isNaN(Number(item.price)));
+    if (invalid.length > 0) {
+      setQuickResult({ error: '有商品缺少價格，請補齊每個天數對應的價格' });
+      return;
+    }
+
+    setIsQuickSubmitting(true);
+    setQuickResult(null);
+    try {
+      const res = await fetch('/api/admin/products/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: quickPreview })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '新增失敗');
+      setQuickResult(json);
+      fetchProducts();
+    } catch (err) {
+      setQuickResult({ error: err instanceof Error ? err.message : '新增失敗' });
+    } finally {
+      setIsQuickSubmitting(false);
+    }
+  };
+
+  const handleReplaceSubmit = async () => {
+    if (isReplaceSubmitting || replacePreview.length === 0) return;
+    setIsReplaceSubmitting(true);
+    setReplaceResult(null);
+    try {
+      const res = await fetch('/api/admin/products/batch-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: replacePreview.map(({ product, updates }) => ({
+            id: product.id,
+            ...updates
+          }))
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '批量修改失敗');
+      setReplaceResult(json);
+      fetchProducts();
+    } catch (err) {
+      setReplaceResult({ error: err instanceof Error ? err.message : '批量修改失敗' });
+    } finally {
+      setIsReplaceSubmitting(false);
     }
   };
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -117,6 +272,7 @@ export default function ProductsPage() {
   const totalProducts = products.length;
   const activeProducts = products.filter(p => p.is_active).length;
   const inactiveProducts = products.filter(p => !p.is_active).length;
+  const countryOptions = Array.from(new Set([...COMMON_COUNTRIES, ...products.map(p => p.country)])).filter(Boolean);
 
   const handleToggleActive = async (product: Product) => {
     try {
@@ -335,20 +491,33 @@ export default function ProductsPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-white">商品管理</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={() => { setQuickForm(QUICK_DEFAULTS); setQuickResult(null); setIsQuickOpen(true); }}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-500 transition-colors flex items-center gap-2"
+          >
+            <Sparkles className="h-4 w-4" />
+            快速建立系列
+          </button>
+          <button
+            onClick={() => { setReplaceForm(REPLACE_DEFAULTS); setReplaceResult(null); setIsReplaceOpen(true); }}
+            className="bg-amber-500/90 text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-400 transition-colors flex items-center gap-2"
+          >
+            <Replace className="h-4 w-4" />
+            批量替換文字
+          </button>
           <button
             onClick={() => { setIsBatchOpen(true); setBatchText(''); setBatchPreview([]); setBatchResult(null); }}
-            className="bg-white/10 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-white/20 transition-colors flex items-center gap-1"
+            className="bg-white/10 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-white/20 transition-colors flex items-center gap-2"
           >
-            📋 批量匯入
+            <ClipboardList className="h-4 w-4" />
+            批量匯入
           </button>
           <button
             onClick={() => { setFormData(emptyForm); setIsAddModalOpen(true); }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center gap-2"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
+            <Plus className="h-4 w-4" />
             新增商品
           </button>
         </div>
@@ -549,6 +718,266 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Series Modal */}
+      {isQuickOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-4xl w-full p-6 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">快速建立系列商品</h2>
+                <p className="text-xs text-white/40 mt-1">用同一套命名規則一次產生多個天數方案</p>
+              </div>
+              <button onClick={() => setIsQuickOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-1">國家</label>
+                    <select
+                      className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40"
+                      value={quickForm.country}
+                      onChange={(e) => setQuickForm({ ...quickForm, country: e.target.value })}
+                    >
+                      {countryOptions.map(c => <option key={c} value={c} className="text-black">{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-1">名稱結尾</label>
+                    <input
+                      className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                      value={quickForm.suffix}
+                      onChange={(e) => setQuickForm({ ...quickForm, suffix: e.target.value })}
+                      placeholder="原生網路"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">商品名稱前綴</label>
+                  <input
+                    className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                    value={quickForm.baseName}
+                    onChange={(e) => setQuickForm({ ...quickForm, baseName: e.target.value })}
+                    placeholder="日本 KDDI 不限速吃到飽"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-1">天數</label>
+                    <input
+                      className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                      value={quickForm.days}
+                      onChange={(e) => setQuickForm({ ...quickForm, days: e.target.value })}
+                      placeholder="3,5,7,10,15"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-1">價格</label>
+                    <input
+                      className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                      value={quickForm.prices}
+                      onChange={(e) => setQuickForm({ ...quickForm, prices: e.target.value })}
+                      placeholder="399,599,799,1299,1799"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-1">熱點規則</label>
+                    <select
+                      className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40"
+                      value={quickForm.hotspotMode}
+                      onChange={(e) => setQuickForm({ ...quickForm, hotspotMode: e.target.value })}
+                    >
+                      <option value="total" className="text-black">熱點總量</option>
+                      <option value="daily" className="text-black">每日熱點</option>
+                      <option value="custom" className="text-black">自訂文字</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-1">熱點數值或文字</label>
+                    <input
+                      className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                      value={quickForm.hotspotGb}
+                      onChange={(e) => setQuickForm({ ...quickForm, hotspotGb: e.target.value })}
+                      placeholder={quickForm.hotspotMode === 'custom' ? '熱點總量4GB' : '4'}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">流量規格前綴</label>
+                  <input
+                    className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                    value={quickForm.dataPrefix}
+                    onChange={(e) => setQuickForm({ ...quickForm, dataPrefix: e.target.value })}
+                    placeholder="不限速上網吃到飽"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">商品描述（選填）</label>
+                  <input
+                    className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                    value={quickForm.description}
+                    onChange={(e) => setQuickForm({ ...quickForm, description: e.target.value })}
+                    placeholder="例如：KDDI 原生線路"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-white/60 mb-2">預覽：{quickPreview.length} 筆商品</p>
+                <div className="max-h-[420px] overflow-y-auto bg-black/30 rounded-lg border border-white/10">
+                  <table className="w-full text-xs">
+                    <thead><tr className="text-white/40 border-b border-white/10">
+                      <th className="px-3 py-2 text-left">名稱</th>
+                      <th className="px-3 py-2 text-right">天數</th>
+                      <th className="px-3 py-2 text-right">價格</th>
+                    </tr></thead>
+                    <tbody>{quickPreview.map((item, i) => (
+                      <tr key={`${item.name}-${i}`} className="border-b border-white/5">
+                        <td className="px-3 py-2 text-white/80">{item.name}<div className="text-white/40 mt-0.5">{item.data_amount}</div></td>
+                        <td className="px-3 py-2 text-right text-white/60">{item.validity_days}</td>
+                        <td className={`px-3 py-2 text-right ${item.price ? 'text-white/80' : 'text-red-300'}`}>{item.price ? `NT${item.price}` : '缺價格'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+
+                {quickResult && (
+                  <div className={`p-4 rounded-lg mt-4 text-sm ${quickResult.error ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
+                    {quickResult.error ? quickResult.error : `新增完成：成功 ${quickResult.inserted} 筆，跳過 ${quickResult.skipped} 筆`}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setIsQuickOpen(false)} className="px-4 py-2 border border-white/20 rounded-lg text-sm text-white/70 hover:bg-white/10">關閉</button>
+              <button
+                onClick={handleQuickSubmit}
+                disabled={isQuickSubmitting || quickPreview.length === 0}
+                className={`px-6 py-2 rounded-lg text-sm font-bold ${isQuickSubmitting || quickPreview.length === 0 ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+              >
+                {isQuickSubmitting ? '新增中...' : `確認新增 ${quickPreview.length} 筆`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Replace Modal */}
+      {isReplaceOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-3xl w-full p-6 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">批量替換商品文字</h2>
+                <p className="text-xs text-white/40 mt-1">先預覽再更新，適合改熱點規格、線路名稱或方案描述</p>
+              </div>
+              <button onClick={() => setIsReplaceOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1">國家範圍</label>
+                <select
+                  className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40"
+                  value={replaceForm.country}
+                  onChange={(e) => setReplaceForm({ ...replaceForm, country: e.target.value })}
+                >
+                  <option value="全部" className="text-black">全部</option>
+                  {countryOptions.map(c => <option key={c} value={c} className="text-black">{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1">替換欄位</label>
+                <select
+                  className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40"
+                  value={replaceForm.field}
+                  onChange={(e) => setReplaceForm({ ...replaceForm, field: e.target.value as ReplaceField })}
+                >
+                  <option value="all" className="text-black">商品名稱 + 流量規格 + 描述</option>
+                  <option value="name" className="text-black">只改商品名稱</option>
+                  <option value="data_amount" className="text-black">只改流量規格</option>
+                  <option value="description" className="text-black">只改商品描述</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1">尋找文字</label>
+                <input
+                  className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                  value={replaceForm.findText}
+                  onChange={(e) => { setReplaceForm({ ...replaceForm, findText: e.target.value }); setReplaceResult(null); }}
+                  placeholder="每日熱點2GB"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1">替換成</label>
+                <input
+                  className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                  value={replaceForm.replaceText}
+                  onChange={(e) => { setReplaceForm({ ...replaceForm, replaceText: e.target.value }); setReplaceResult(null); }}
+                  placeholder="熱點總量4GB"
+                />
+              </div>
+            </div>
+
+            <p className="text-sm text-white/60 mb-2">預覽：{replacePreview.length} 筆商品會更新</p>
+            <div className="max-h-72 overflow-y-auto bg-black/30 rounded-lg border border-white/10 mb-4">
+              {replacePreview.length === 0 ? (
+                <div className="text-sm text-white/40 px-4 py-6 text-center">沒有找到符合的文字</div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead><tr className="text-white/40 border-b border-white/10">
+                    <th className="px-3 py-2 text-left">原商品</th>
+                    <th className="px-3 py-2 text-left">更新後</th>
+                  </tr></thead>
+                  <tbody>{replacePreview.map(({ product, updates }) => (
+                    <tr key={product.id} className="border-b border-white/5 align-top">
+                      <td className="px-3 py-2 text-white/60">
+                        <div>{product.name}</div>
+                        <div className="text-white/35 mt-1">{product.data_amount || '-'}</div>
+                      </td>
+                      <td className="px-3 py-2 text-white/85">
+                        <div>{updates.name || product.name}</div>
+                        <div className="text-cyan-300/80 mt-1">{updates.data_amount || product.data_amount || '-'}</div>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              )}
+            </div>
+
+            {replaceResult && (
+              <div className={`p-4 rounded-lg mb-4 text-sm ${replaceResult.error ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
+                {replaceResult.error ? replaceResult.error : `已更新 ${replaceResult.updated} 筆商品`}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setIsReplaceOpen(false)} className="px-4 py-2 border border-white/20 rounded-lg text-sm text-white/70 hover:bg-white/10">關閉</button>
+              <button
+                onClick={handleReplaceSubmit}
+                disabled={isReplaceSubmitting || replacePreview.length === 0 || !replaceForm.findText}
+                className={`px-6 py-2 rounded-lg text-sm font-bold ${isReplaceSubmitting || replacePreview.length === 0 || !replaceForm.findText ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-black'}`}
+              >
+                {isReplaceSubmitting ? '更新中...' : `確認更新 ${replacePreview.length} 筆`}
+              </button>
+            </div>
           </div>
         </div>
       )}
