@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ClipboardList, Plus, Replace, Sparkles, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ClipboardList, Plus, Replace, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -46,6 +46,11 @@ type ReplaceResult = {
   updated?: number;
 };
 
+type SortResult = {
+  error?: string;
+  success?: boolean;
+};
+
 const QUICK_DEFAULTS = {
   country: '日本',
   baseName: '日本 KDDI 不限速吃到飽',
@@ -67,6 +72,7 @@ const REPLACE_DEFAULTS = {
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const hasInitializedCollapse = useRef(false);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -85,6 +91,11 @@ export default function ProductsPage() {
   const [replaceForm, setReplaceForm] = useState(REPLACE_DEFAULTS);
   const [replaceResult, setReplaceResult] = useState<ReplaceResult | null>(null);
   const [isReplaceSubmitting, setIsReplaceSubmitting] = useState(false);
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const [sortForm, setSortForm] = useState({ countriesText: '', plansText: '' });
+  const [sortResult, setSortResult] = useState<SortResult | null>(null);
+  const [isSortLoading, setIsSortLoading] = useState(false);
+  const [isSortSubmitting, setIsSortSubmitting] = useState(false);
 
   const splitList = (value: string) => value
     .split(/[,，\n]/)
@@ -138,6 +149,18 @@ export default function ProductsPage() {
       return changed ? { product, updates } : null;
     })
     .filter(Boolean) as { product: Product; updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description'>> }[];
+
+  const suggestedCountrySort = Array.from(new Set(products.map(product => product.country))).filter(Boolean);
+  const suggestedPlanSort = Array.from(new Set(
+    products
+      .filter(product => product.country && product.data_amount)
+      .map(product => `${product.country}|${product.data_amount}`)
+  ));
+
+  const splitSortLines = (value: string) => value
+    .split('\n')
+    .map(item => item.trim())
+    .filter(Boolean);
 
   const parseBatchText = (text: string) => {
     const lines = text.trim().split('\n').filter(l => l.trim());
@@ -232,6 +255,54 @@ export default function ProductsPage() {
       setIsReplaceSubmitting(false);
     }
   };
+
+  const openSortModal = async () => {
+    setIsSortOpen(true);
+    setSortResult(null);
+    setIsSortLoading(true);
+    try {
+      const res = await fetch('/api/admin/products/sort');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '讀取排序設定失敗');
+
+      setSortForm({
+        countriesText: (json.sort?.countries?.length ? json.sort.countries : suggestedCountrySort).join('\n'),
+        plansText: (json.sort?.plans?.length ? json.sort.plans : suggestedPlanSort).join('\n')
+      });
+    } catch (err) {
+      setSortResult({ error: err instanceof Error ? err.message : '讀取排序設定失敗' });
+      setSortForm({
+        countriesText: suggestedCountrySort.join('\n'),
+        plansText: suggestedPlanSort.join('\n')
+      });
+    } finally {
+      setIsSortLoading(false);
+    }
+  };
+
+  const handleSortSubmit = async () => {
+    if (isSortSubmitting) return;
+    setIsSortSubmitting(true);
+    setSortResult(null);
+    try {
+      const res = await fetch('/api/admin/products/sort', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          countries: splitSortLines(sortForm.countriesText),
+          plans: splitSortLines(sortForm.plansText)
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '儲存排序設定失敗');
+      setSortResult({ success: true });
+    } catch (err) {
+      setSortResult({ error: err instanceof Error ? err.message : '儲存排序設定失敗' });
+    } finally {
+      setIsSortSubmitting(false);
+    }
+  };
+
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const toggleGroup = (key: string) => {
@@ -262,7 +333,12 @@ export default function ProductsPage() {
       const res = await fetch('/api/admin/products');
       const json = await res.json();
       if (json.products) {
-        setProducts(json.products);
+        const productList = json.products as Product[];
+        setProducts(productList);
+        if (!hasInitializedCollapse.current) {
+          setCollapsedGroups(new Set(productList.map(product => product.country)));
+          hasInitializedCollapse.current = true;
+        }
       }
     } catch (err) {
       console.error('Error fetching products:', err);
@@ -510,6 +586,13 @@ export default function ProductsPage() {
           >
             <Replace className="h-4 w-4" />
             批量替換文字
+          </button>
+          <button
+            onClick={openSortModal}
+            className="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-cyan-500 transition-colors flex items-center gap-2"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            前台排序
           </button>
           <button
             onClick={() => { setIsBatchOpen(true); setBatchText(''); setBatchPreview([]); setBatchResult(null); }}
@@ -981,6 +1064,87 @@ export default function ProductsPage() {
                 className={`px-6 py-2 rounded-lg text-sm font-bold ${isReplaceSubmitting || replacePreview.length === 0 || !replaceForm.findText ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-black'}`}
               >
                 {isReplaceSubmitting ? '更新中...' : `確認更新 ${replacePreview.length} 筆`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Frontend Sort Modal */}
+      {isSortOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-4xl w-full p-6 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">前台商品排序</h2>
+                <p className="text-xs text-white/40 mt-1">控制前台國家與同國家內方案的顯示順序，未列入的項目會排在最後</p>
+              </div>
+              <button onClick={() => setIsSortOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {isSortLoading ? (
+              <div className="text-center py-10 text-white/50">讀取排序設定中...</div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-2">國家排序</label>
+                  <textarea
+                    rows={14}
+                    className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 resize-none"
+                    placeholder="日本&#10;韓國&#10;泰國"
+                    value={sortForm.countriesText}
+                    onChange={(e) => { setSortForm({ ...sortForm, countriesText: e.target.value }); setSortResult(null); }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSortForm({ ...sortForm, countriesText: suggestedCountrySort.join('\n') })}
+                    className="mt-2 text-xs text-cyan-300 hover:text-cyan-200"
+                  >
+                    套用目前國家清單
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-2">方案排序</label>
+                  <textarea
+                    rows={14}
+                    className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 resize-none"
+                    placeholder="日本|KIDD原生網路不限速上網吃到飽&#10;日本|每日 1GB 用畢降速/128kbs"
+                    value={sortForm.plansText}
+                    onChange={(e) => { setSortForm({ ...sortForm, plansText: e.target.value }); setSortResult(null); }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSortForm({ ...sortForm, plansText: suggestedPlanSort.join('\n') })}
+                    className="mt-2 text-xs text-cyan-300 hover:text-cyan-200"
+                  >
+                    套用目前方案清單
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-white/50">
+              <p>方案格式：國家|流量規格，例如 日本|KIDD原生網路不限速上網吃到飽。</p>
+              <p className="mt-1">只需要調整順序，不用填商品天數；同一方案底下的 3天、5天、7天仍會自動照天數排列。</p>
+            </div>
+
+            {sortResult && (
+              <div className={`p-4 rounded-lg mt-4 text-sm ${sortResult.error ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
+                {sortResult.error || '排序設定已儲存，前台重新整理後會套用'}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setIsSortOpen(false)} className="px-4 py-2 border border-white/20 rounded-lg text-sm text-white/70 hover:bg-white/10">關閉</button>
+              <button
+                onClick={handleSortSubmit}
+                disabled={isSortSubmitting || isSortLoading}
+                className={`px-6 py-2 rounded-lg text-sm font-bold ${isSortSubmitting || isSortLoading ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-500 text-white'}`}
+              >
+                {isSortSubmitting ? '儲存中...' : '儲存排序'}
               </button>
             </div>
           </div>

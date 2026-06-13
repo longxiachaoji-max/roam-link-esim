@@ -7,6 +7,22 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const SORT_CONFIG_PATTERN = /\n?(<!--PRODUCT_SORT_CONFIG:[\s\S]*?-->)\n?/;
+
+function stripSortConfig(usageGuide: string | null) {
+  return (usageGuide || '').replace(SORT_CONFIG_PATTERN, '').trim();
+}
+
+function getSortConfigComment(usageGuide: string | null) {
+  return (usageGuide || '').match(SORT_CONFIG_PATTERN)?.[1] || '';
+}
+
+function withExistingSortConfig(nextUsageGuide: string, currentUsageGuide: string | null) {
+  const sortConfigComment = getSortConfigComment(currentUsageGuide);
+  const cleanGuide = stripSortConfig(nextUsageGuide);
+  return `${cleanGuide}${sortConfigComment ? `${cleanGuide ? '\n\n' : ''}${sortConfigComment}` : ''}`;
+}
+
 // GET - 取得網站設定
 export async function GET() {
   try {
@@ -20,7 +36,12 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ settings: data });
+    return NextResponse.json({
+      settings: {
+        ...data,
+        usage_guide: stripSortConfig(data.usage_guide)
+      }
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -37,7 +58,15 @@ export async function PUT(request: Request) {
     if (hero_title !== undefined) updateData.hero_title = hero_title;
     if (hero_subtitle !== undefined) updateData.hero_subtitle = hero_subtitle;
     if (section_title !== undefined) updateData.section_title = section_title;
-    if (usage_guide !== undefined) updateData.usage_guide = usage_guide;
+    if (usage_guide !== undefined) {
+      const { data } = await supabase
+        .from('site_settings')
+        .select('usage_guide')
+        .eq('id', 'main')
+        .single();
+
+      updateData.usage_guide = withExistingSortConfig(usage_guide, data?.usage_guide || '');
+    }
 
     const { error } = await supabase
       .from('site_settings')

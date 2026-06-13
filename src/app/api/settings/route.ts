@@ -7,6 +7,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const SORT_CONFIG_PATTERN = /\n?<!--PRODUCT_SORT_CONFIG:[\s\S]*?-->\n?/;
+
+function stripSortConfig(usageGuide: string | null) {
+  return (usageGuide || '').replace(SORT_CONFIG_PATTERN, '').trim();
+}
+
 export async function GET() {
   try {
     const { data, error } = await supabase
@@ -28,7 +34,12 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ settings: data });
+    return NextResponse.json({
+      settings: {
+        ...data,
+        usage_guide: stripSortConfig(data.usage_guide)
+      }
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

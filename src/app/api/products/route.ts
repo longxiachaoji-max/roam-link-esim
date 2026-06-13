@@ -49,6 +49,28 @@ function getHotspotSharing(description: string | null, name: string) {
   return match?.[1]?.trim() || '';
 }
 
+const SORT_CONFIG_PATTERN = /\n?<!--PRODUCT_SORT_CONFIG:([\s\S]*?)-->\n?/;
+
+function parseSortConfig(usageGuide: string | null) {
+  const match = (usageGuide || '').match(SORT_CONFIG_PATTERN);
+  if (!match?.[1]) return { countries: [], plans: [] };
+
+  try {
+    const parsed = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
+    return {
+      countries: Array.isArray(parsed.countries) ? parsed.countries.filter(Boolean) : [],
+      plans: Array.isArray(parsed.plans) ? parsed.plans.filter(Boolean) : []
+    };
+  } catch {
+    return { countries: [], plans: [] };
+  }
+}
+
+function getSortIndex(items: string[], key: string) {
+  const index = items.indexOf(key);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 // GET - 公開 API：回傳 is_active=true 的商品，按國家分組，同流量合併天數選項，依銷量排序
 export async function GET() {
   try {
@@ -67,6 +89,14 @@ export async function GET() {
     if (!data || data.length === 0) {
       return NextResponse.json({ products: [], regions: [] });
     }
+
+    const { data: settings } = await supabase
+      .from('site_settings')
+      .select('usage_guide')
+      .eq('id', 'main')
+      .single();
+
+    const sortConfig = parseSortConfig(settings?.usage_guide || '');
 
     // 2. 從 order_items 計算各 product_id 銷售次數
     const salesMap: Record<string, number> = {};
@@ -140,9 +170,20 @@ export async function GET() {
           data: plan.data,
           isHiddenGem: (plan as any).isHiddenGem || false,
           options: plan.options.sort((a, b) => a.days - b.days)
-        }))
+        })).sort((a, b) => {
+          const planA = getSortIndex(sortConfig.plans, `${g.country}|${a.data}`);
+          const planB = getSortIndex(sortConfig.plans, `${g.country}|${b.data}`);
+          if (planA !== planB) return planA - planB;
+          return a.data.localeCompare(b.data, 'zh-Hant');
+        })
       }))
-      .sort((a, b) => b.totalSales - a.totalSales);
+      .sort((a, b) => {
+        const countryA = getSortIndex(sortConfig.countries, a.country);
+        const countryB = getSortIndex(sortConfig.countries, b.country);
+        if (countryA !== countryB) return countryA - countryB;
+        if (a.totalSales !== b.totalSales) return b.totalSales - a.totalSales;
+        return a.country.localeCompare(b.country, 'zh-Hant');
+      });
 
     // 5. 收集所有出現的 regions
     const regionSet = new Set(products.map(p => p.region));
