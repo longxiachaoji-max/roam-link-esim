@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ClipboardList, Plus, Replace, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, Replace, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -51,6 +51,13 @@ type SortResult = {
   success?: boolean;
 };
 
+type SortKind = 'countries' | 'plans';
+
+type DragItem = {
+  kind: SortKind;
+  index: number;
+};
+
 const QUICK_DEFAULTS = {
   country: '日本',
   baseName: '日本 KDDI 不限速吃到飽',
@@ -92,10 +99,11 @@ export default function ProductsPage() {
   const [replaceResult, setReplaceResult] = useState<ReplaceResult | null>(null);
   const [isReplaceSubmitting, setIsReplaceSubmitting] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
-  const [sortForm, setSortForm] = useState({ countriesText: '', plansText: '' });
+  const [sortForm, setSortForm] = useState<{ countries: string[]; plans: string[] }>({ countries: [], plans: [] });
   const [sortResult, setSortResult] = useState<SortResult | null>(null);
   const [isSortLoading, setIsSortLoading] = useState(false);
   const [isSortSubmitting, setIsSortSubmitting] = useState(false);
+  const [dragItem, setDragItem] = useState<DragItem | null>(null);
 
   const splitList = (value: string) => value
     .split(/[,，\n]/)
@@ -156,11 +164,6 @@ export default function ProductsPage() {
       .filter(product => product.country && product.data_amount)
       .map(product => `${product.country}|${product.data_amount}`)
   ));
-
-  const splitSortLines = (value: string) => value
-    .split('\n')
-    .map(item => item.trim())
-    .filter(Boolean);
 
   const parseBatchText = (text: string) => {
     const lines = text.trim().split('\n').filter(l => l.trim());
@@ -266,14 +269,14 @@ export default function ProductsPage() {
       if (!res.ok) throw new Error(json.error || '讀取排序設定失敗');
 
       setSortForm({
-        countriesText: (json.sort?.countries?.length ? json.sort.countries : suggestedCountrySort).join('\n'),
-        plansText: (json.sort?.plans?.length ? json.sort.plans : suggestedPlanSort).join('\n')
+        countries: json.sort?.countries?.length ? json.sort.countries : suggestedCountrySort,
+        plans: json.sort?.plans?.length ? json.sort.plans : suggestedPlanSort
       });
     } catch (err) {
       setSortResult({ error: err instanceof Error ? err.message : '讀取排序設定失敗' });
       setSortForm({
-        countriesText: suggestedCountrySort.join('\n'),
-        plansText: suggestedPlanSort.join('\n')
+        countries: suggestedCountrySort,
+        plans: suggestedPlanSort
       });
     } finally {
       setIsSortLoading(false);
@@ -289,8 +292,8 @@ export default function ProductsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          countries: splitSortLines(sortForm.countriesText),
-          plans: splitSortLines(sortForm.plansText)
+          countries: sortForm.countries,
+          plans: sortForm.plans
         })
       });
       const json = await res.json();
@@ -302,6 +305,117 @@ export default function ProductsPage() {
       setIsSortSubmitting(false);
     }
   };
+
+  const moveSortItem = (kind: SortKind, fromIndex: number, toIndex: number) => {
+    setSortResult(null);
+    setSortForm(prev => {
+      const items = [...prev[kind]];
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= items.length ||
+        toIndex >= items.length
+      ) {
+        return prev;
+      }
+
+      const [moved] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, moved);
+      return { ...prev, [kind]: items };
+    });
+  };
+
+  const resetSortList = (kind: SortKind) => {
+    setSortResult(null);
+    setSortForm(prev => ({
+      ...prev,
+      [kind]: kind === 'countries' ? suggestedCountrySort : suggestedPlanSort
+    }));
+  };
+
+  const renderSortLabel = (kind: SortKind, item: string) => {
+    if (kind === 'countries') return <span className="font-medium text-white">{item}</span>;
+
+    const [country, ...planParts] = item.split('|');
+    return (
+      <div className="min-w-0">
+        <div className="text-xs text-cyan-300/80 mb-0.5">{country || '未指定國家'}</div>
+        <div className="font-medium text-white truncate">{planParts.join('|') || item}</div>
+      </div>
+    );
+  };
+
+  const renderSortableList = (kind: SortKind, title: string, items: string[]) => (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-sm font-medium text-white/70">{title}</label>
+        <button
+          type="button"
+          onClick={() => resetSortList(kind)}
+          className="text-xs text-cyan-300 hover:text-cyan-200 flex items-center gap-1"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          套用目前清單
+        </button>
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-black/25 max-h-[430px] overflow-y-auto p-2 space-y-2">
+        {items.length === 0 ? (
+          <div className="text-center py-8 text-sm text-white/35">目前沒有可排序項目</div>
+        ) : items.map((item, index) => {
+          const isDragging = dragItem?.kind === kind && dragItem.index === index;
+          return (
+            <div
+              key={`${kind}-${item}`}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', `${kind}:${index}`);
+                setDragItem({ kind, index });
+              }}
+              onDragEnd={() => setDragItem(null)}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const [dropKind, rawIndex] = event.dataTransfer.getData('text/plain').split(':');
+                if (dropKind === kind) moveSortItem(kind, Number(rawIndex), index);
+                setDragItem(null);
+              }}
+              className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${isDragging ? 'border-cyan-300/70 bg-cyan-400/10 opacity-70' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`}
+            >
+              <span className="text-xs tabular-nums text-white/35 w-6 text-right">{index + 1}</span>
+              <GripVertical className="h-4 w-4 text-white/35 shrink-0 cursor-grab" />
+              <div className="min-w-0 flex-1 text-sm">{renderSortLabel(kind, item)}</div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => moveSortItem(kind, index, index - 1)}
+                  disabled={index === 0}
+                  className="p-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-25 disabled:hover:bg-transparent"
+                  aria-label="上移"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveSortItem(kind, index, index + 1)}
+                  disabled={index === items.length - 1}
+                  className="p-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-25 disabled:hover:bg-transparent"
+                  aria-label="下移"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -1088,47 +1202,14 @@ export default function ProductsPage() {
               <div className="text-center py-10 text-white/50">讀取排序設定中...</div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-medium text-white/70 mb-2">國家排序</label>
-                  <textarea
-                    rows={14}
-                    className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 resize-none"
-                    placeholder="日本&#10;韓國&#10;泰國"
-                    value={sortForm.countriesText}
-                    onChange={(e) => { setSortForm({ ...sortForm, countriesText: e.target.value }); setSortResult(null); }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSortForm({ ...sortForm, countriesText: suggestedCountrySort.join('\n') })}
-                    className="mt-2 text-xs text-cyan-300 hover:text-cyan-200"
-                  >
-                    套用目前國家清單
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white/70 mb-2">方案排序</label>
-                  <textarea
-                    rows={14}
-                    className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 resize-none"
-                    placeholder="日本|KIDD原生網路不限速上網吃到飽&#10;日本|每日 1GB 用畢降速/128kbs"
-                    value={sortForm.plansText}
-                    onChange={(e) => { setSortForm({ ...sortForm, plansText: e.target.value }); setSortResult(null); }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSortForm({ ...sortForm, plansText: suggestedPlanSort.join('\n') })}
-                    className="mt-2 text-xs text-cyan-300 hover:text-cyan-200"
-                  >
-                    套用目前方案清單
-                  </button>
-                </div>
+                {renderSortableList('countries', `國家排序 (${sortForm.countries.length})`, sortForm.countries)}
+                {renderSortableList('plans', `方案排序 (${sortForm.plans.length})`, sortForm.plans)}
               </div>
             )}
 
             <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-white/50">
-              <p>方案格式：國家|流量規格，例如 日本|KIDD原生網路不限速上網吃到飽。</p>
-              <p className="mt-1">只需要調整順序，不用填商品天數；同一方案底下的 3天、5天、7天仍會自動照天數排列。</p>
+              <p>拖曳項目可以調整順序，也可以用右側箭頭微調。</p>
+              <p className="mt-1">同一方案底下的 3天、5天、7天仍會自動照天數排列；未列入的新增項目會接在已設定排序後面。</p>
             </div>
 
             {sortResult && (
