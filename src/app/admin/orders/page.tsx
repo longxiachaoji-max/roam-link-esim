@@ -94,6 +94,7 @@ export default function OrdersPage() {
   const [inventoryOptions, setInventoryOptions] = useState<InventoryOption[]>([]);
   const [assignSelections, setAssignSelections] = useState<Record<string, string>>({});
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -206,6 +207,31 @@ export default function OrdersPage() {
       alert(err instanceof Error ? err.message : '補上 eSIM 失敗');
     } finally {
       setAssigningItemId(null);
+    }
+  };
+
+  const handleDeleteOrder = async (order: Order) => {
+    const customer = order.customers?.email || '未知客戶';
+    const ok = window.confirm(
+      `確定要刪除這筆訂單嗎？\n\n客戶：${customer}\n訂單：${order.id}\n\n已配發的 eSIM 會退回可用庫存。`
+    );
+    if (!ok) return;
+
+    setDeletingOrderId(order.id);
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: order.id })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '刪除訂單失敗');
+      setExpandedOrderId(prev => (prev === order.id ? null : prev));
+      await fetchOrders();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '刪除訂單失敗');
+    } finally {
+      setDeletingOrderId(null);
     }
   };
 
@@ -399,8 +425,19 @@ export default function OrdersPage() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-4 text-sm min-w-[260px]">
-                        {item ? renderAssignControls(item, true) : '-'}
+                      <td className="px-4 py-4 text-sm min-w-[280px]">
+                        <div className="flex flex-col gap-2">
+                          {item ? renderAssignControls(item, true) : '-'}
+                          {isFirst && (
+                            <button
+                              onClick={() => handleDeleteOrder(order)}
+                              disabled={deletingOrderId === order.id}
+                              className="self-start rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
+                            >
+                              {deletingOrderId === order.id ? '刪除中...' : '刪除訂單'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {/* Expanded detail row */}
@@ -431,6 +468,16 @@ export default function OrdersPage() {
                                   <p className="text-white/80 mt-1">{order.tokens_used}</p>
                                 </div>
                               )}
+                            </div>
+
+                            <div className="flex justify-end">
+                              <button
+                                onClick={() => handleDeleteOrder(order)}
+                                disabled={deletingOrderId === order.id}
+                                className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
+                              >
+                                {deletingOrderId === order.id ? '刪除中...' : '刪除這筆訂單'}
+                              </button>
                             </div>
 
                             {/* Order Items Detail */}

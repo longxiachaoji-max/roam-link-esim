@@ -141,3 +141,55 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// DELETE - 刪除訂單，並將已綁定的 eSIM 庫存退回可用
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { order_id } = body;
+
+    if (!order_id) {
+      return NextResponse.json({ error: '缺少 order_id' }, { status: 400 });
+    }
+
+    const { data: orderItems, error: itemsError } = await supabase
+      .from('order_items')
+      .select('inventory_id')
+      .eq('order_id', order_id);
+
+    if (itemsError) {
+      return NextResponse.json({ error: itemsError.message }, { status: 500 });
+    }
+
+    const inventoryIds = (orderItems || [])
+      .map(item => item.inventory_id)
+      .filter(Boolean);
+
+    if (inventoryIds.length > 0) {
+      const { error: inventoryError } = await supabase
+        .from('e_sim_inventory')
+        .update({
+          status: 'AVAILABLE',
+          sold_at: null
+        })
+        .in('id', inventoryIds);
+
+      if (inventoryError) {
+        return NextResponse.json({ error: inventoryError.message }, { status: 500 });
+      }
+    }
+
+    const { error: deleteError } = await supabase
+      .from('orders')
+      .delete()
+      .eq('id', order_id);
+
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
