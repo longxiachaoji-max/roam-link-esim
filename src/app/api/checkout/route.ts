@@ -9,10 +9,49 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
 
-async function sendTelegramNotification(message: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+interface NotificationSettings {
+  notify_email_enabled: boolean;
+  order_notify_email: string;
+  notify_telegram_enabled: boolean;
+  telegram_bot_token: string;
+  telegram_chat_id: string;
+}
 
+function getFallbackNotificationSettings(): NotificationSettings {
+  return {
+    notify_email_enabled: Boolean(process.env.ORDER_NOTIFY_EMAIL || process.env.ADMIN_NOTIFY_EMAIL),
+    order_notify_email: process.env.ORDER_NOTIFY_EMAIL || process.env.ADMIN_NOTIFY_EMAIL || '',
+    notify_telegram_enabled: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+    telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '',
+    telegram_chat_id: process.env.TELEGRAM_CHAT_ID || ''
+  };
+}
+
+async function getNotificationSettings(): Promise<NotificationSettings> {
+  const fallback = getFallbackNotificationSettings();
+
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('notify_email_enabled, order_notify_email, notify_telegram_enabled, telegram_bot_token, telegram_chat_id')
+      .eq('id', 'main')
+      .single();
+
+    if (error || !data) return fallback;
+
+    return {
+      notify_email_enabled: data.notify_email_enabled ?? fallback.notify_email_enabled,
+      order_notify_email: data.order_notify_email || fallback.order_notify_email,
+      notify_telegram_enabled: data.notify_telegram_enabled ?? fallback.notify_telegram_enabled,
+      telegram_bot_token: data.telegram_bot_token || fallback.telegram_bot_token,
+      telegram_chat_id: data.telegram_chat_id || fallback.telegram_chat_id
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+async function sendTelegramNotification(message: string, token: string, chatId: string) {
   if (!token || !chatId) return;
 
   try {
@@ -207,8 +246,9 @@ export async function POST(request: Request) {
         `,
       });
 
-      const notifyEmail = process.env.ORDER_NOTIFY_EMAIL || process.env.ADMIN_NOTIFY_EMAIL;
-      if (!assignedInventory && notifyEmail) {
+      const notificationSettings = !assignedInventory ? await getNotificationSettings() : null;
+      const notifyEmail = notificationSettings?.order_notify_email || '';
+      if (!assignedInventory && notificationSettings?.notify_email_enabled && notifyEmail) {
         await resend.emails.send({
           from: `Roam Link eSIM <${fromEmail}>`,
           to: [notifyEmail],
@@ -229,6 +269,16 @@ export async function POST(request: Request) {
     }
 
     if (!assignedInventory) {
+      const notificationSettings = await getNotificationSettings();
+      if (!notificationSettings.notify_telegram_enabled) {
+        return NextResponse.json({
+          success: true,
+          orderId: order.id,
+          inventoryStatus: 'PENDING',
+          message: 'Checkout successful, eSIM pending fulfillment.',
+        });
+      }
+
       await sendTelegramNotification([
         '<b>有一筆訂單需要補 eSIM</b>',
         `訂單：<code>${escapeTelegramHtml(order.id)}</code>`,
@@ -238,7 +288,7 @@ export async function POST(request: Request) {
         `天數：${product.validity_days || '-'} 天`,
         `金額：NT$${Number(product.price)}`,
         `後台：${adminUrl}`
-      ].join('\n'));
+      ].join('\n'), notificationSettings.telegram_bot_token, notificationSettings.telegram_chat_id);
     }
 
     return NextResponse.json({
