@@ -9,6 +9,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
 
+const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
+
 interface NotificationSettings {
   notify_email_enabled: boolean;
   order_notify_email: string;
@@ -27,24 +29,36 @@ function getFallbackNotificationSettings(): NotificationSettings {
   };
 }
 
+function parseNotificationConfig(usageGuide: string | null): Partial<NotificationSettings> {
+  const match = (usageGuide || '').match(NOTIFICATION_CONFIG_PATTERN);
+  if (!match?.[1]) return {};
+
+  try {
+    return JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
+  } catch {
+    return {};
+  }
+}
+
 async function getNotificationSettings(): Promise<NotificationSettings> {
   const fallback = getFallbackNotificationSettings();
 
   try {
     const { data, error } = await supabase
       .from('site_settings')
-      .select('notify_email_enabled, order_notify_email, notify_telegram_enabled, telegram_bot_token, telegram_chat_id')
+      .select('usage_guide')
       .eq('id', 'main')
       .single();
 
     if (error || !data) return fallback;
+    const config = parseNotificationConfig(data.usage_guide);
 
     return {
-      notify_email_enabled: data.notify_email_enabled ?? fallback.notify_email_enabled,
-      order_notify_email: data.order_notify_email || fallback.order_notify_email,
-      notify_telegram_enabled: data.notify_telegram_enabled ?? fallback.notify_telegram_enabled,
-      telegram_bot_token: data.telegram_bot_token || fallback.telegram_bot_token,
-      telegram_chat_id: data.telegram_chat_id || fallback.telegram_chat_id
+      notify_email_enabled: config.notify_email_enabled ?? fallback.notify_email_enabled,
+      order_notify_email: config.order_notify_email || fallback.order_notify_email,
+      notify_telegram_enabled: config.notify_telegram_enabled ?? fallback.notify_telegram_enabled,
+      telegram_bot_token: config.telegram_bot_token || fallback.telegram_bot_token,
+      telegram_chat_id: config.telegram_chat_id || fallback.telegram_chat_id
     };
   } catch {
     return fallback;

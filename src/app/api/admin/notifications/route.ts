@@ -9,6 +9,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
 
+const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
+
 interface NotificationSettings {
   notify_email_enabled: boolean;
   order_notify_email: string;
@@ -25,13 +27,35 @@ const DEFAULTS: NotificationSettings = {
   telegram_chat_id: ''
 };
 
+function parseNotificationConfig(usageGuide: string | null): Partial<NotificationSettings> {
+  const match = (usageGuide || '').match(NOTIFICATION_CONFIG_PATTERN);
+  if (!match?.[1]) return {};
+
+  try {
+    return JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function stripNotificationConfig(usageGuide: string | null) {
+  return (usageGuide || '').replace(NOTIFICATION_CONFIG_PATTERN, '').trim();
+}
+
+function withNotificationConfig(usageGuide: string | null, settings: NotificationSettings) {
+  const cleanGuide = stripNotificationConfig(usageGuide);
+  const encoded = Buffer.from(JSON.stringify(settings), 'utf8').toString('base64');
+  return `${cleanGuide}${cleanGuide ? '\n\n' : ''}<!--NOTIFICATION_SETTINGS:${encoded}-->`;
+}
+
 function normalizeSettings(data: any): NotificationSettings {
+  const config = parseNotificationConfig(data?.usage_guide);
   return {
-    notify_email_enabled: data?.notify_email_enabled ?? true,
-    order_notify_email: data?.order_notify_email || process.env.ORDER_NOTIFY_EMAIL || process.env.ADMIN_NOTIFY_EMAIL || '',
-    notify_telegram_enabled: data?.notify_telegram_enabled ?? false,
-    telegram_bot_token: data?.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
-    telegram_chat_id: data?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID || ''
+    notify_email_enabled: config.notify_email_enabled ?? true,
+    order_notify_email: config.order_notify_email || process.env.ORDER_NOTIFY_EMAIL || process.env.ADMIN_NOTIFY_EMAIL || '',
+    notify_telegram_enabled: config.notify_telegram_enabled ?? false,
+    telegram_bot_token: config.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
+    telegram_chat_id: config.telegram_chat_id || process.env.TELEGRAM_CHAT_ID || ''
   };
 }
 
@@ -56,7 +80,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('site_settings')
-      .select('notify_email_enabled, order_notify_email, notify_telegram_enabled, telegram_bot_token, telegram_chat_id')
+      .select('usage_guide')
       .eq('id', 'main')
       .single();
 
@@ -73,12 +97,26 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const updateData = {
+    const nextSettings = {
       notify_email_enabled: Boolean(body.notify_email_enabled),
       order_notify_email: String(body.order_notify_email || '').trim(),
       notify_telegram_enabled: Boolean(body.notify_telegram_enabled),
       telegram_bot_token: String(body.telegram_bot_token || '').trim(),
-      telegram_chat_id: String(body.telegram_chat_id || '').trim(),
+      telegram_chat_id: String(body.telegram_chat_id || '').trim()
+    };
+
+    const { data: current, error: readError } = await supabase
+      .from('site_settings')
+      .select('usage_guide')
+      .eq('id', 'main')
+      .single();
+
+    if (readError) {
+      return NextResponse.json({ error: readError.message }, { status: 500 });
+    }
+
+    const updateData = {
+      usage_guide: withNotificationConfig(current?.usage_guide || '', nextSettings),
       updated_at: new Date().toISOString()
     };
 
@@ -104,7 +142,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from('site_settings')
-      .select('notify_email_enabled, order_notify_email, notify_telegram_enabled, telegram_bot_token, telegram_chat_id')
+      .select('usage_guide')
       .eq('id', 'main')
       .single();
 

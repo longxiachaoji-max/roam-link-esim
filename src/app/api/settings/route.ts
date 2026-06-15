@@ -7,10 +7,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const SORT_CONFIG_PATTERN = /\n?<!--PRODUCT_SORT_CONFIG:[\s\S]*?-->\n?/;
+const HIDDEN_CONFIG_PATTERN = /\n?<!--(?:PRODUCT_SORT_CONFIG|NOTIFICATION_SETTINGS):[\s\S]*?-->\n?/g;
 
 function stripSortConfig(usageGuide: string | null) {
-  return (usageGuide || '').replace(SORT_CONFIG_PATTERN, '').trim();
+  return (usageGuide || '').replace(HIDDEN_CONFIG_PATTERN, '').trim();
 }
 
 export async function GET() {
