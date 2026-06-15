@@ -124,6 +124,10 @@ export default function OrdersPage() {
   const totalOrders = orders.length;
   const completedOrders = orders.filter(o => o.order_status === 'COMPLETED').length;
   const pendingOrders = orders.filter(o => o.order_status === 'PENDING').length;
+  const pendingFulfillmentCount = orders.reduce(
+    (sum, order) => sum + order.order_items.filter(item => !item.inventory_id).length,
+    0
+  );
 
   // 計算毛利
   const now = new Date();
@@ -167,7 +171,10 @@ export default function OrdersPage() {
 
   const getAvailableInventoryForItem = (item: OrderItem | null) => {
     if (!item?.product_id) return [];
-    return inventoryOptions.filter(inventory => inventory.product_id === item.product_id);
+    return inventoryOptions.filter(inventory => {
+      const status = inventory.status || '';
+      return inventory.product_id === item.product_id && (status === 'AVAILABLE' || status === '可使用');
+    });
   };
 
   const handleAssignInventory = async (item: OrderItem) => {
@@ -202,11 +209,57 @@ export default function OrdersPage() {
     }
   };
 
+  const renderAssignControls = (item: OrderItem, compact = false) => {
+    if (item.inventory_id) {
+      return <span className="text-green-400 text-xs">已配發</span>;
+    }
+
+    const availableInventory = getAvailableInventoryForItem(item);
+    if (availableInventory.length === 0) {
+      return <span className="text-yellow-300/80 text-xs">待補庫存</span>;
+    }
+
+    return (
+      <div className={`flex ${compact ? 'items-center' : 'items-stretch sm:items-center'} gap-2 ${compact ? '' : 'flex-col sm:flex-row'}`}>
+        <select
+          className={`${compact ? 'max-w-[180px]' : 'w-full sm:max-w-[280px]'} bg-black/40 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white min-w-0`}
+          value={assignSelections[item.id] || ''}
+          onChange={(e) => setAssignSelections(prev => ({ ...prev, [item.id]: e.target.value }))}
+        >
+          <option value="" className="text-black">選擇 eSIM</option>
+          {availableInventory.map(inventory => (
+            <option key={inventory.id} value={inventory.id} className="text-black">
+              {inventory.iccid || truncate(inventory.activation_code, 18)}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => handleAssignInventory(item)}
+          disabled={assigningItemId === item.id}
+          className={`${compact ? 'px-3 py-1.5' : 'px-4 py-2'} rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:text-gray-400 text-white text-xs font-bold whitespace-nowrap`}
+        >
+          {assigningItemId === item.id ? '補上中...' : '補上 eSIM'}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-white">訂單管理</h1>
       </div>
+
+      {pendingFulfillmentCount > 0 && (
+        <div className="mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-4 text-yellow-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <p className="font-bold">有 {pendingFulfillmentCount} 筆商品尚未補上 eSIM</p>
+              <p className="text-sm text-yellow-100/70 mt-1">點訂單最左邊箭頭展開，在商品明細下方選擇 eSIM 後按「補上 eSIM」。</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Profit Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -296,10 +349,7 @@ export default function OrdersPage() {
                   <td colSpan={9} className="px-6 py-4 text-center text-sm text-white/50">尚無任何訂單</td>
                 </tr>
               ) : (
-                flatRows.map(({ order, item, isFirst, itemCount }, idx) => {
-                  const availableInventory = getAvailableInventoryForItem(item);
-
-                  return (
+                flatRows.map(({ order, item, isFirst, itemCount }, idx) => (
                   <Fragment key={`wrap-${order.id}-${item?.id ?? 'empty'}-${idx}`}>
                     <tr key={`row-${order.id}-${item?.id ?? 'empty'}-${idx}`} className="hover:bg-white/5 transition-colors">
                       {/* Expand button - only on first row of each order */}
@@ -328,7 +378,10 @@ export default function OrdersPage() {
                         {isFirst ? (order.customers?.email || '-') : ''}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-white/90">
-                        {item?.products?.name || '-'}
+                        <div>{item?.products?.name || '-'}</div>
+                        {item && !item.inventory_id && (
+                          <div className="mt-1 text-xs text-yellow-300/80">待補 eSIM</div>
+                        )}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-white/60 font-mono text-xs">
                         {item?.e_sim_inventory?.iccid || '-'}
@@ -347,35 +400,7 @@ export default function OrdersPage() {
                         ) : null}
                       </td>
                       <td className="px-4 py-4 text-sm min-w-[260px]">
-                        {item && !item.inventory_id ? (
-                          availableInventory.length > 0 ? (
-                            <div className="flex items-center gap-2">
-                              <select
-                                className="bg-black/40 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white min-w-0 max-w-[180px]"
-                                value={assignSelections[item.id] || ''}
-                                onChange={(e) => setAssignSelections(prev => ({ ...prev, [item.id]: e.target.value }))}
-                              >
-                                <option value="" className="text-black">選擇 eSIM</option>
-                                {availableInventory.map(inventory => (
-                                  <option key={inventory.id} value={inventory.id} className="text-black">
-                                    {inventory.iccid || truncate(inventory.activation_code, 18)}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => handleAssignInventory(item)}
-                                disabled={assigningItemId === item.id}
-                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:text-gray-400 text-white text-xs font-bold"
-                              >
-                                {assigningItemId === item.id ? '補上中...' : '補上'}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-yellow-300/80 text-xs">待補庫存</span>
-                          )
-                        ) : item?.inventory_id ? (
-                          <span className="text-green-400 text-xs">已配發</span>
-                        ) : '-'}
+                        {item ? renderAssignControls(item, true) : '-'}
                       </td>
                     </tr>
                     {/* Expanded detail row */}
@@ -435,7 +460,10 @@ export default function OrdersPage() {
                                           </div>
                                         )}
                                         {!oi.e_sim_inventory && (
-                                          <p className="text-yellow-300/80 text-xs mt-1">尚未配發 eSIM，客戶會員頁會顯示處理中</p>
+                                          <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
+                                            <p className="text-yellow-100/80 text-xs mb-2">尚未配發 eSIM，客戶會員頁會顯示處理中</p>
+                                            {renderAssignControls(oi)}
+                                          </div>
                                         )}
                                         {oi.note && <p className="text-white/40 text-xs mt-1">備註: {oi.note}</p>}
                                       </div>
@@ -450,8 +478,7 @@ export default function OrdersPage() {
                       </tr>
                     )}
                   </Fragment>
-                );
-                })
+                ))
               )}
             </tbody>
           </table>
