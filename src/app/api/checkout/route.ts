@@ -52,8 +52,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    // 3. Find available eSIM inventory
-    // In a real app, you might want to use an RPC or a transaction to avoid race conditions.
+    // 3. Find available eSIM inventory. If none exists, still allow checkout and
+    // leave the order item pending for manual fulfillment in admin/orders.
     const { data: inventory, error: inventoryError } = await supabase
       .from('e_sim_inventory')
       .select('*')
@@ -62,9 +62,7 @@ export async function POST(request: Request) {
       .limit(1)
       .single();
 
-    if (inventoryError || !inventory) {
-      return NextResponse.json({ error: '庫存不足' }, { status: 400 });
-    }
+    const assignedInventory = inventoryError ? null : inventory;
 
     // 4. Calculate total amount and token deduction
     let totalAmount = Number(product.price);
@@ -97,25 +95,26 @@ export async function POST(request: Request) {
         tokens_used: tokensUsed,
         payment_method: paymentMethod || 'CREDIT_CARD',
         payment_status: totalAmount === 0 ? 'PAID' : 'PENDING',
-        order_status: 'CREATED'
+        order_status: assignedInventory && totalAmount === 0 ? 'COMPLETED' : 'PENDING'
       }])
       .select()
       .single();
 
     if (orderError) throw orderError;
 
-    // 6. Bind Inventory to Order Item and Mark Inventory as SOLD
-    // Update inventory first
-    const { error: updateInventoryError } = await supabase
-      .from('e_sim_inventory')
-      .update({
-        status: 'SOLD',
-        sold_at: new Date().toISOString()
-      })
-      .eq('id', inventory.id)
-      .eq('status', 'AVAILABLE'); // Optimistic locking
+    // 6. Bind inventory when available. Otherwise the member page will show 處理中.
+    if (assignedInventory) {
+      const { error: updateInventoryError } = await supabase
+        .from('e_sim_inventory')
+        .update({
+          status: 'SOLD',
+          sold_at: new Date().toISOString()
+        })
+        .eq('id', assignedInventory.id)
+        .eq('status', 'AVAILABLE'); // Optimistic locking
 
-    if (updateInventoryError) throw updateInventoryError;
+      if (updateInventoryError) throw updateInventoryError;
+    }
 
     // Create order item
     const { error: orderItemError } = await supabase
@@ -123,7 +122,7 @@ export async function POST(request: Request) {
       .insert([{
         order_id: order.id,
         product_id: product.id,
-        inventory_id: inventory.id,
+        inventory_id: assignedInventory ? assignedInventory.id : null,
         price: product.price
       }]);
 
@@ -158,30 +157,47 @@ export async function POST(request: Request) {
       await resend.emails.send({
         from: `Roam Link eSIM <${fromEmail}>`,
         to: [email],
-        subject: `Your eSIM for ${product.name} is ready!`,
-        html: `
+        subject: assignedInventory ? `Your eSIM for ${product.name} is ready!` : `Your ${product.name} order is being prepared`,
+        html: assignedInventory ? `
           <h1>Thank you for your purchase!</h1>
           <p>Here are your eSIM details for <strong>${product.name}</strong>.</p>
-          <p><strong>SM-DP+ Address:</strong> ${inventory.smdp_address}</p>
-          <p><strong>Activation Code:</strong> ${inventory.activation_code}</p>
+          <p><strong>SM-DP+ Address:</strong> ${assignedInventory.smdp_address}</p>
+          <p><strong>Activation Code:</strong> ${assignedInventory.activation_code}</p>
           <p>Or scan the QR code (generated from the LPA string) on your device.</p>
           <p>Enjoy your trip to ${product.country}!</p>
+        ` : `
+          <h1>Thank you for your purchase!</h1>
+          <p>Your order for <strong>${product.name}</strong> has been received and is being prepared.</p>
+          <p>You can check your member center later. The installation button and QR Code will appear once the eSIM is assigned.</p>
         `,
       });
+
+      const notifyEmail = process.env.ORDER_NOTIFY_EMAIL || process.env.ADMIN_NOTIFY_EMAIL;
+      if (!assignedInventory && notifyEmail) {
+        await resend.emails.send({
+          from: `Roam Link eSIM <${fromEmail}>`,
+          to: [notifyEmail],
+          subject: `待補 eSIM 訂單：${product.name}`,
+          html: `
+            <h1>有一筆訂單需要補 eSIM</h1>
+            <p><strong>訂單：</strong>${order.id}</p>
+            <p><strong>客戶：</strong>${email}</p>
+            <p><strong>商品：</strong>${product.name}</p>
+            <p><strong>金額：</strong>NT$${Number(product.price)}</p>
+            <p>請到後台訂單管理補上 eSIM 資料。</p>
+          `,
+        });
+      }
     } catch (emailError) {
       console.error('Failed to send email:', emailError);
       // We don't throw here, order is still successful, but email failed.
     }
 
-    // Optional: Mark order as COMPLETED if payment was skipped
-    if (totalAmount === 0) {
-      await supabase.from('orders').update({ order_status: 'COMPLETED' }).eq('id', order.id);
-    }
-
     return NextResponse.json({
       success: true,
       orderId: order.id,
-      message: 'Checkout successful, eSIM provisioned.',
+      inventoryStatus: assignedInventory ? 'ASSIGNED' : 'PENDING',
+      message: assignedInventory ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
     });
 
   } catch (error: any) {

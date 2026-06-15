@@ -314,7 +314,7 @@ export default function MemberCenter() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-xs font-bold">
+                    <div className={`${item.e_sim_inventory ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300'} border px-2.5 py-1 rounded-lg text-xs font-bold`}>
                       {item.e_sim_inventory ? '使用中' : '處理中'}
                     </div>
                   </div>
@@ -394,6 +394,12 @@ export default function MemberCenter() {
                      >
                        <QrCode size={16} /> 顯示 QRCODE
                      </button>
+                  </div>
+                )}
+
+                {!item.e_sim_inventory && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-100/80 rounded-2xl px-4 py-3 text-sm mb-3">
+                    eSIM 正在處理中，配發完成後這裡會自動出現安裝按鈕與 QR Code。
                   </div>
                 )}
 

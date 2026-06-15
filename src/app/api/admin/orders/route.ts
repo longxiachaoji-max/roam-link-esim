@@ -30,7 +30,10 @@ export async function GET() {
           price,
           note,
           user_deleted_at,
+          product_id,
+          inventory_id,
           products (
+            id,
             name,
             country,
             data_amount,
@@ -52,6 +55,88 @@ export async function GET() {
     }
 
     return NextResponse.json({ orders: data });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// PUT - 手動補上 eSIM 庫存到訂單明細
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { order_item_id, inventory_id } = body;
+
+    if (!order_item_id || !inventory_id) {
+      return NextResponse.json({ error: '缺少 order_item_id 或 inventory_id' }, { status: 400 });
+    }
+
+    const { data: orderItem, error: itemError } = await supabase
+      .from('order_items')
+      .select('id, order_id, product_id, inventory_id')
+      .eq('id', order_item_id)
+      .single();
+
+    if (itemError || !orderItem) {
+      return NextResponse.json({ error: itemError?.message || '找不到訂單明細' }, { status: 404 });
+    }
+
+    if (orderItem.inventory_id) {
+      return NextResponse.json({ error: '此訂單明細已經綁定 eSIM' }, { status: 400 });
+    }
+
+    const { data: inventory, error: inventoryError } = await supabase
+      .from('e_sim_inventory')
+      .select('id, product_id, status')
+      .eq('id', inventory_id)
+      .single();
+
+    if (inventoryError || !inventory) {
+      return NextResponse.json({ error: inventoryError?.message || '找不到 eSIM 庫存' }, { status: 404 });
+    }
+
+    if (inventory.status !== 'AVAILABLE') {
+      return NextResponse.json({ error: '這筆 eSIM 庫存不是可使用狀態' }, { status: 400 });
+    }
+
+    if (inventory.product_id !== orderItem.product_id) {
+      return NextResponse.json({ error: '選擇的 eSIM 商品不符合訂單商品' }, { status: 400 });
+    }
+
+    const { error: updateInventoryError } = await supabase
+      .from('e_sim_inventory')
+      .update({
+        status: 'SOLD',
+        sold_at: new Date().toISOString()
+      })
+      .eq('id', inventory_id)
+      .eq('status', 'AVAILABLE');
+
+    if (updateInventoryError) {
+      return NextResponse.json({ error: updateInventoryError.message }, { status: 500 });
+    }
+
+    const { error: updateItemError } = await supabase
+      .from('order_items')
+      .update({ inventory_id })
+      .eq('id', order_item_id);
+
+    if (updateItemError) {
+      return NextResponse.json({ error: updateItemError.message }, { status: 500 });
+    }
+
+    const { data: remainingItems, error: remainingError } = await supabase
+      .from('order_items')
+      .select('id, inventory_id')
+      .eq('order_id', orderItem.order_id);
+
+    if (!remainingError && remainingItems?.every(item => item.inventory_id)) {
+      await supabase
+        .from('orders')
+        .update({ order_status: 'COMPLETED' })
+        .eq('id', orderItem.order_id);
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

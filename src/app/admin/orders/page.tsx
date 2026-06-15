@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 
 interface ESimInventory {
   iccid: string | null;
@@ -11,6 +11,7 @@ interface ESimInventory {
 }
 
 interface Product {
+  id: string;
   name: string;
   country: string;
   data_amount: string | null;
@@ -22,6 +23,8 @@ interface OrderItem {
   price: number;
   note: string | null;
   user_deleted_at: string | null;
+  product_id: string;
+  inventory_id: string | null;
   products: Product | null;
   e_sim_inventory: ESimInventory | null;
 }
@@ -43,12 +46,27 @@ interface Order {
   order_items: OrderItem[];
 }
 
+interface InventoryOption {
+  id: string;
+  iccid: string | null;
+  activation_code: string;
+  status: string;
+  product_id: string;
+  products: {
+    name: string;
+    country: string;
+    data_amount: string | null;
+  } | null;
+}
+
 const getStatusBadgeClass = (status: string) => {
   switch (status) {
     case 'COMPLETED':
       return 'bg-green-500/20 text-green-400 border border-green-500/30';
     case 'PENDING':
       return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30';
+    case 'CREATED':
+      return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
     case 'CANCELLED':
       return 'bg-red-500/20 text-red-400 border border-red-500/30';
     default:
@@ -62,6 +80,8 @@ const getStatusLabel = (status: string) => {
       return '已完成';
     case 'PENDING':
       return '待處理';
+    case 'CREATED':
+      return '已建立';
     case 'CANCELLED':
       return '已取消';
     default:
@@ -71,6 +91,9 @@ const getStatusLabel = (status: string) => {
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [inventoryOptions, setInventoryOptions] = useState<InventoryOption[]>([]);
+  const [assignSelections, setAssignSelections] = useState<Record<string, string>>({});
+  const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -81,6 +104,12 @@ export default function OrdersPage() {
       const json = await res.json();
       if (json.orders) {
         setOrders(json.orders);
+      }
+
+      const invRes = await fetch('/api/admin/esim-inventory');
+      const invJson = await invRes.json();
+      if (invJson.inventory) {
+        setInventoryOptions(invJson.inventory.filter((item: InventoryOption) => item.status === 'AVAILABLE'));
       }
     } catch (err) {
       console.error('Error fetching orders:', err);
@@ -134,6 +163,43 @@ export default function OrdersPage() {
   const truncate = (str: string | null | undefined, maxLen: number) => {
     if (!str) return '-';
     return str.length > maxLen ? str.slice(0, maxLen) + '…' : str;
+  };
+
+  const getAvailableInventoryForItem = (item: OrderItem | null) => {
+    if (!item?.product_id) return [];
+    return inventoryOptions.filter(inventory => inventory.product_id === item.product_id);
+  };
+
+  const handleAssignInventory = async (item: OrderItem) => {
+    const inventoryId = assignSelections[item.id];
+    if (!inventoryId) {
+      alert('請先選擇一筆可用 eSIM');
+      return;
+    }
+
+    setAssigningItemId(item.id);
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: item.id,
+          inventory_id: inventoryId
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '補上 eSIM 失敗');
+      setAssignSelections(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      await fetchOrders();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '補上 eSIM 失敗');
+    } finally {
+      setAssigningItemId(null);
+    }
   };
 
   return (
@@ -217,20 +283,24 @@ export default function OrdersPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">啟用碼</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">金額</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">處理</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
+                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
                 </tr>
               ) : flatRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-white/50">尚無任何訂單</td>
+                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-white/50">尚無任何訂單</td>
                 </tr>
               ) : (
-                flatRows.map(({ order, item, isFirst, itemCount }, idx) => (
-                  <>
+                flatRows.map(({ order, item, isFirst, itemCount }, idx) => {
+                  const availableInventory = getAvailableInventoryForItem(item);
+
+                  return (
+                  <Fragment key={`wrap-${order.id}-${item?.id ?? 'empty'}-${idx}`}>
                     <tr key={`row-${order.id}-${item?.id ?? 'empty'}-${idx}`} className="hover:bg-white/5 transition-colors">
                       {/* Expand button - only on first row of each order */}
                       <td className="px-4 py-4 whitespace-nowrap text-sm">
@@ -276,11 +346,42 @@ export default function OrdersPage() {
                           </span>
                         ) : null}
                       </td>
+                      <td className="px-4 py-4 text-sm min-w-[260px]">
+                        {item && !item.inventory_id ? (
+                          availableInventory.length > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <select
+                                className="bg-black/40 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white min-w-0 max-w-[180px]"
+                                value={assignSelections[item.id] || ''}
+                                onChange={(e) => setAssignSelections(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              >
+                                <option value="" className="text-black">選擇 eSIM</option>
+                                {availableInventory.map(inventory => (
+                                  <option key={inventory.id} value={inventory.id} className="text-black">
+                                    {inventory.iccid || truncate(inventory.activation_code, 18)}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleAssignInventory(item)}
+                                disabled={assigningItemId === item.id}
+                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:text-gray-400 text-white text-xs font-bold"
+                              >
+                                {assigningItemId === item.id ? '補上中...' : '補上'}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-yellow-300/80 text-xs">待補庫存</span>
+                          )
+                        ) : item?.inventory_id ? (
+                          <span className="text-green-400 text-xs">已配發</span>
+                        ) : '-'}
+                      </td>
                     </tr>
                     {/* Expanded detail row */}
                     {isFirst && expandedOrderId === order.id && (
                       <tr key={`detail-${order.id}`}>
-                        <td colSpan={8} className="px-6 py-4 bg-white/[0.02]">
+                        <td colSpan={9} className="px-6 py-4 bg-white/[0.02]">
                           <div className="space-y-3">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
@@ -333,6 +434,9 @@ export default function OrdersPage() {
                                             <p>eSIM 狀態: {oi.e_sim_inventory?.status || '-'}</p>
                                           </div>
                                         )}
+                                        {!oi.e_sim_inventory && (
+                                          <p className="text-yellow-300/80 text-xs mt-1">尚未配發 eSIM，客戶會員頁會顯示處理中</p>
+                                        )}
                                         {oi.note && <p className="text-white/40 text-xs mt-1">備註: {oi.note}</p>}
                                       </div>
                                       <p className="text-white/80 font-medium">NT${oi.price}</p>
@@ -345,8 +449,9 @@ export default function OrdersPage() {
                         </td>
                       </tr>
                     )}
-                  </>
-                ))
+                  </Fragment>
+                );
+                })
               )}
             </tbody>
           </table>
