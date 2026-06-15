@@ -201,6 +201,8 @@ export default function EsimInventoryPage() {
     return countryMatches && daysMatches;
   });
 
+  const selectedProduct = products.find(product => product.id === formData.productId) || null;
+
   const formatProductOption = (product: Product) => (
     `[${product.country}] ${product.validity_days}天 / ${product.data_amount || '其他'} / NT$${product.price} / ${product.name} / ${product.id.slice(0, 8)}`
   );
@@ -625,7 +627,7 @@ export default function EsimInventoryPage() {
       {/* Add eSIM Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-md w-full p-6 text-white">
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-xl shadow-2xl max-w-md w-full p-6 text-white max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-white">新增 eSIM 庫存</h2>
               <button onClick={() => setIsAddModalOpen(false)} className="text-white/50 hover:text-white transition-colors">
@@ -660,20 +662,41 @@ export default function EsimInventoryPage() {
                       ))}
                     </select>
                   </div>
-                  <select 
-                    required
-                    className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
-                    value={formData.productId}
-                    onChange={(e) => setFormData({...formData, productId: e.target.value})}
-                  >
-                    <option value="" disabled className="text-black">請選擇商品</option>
-                    {filteredProducts.map(p => (
-                      <option key={p.id} value={p.id} className="text-black">{formatProductOption(p)}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-white/35 mt-1">
-                    顯示格式：國家 / 天數 / 流量 / 價格 / 商品名稱 / 商品ID
-                  </p>
+                  {selectedProduct && (
+                    <div className="mb-2 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100">
+                      <div className="font-bold text-white mb-0.5">目前選擇</div>
+                      <div>{formatProductOption(selectedProduct)}</div>
+                    </div>
+                  )}
+                  <div className="rounded-lg border border-white/10 bg-black/25 max-h-52 overflow-y-auto p-2 space-y-2">
+                    {filteredProducts.length === 0 ? (
+                      <div className="text-center py-6 text-sm text-white/40">沒有符合篩選的商品</div>
+                    ) : filteredProducts.map(product => {
+                      const selected = formData.productId === product.id;
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, productId: product.id })}
+                          className={`w-full text-left rounded-lg border px-3 py-3 transition-colors ${selected ? 'border-cyan-400/70 bg-cyan-400/15' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-sm font-bold text-white truncate">{product.name}</span>
+                            <span className="text-xs text-white/50 shrink-0">{product.validity_days}天</span>
+                          </div>
+                          <div className="text-xs text-white/50 leading-5">
+                            <span className="text-cyan-200/80">{product.country}</span>
+                            <span className="mx-1">/</span>
+                            <span>{product.data_amount || '其他'}</span>
+                            <span className="mx-1">/</span>
+                            <span>NT${product.price}</span>
+                            <span className="mx-1">/</span>
+                            <span>ID {product.id.slice(0, 8)}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-white/70 mb-1">ICCID <span className="text-white/30">(選填)</span></label>
