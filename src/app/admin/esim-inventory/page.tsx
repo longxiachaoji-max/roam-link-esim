@@ -20,6 +20,10 @@ interface EsimItem {
 interface Product {
   id: string;
   name: string;
+  country: string;
+  data_amount: string | null;
+  validity_days: number;
+  price: number;
 }
 
 export default function EsimInventoryPage() {
@@ -112,6 +116,10 @@ export default function EsimInventoryPage() {
     }
   };
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [productFilters, setProductFilters] = useState({
+    country: '全部',
+    days: '全部'
+  });
   const [formData, setFormData] = useState({
     productId: '',
     iccid: '',
@@ -155,9 +163,10 @@ export default function EsimInventoryPage() {
       // 2. Fetch products for dropdown (anon key is fine for read-only products)
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, name, country, data_amount')
+        .select('id, name, country, data_amount, validity_days, price')
         .order('country', { ascending: true })
         .order('data_amount', { ascending: true })
+        .order('validity_days', { ascending: true })
         .order('name', { ascending: true });
       
       if (productsError) {
@@ -178,6 +187,36 @@ export default function EsimInventoryPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const productCountryOptions = Array.from(new Set(products.map(product => product.country))).filter(Boolean);
+  const productDayOptions = Array.from(new Set(
+    products
+      .filter(product => productFilters.country === '全部' || product.country === productFilters.country)
+      .map(product => product.validity_days)
+  )).sort((a, b) => a - b);
+
+  const filteredProducts = products.filter(product => {
+    const countryMatches = productFilters.country === '全部' || product.country === productFilters.country;
+    const daysMatches = productFilters.days === '全部' || product.validity_days === Number(productFilters.days);
+    return countryMatches && daysMatches;
+  });
+
+  const formatProductOption = (product: Product) => (
+    `[${product.country}] ${product.validity_days}天 / ${product.data_amount || '其他'} / NT$${product.price} / ${product.name} / ${product.id.slice(0, 8)}`
+  );
+
+  const updateProductFilter = (nextFilters: typeof productFilters) => {
+    setProductFilters(nextFilters);
+    const nextProducts = products.filter(product => {
+      const countryMatches = nextFilters.country === '全部' || product.country === nextFilters.country;
+      const daysMatches = nextFilters.days === '全部' || product.validity_days === Number(nextFilters.days);
+      return countryMatches && daysMatches;
+    });
+
+    if (nextProducts.length > 0 && !nextProducts.some(product => product.id === formData.productId)) {
+      setFormData(prev => ({ ...prev, productId: nextProducts[0].id }));
+    }
+  };
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -362,7 +401,10 @@ export default function EsimInventoryPage() {
             📋 批量匯入
           </button>
           <button 
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setProductFilters({ country: '全部', days: '全部' });
+              setIsAddModalOpen(true);
+            }}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors shadow-lg flex items-center"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -596,6 +638,28 @@ export default function EsimInventoryPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-white/70 mb-1">綁定商品</label>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <select
+                      className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border text-white bg-black/40"
+                      value={productFilters.country}
+                      onChange={(e) => updateProductFilter({ ...productFilters, country: e.target.value, days: '全部' })}
+                    >
+                      <option value="全部" className="text-black">全部國家</option>
+                      {productCountryOptions.map(country => (
+                        <option key={country} value={country} className="text-black">{country}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border text-white bg-black/40"
+                      value={productFilters.days}
+                      onChange={(e) => updateProductFilter({ ...productFilters, days: e.target.value })}
+                    >
+                      <option value="全部" className="text-black">全部天數</option>
+                      {productDayOptions.map(days => (
+                        <option key={days} value={days} className="text-black">{days} 天</option>
+                      ))}
+                    </select>
+                  </div>
                   <select 
                     required
                     className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40"
@@ -603,10 +667,13 @@ export default function EsimInventoryPage() {
                     onChange={(e) => setFormData({...formData, productId: e.target.value})}
                   >
                     <option value="" disabled className="text-black">請選擇商品</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id} className="text-black">[{(p as any).country}] {(p as any).data_amount} - {p.name}</option>
+                    {filteredProducts.map(p => (
+                      <option key={p.id} value={p.id} className="text-black">{formatProductOption(p)}</option>
                     ))}
                   </select>
+                  <p className="text-xs text-white/35 mt-1">
+                    顯示格式：國家 / 天數 / 流量 / 價格 / 商品名稱 / 商品ID
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-white/70 mb-1">ICCID <span className="text-white/30">(選填)</span></label>
@@ -707,7 +774,7 @@ export default function EsimInventoryPage() {
                   >
                     <option value="" disabled className="text-black">請選擇商品</option>
                     {products.map(p => (
-                      <option key={p.id} value={p.id} className="text-black">[{(p as any).country}] {(p as any).data_amount} - {p.name}</option>
+                      <option key={p.id} value={p.id} className="text-black">{formatProductOption(p)}</option>
                     ))}
                   </select>
                 </div>

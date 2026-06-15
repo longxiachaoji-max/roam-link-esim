@@ -468,6 +468,10 @@ export default function ProductsPage() {
   const activeProducts = products.filter(p => p.is_active).length;
   const inactiveProducts = products.filter(p => !p.is_active).length;
   const countryOptions = Array.from(new Set([...COMMON_COUNTRIES, ...products.map(p => p.country)])).filter(Boolean);
+  const duplicateNameCounts = products.reduce<Record<string, number>>((counts, product) => {
+    counts[product.name] = (counts[product.name] || 0) + 1;
+    return counts;
+  }, {});
 
   const handleToggleActive = async (product: Product) => {
     try {
@@ -827,6 +831,11 @@ export default function ProductsPage() {
                           <div className="flex items-center gap-6 flex-1 min-w-0">
                             <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
                             <span className="text-sm text-white/90 font-medium truncate">{product.name}</span>
+                            {duplicateNameCounts[product.name] > 1 && (
+                              <span className="text-[10px] text-white/40 bg-white/10 rounded px-1.5 py-0.5 shrink-0">
+                                ID {product.id.slice(0, 8)}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-4 shrink-0">
                             <span className="text-sm font-bold text-white/90">NT${product.price}</span>
