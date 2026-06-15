@@ -9,6 +9,40 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
 
+async function sendTelegramNotification(message: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId) return;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Failed to send Telegram notification:', text);
+    }
+  } catch (error) {
+    console.error('Failed to send Telegram notification:', error);
+  }
+}
+
+function escapeTelegramHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -153,6 +187,7 @@ export async function POST(request: Request) {
 
     // 7. Send email via Resend
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
     try {
       await resend.emails.send({
         from: `Roam Link eSIM <${fromEmail}>`,
@@ -191,6 +226,19 @@ export async function POST(request: Request) {
     } catch (emailError) {
       console.error('Failed to send email:', emailError);
       // We don't throw here, order is still successful, but email failed.
+    }
+
+    if (!assignedInventory) {
+      await sendTelegramNotification([
+        '<b>有一筆訂單需要補 eSIM</b>',
+        `訂單：<code>${escapeTelegramHtml(order.id)}</code>`,
+        `客戶：${escapeTelegramHtml(email)}`,
+        `商品：${escapeTelegramHtml(product.name)}`,
+        `國家：${escapeTelegramHtml(product.country || '-')}`,
+        `天數：${product.validity_days || '-'} 天`,
+        `金額：NT$${Number(product.price)}`,
+        `後台：${adminUrl}`
+      ].join('\n'));
     }
 
     return NextResponse.json({
