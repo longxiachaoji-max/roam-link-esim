@@ -46,6 +46,13 @@ interface Order {
   order_items: OrderItem[];
 }
 
+interface TokenTransaction {
+  amount: number;
+  transaction_type?: string | null;
+  reason?: string | null;
+  created_at: string;
+}
+
 interface InventoryOption {
   id: string;
   iccid: string | null;
@@ -89,8 +96,32 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+const RECEIVED_AMOUNT_PATTERN = /\[收款金額:(\d+(?:\.\d+)?)\]/;
+
+function getReceivedRevenue(transaction: TokenTransaction) {
+  const amount = Number(transaction.amount || 0);
+  const reason = transaction.reason || '';
+  const receivedMatch = reason.match(RECEIVED_AMOUNT_PATTERN);
+
+  if (receivedMatch) {
+    return Number(receivedMatch[1] || 0);
+  }
+
+  if (transaction.transaction_type === 'purchase' || amount <= 0) {
+    return 0;
+  }
+
+  // 舊資料沒有收款標記時，保留手動加值的正數金額；兌換碼等贈送不列營收。
+  if (reason.includes('兌換代碼') || reason.includes('遊樂場') || reason.includes('獎勵')) {
+    return 0;
+  }
+
+  return amount;
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
   const [inventoryOptions, setInventoryOptions] = useState<InventoryOption[]>([]);
   const [assignSelections, setAssignSelections] = useState<Record<string, string>>({});
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
@@ -105,6 +136,12 @@ export default function OrdersPage() {
       const json = await res.json();
       if (json.orders) {
         setOrders(json.orders);
+      }
+
+      const txRes = await fetch('/api/admin/topup-history');
+      const txJson = await txRes.json();
+      if (Array.isArray(txJson)) {
+        setTransactions(txJson);
       }
 
       const invRes = await fetch('/api/admin/esim-inventory');
@@ -136,19 +173,24 @@ export default function OrdersPage() {
   const currentYear = now.getFullYear();
 
   const calcProfit = (filterFn: (d: Date) => boolean) => {
-    let revenue = 0;
+    let topupRevenue = 0;
     let cost = 0;
+
+    for (const transaction of transactions) {
+      const transactionDate = new Date(transaction.created_at);
+      if (!filterFn(transactionDate)) continue;
+      topupRevenue += getReceivedRevenue(transaction);
+    }
+
     for (const order of orders) {
       const orderDate = new Date(order.created_at);
       if (!filterFn(orderDate)) continue;
-      // 營收 = total_amount (現金) + tokens_used (代幣折抵)
-      revenue += Number(order.total_amount || 0) + Number(order.tokens_used || 0);
-      // 成本 = 加總各 order_item 的 eSIM 成本
+      // 儲值金結帳不重複列營收，訂單只扣已配發 eSIM 的成本。
       for (const item of order.order_items || []) {
         cost += Number(item.e_sim_inventory?.cost || 0);
       }
     }
-    return { revenue, cost, profit: revenue - cost };
+    return { revenue: topupRevenue, cost, profit: topupRevenue - cost };
   };
 
   const monthlyProfit = calcProfit(d => d.getMonth() === currentMonth && d.getFullYear() === currentYear);
@@ -292,7 +334,7 @@ export default function OrdersPage() {
         <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-900/5 rounded-xl border border-emerald-500/20 p-6 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-sm font-medium text-emerald-400/70">📅 {currentMonth + 1}月份毛利</p>
-            <p className="text-xs text-white/30">營收 NT${monthlyProfit.revenue.toLocaleString()} − 成本 NT${monthlyProfit.cost.toLocaleString()}</p>
+            <p className="text-xs text-white/30">儲值收款 NT${monthlyProfit.revenue.toLocaleString()} − eSIM 成本 NT${monthlyProfit.cost.toLocaleString()}</p>
           </div>
           <p className={`text-3xl font-black ${monthlyProfit.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             NT$ {monthlyProfit.profit.toLocaleString()}
@@ -301,7 +343,7 @@ export default function OrdersPage() {
         <div className="bg-gradient-to-br from-blue-500/10 to-blue-900/5 rounded-xl border border-blue-500/20 p-6 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-sm font-medium text-blue-400/70">📊 {currentYear} 年度毛利</p>
-            <p className="text-xs text-white/30">營收 NT${yearlyProfit.revenue.toLocaleString()} − 成本 NT${yearlyProfit.cost.toLocaleString()}</p>
+            <p className="text-xs text-white/30">儲值收款 NT${yearlyProfit.revenue.toLocaleString()} − eSIM 成本 NT${yearlyProfit.cost.toLocaleString()}</p>
           </div>
           <p className={`text-3xl font-black ${yearlyProfit.profit >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
             NT$ {yearlyProfit.profit.toLocaleString()}

@@ -27,6 +27,7 @@ export default function AdminCustomersPage() {
   };
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [addAmount, setAddAmount] = useState("");
+  const [paymentReceivedAmount, setPaymentReceivedAmount] = useState("");
   const [reason, setReason] = useState("");
   const [toastMsg, setToastMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,12 +62,21 @@ export default function AdminCustomersPage() {
     setIsSubmitting(true);
 
     try {
+      const receivedAmount = paymentReceivedAmount === "" ? (amount > 0 ? amount : 0) : Number(paymentReceivedAmount);
+
+      if (Number.isNaN(receivedAmount) || receivedAmount < 0) {
+        showToast("⚠️ 請輸入有效的實際收款金額");
+        setIsSubmitting(false);
+        return;
+      }
+
       const res = await fetch('/api/admin/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerId: selectedCustomer.id,
           amount: amount,
+          paymentReceivedAmount: receivedAmount,
           reason: reason
         }),
       });
@@ -90,6 +100,7 @@ export default function AdminCustomersPage() {
       showToast(`✅ 成功為 ${selectedCustomer.email} ${amount > 0 ? '加值' : '扣除'} NT${Math.abs(amount)}`);
       setSelectedCustomer(null);
       setAddAmount("");
+      setPaymentReceivedAmount("");
       setReason("");
       
       // 再抓取一次最新資料確保同步
@@ -227,7 +238,7 @@ export default function AdminCustomersPage() {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
           <div className="bg-[#1A1A2E] w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl relative border border-white/10 max-h-[90vh] overflow-y-auto">
             <button 
-              onClick={() => { setSelectedCustomer(null); setAddAmount(""); setReason(""); }} 
+              onClick={() => { setSelectedCustomer(null); setAddAmount(""); setPaymentReceivedAmount(""); setReason(""); }}
               className="absolute top-4 right-4 text-muted hover:text-white"
             >
               ✕
@@ -252,13 +263,32 @@ export default function AdminCustomersPage() {
                     required
                     placeholder="例如 1000 (可負數)" 
                     value={addAmount}
-                    onChange={(e) => setAddAmount(e.target.value)}
+                    onChange={(e) => {
+                      setAddAmount(e.target.value);
+                      const nextAmount = Number(e.target.value);
+                      if (paymentReceivedAmount === "" && Number.isFinite(nextAmount) && nextAmount > 0) {
+                        setPaymentReceivedAmount(e.target.value);
+                      }
+                    }}
                     className="w-full bg-[#0B0B1A] md:bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow text-xl font-bold" 
                   />
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs md:text-sm text-muted pointer-events-none">
                     正數加值 / 負數扣款
                   </div>
                 </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm text-muted mb-2">實際收款金額（列入營收）</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="例如 1000；活動贈送請填 0"
+                  value={paymentReceivedAmount}
+                  onChange={(e) => setPaymentReceivedAmount(e.target.value)}
+                  className="w-full bg-[#0B0B1A] md:bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-400 text-xl font-bold"
+                />
+                <p className="text-xs text-white/40 mt-2">只有這個欄位會列入營收；客戶之後用儲值金結帳不會再重複列營收。</p>
               </div>
 
               <div className="mb-6">

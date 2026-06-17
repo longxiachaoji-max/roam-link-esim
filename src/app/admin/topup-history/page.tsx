@@ -9,10 +9,27 @@ interface Transaction {
   customer_id: string;
   amount: number;
   transaction_type?: 'topup' | 'purchase';
+  reason?: string | null;
   created_at: string;
   customers: {
     email: string;
   } | null;
+}
+
+const RECEIVED_AMOUNT_PATTERN = /\[收款金額:(\d+(?:\.\d+)?)\]\s*/;
+
+function getReceivedAmount(tx: Transaction) {
+  const match = (tx.reason || '').match(RECEIVED_AMOUNT_PATTERN);
+  if (match) return Number(match[1] || 0);
+
+  const amount = Number(tx.amount || 0);
+  if (tx.transaction_type === 'purchase' || amount <= 0) return 0;
+  if ((tx.reason || '').includes('兌換代碼')) return 0;
+  return amount;
+}
+
+function getCleanReason(tx: Transaction) {
+  return (tx.reason || '').replace(RECEIVED_AMOUNT_PATTERN, '').trim() || '-';
 }
 
 function getTransactionDisplay(tx: Transaction) {
@@ -72,6 +89,8 @@ export default function TopupHistoryPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">User Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">收到款項</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Reason</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
               </tr>
             </thead>
@@ -90,6 +109,12 @@ export default function TopupHistoryPage() {
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${display.amountClass}`}>
                       {display.sign}{display.amount}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-400">
+                      NT$ {getReceivedAmount(tx).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                      {getCleanReason(tx)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {new Date(tx.created_at).toLocaleString()}

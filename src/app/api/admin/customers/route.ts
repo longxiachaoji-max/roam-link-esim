@@ -28,10 +28,21 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { customerId, amount, reason } = await request.json();
+    const { customerId, amount, reason, paymentReceivedAmount } = await request.json();
 
     if (!customerId || amount === undefined || !reason) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    const numericAmount = Number(amount);
+    const receivedAmount = Number(paymentReceivedAmount ?? (numericAmount > 0 ? numericAmount : 0));
+
+    if (!Number.isFinite(numericAmount) || numericAmount === 0) {
+      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+    }
+
+    if (!Number.isFinite(receivedAmount) || receivedAmount < 0) {
+      return NextResponse.json({ error: 'Invalid received amount' }, { status: 400 });
     }
 
     // 1. Fetch current balance
@@ -45,7 +56,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
 
-    const newBalance = Math.max(0, customer.token_balance + amount);
+    const newBalance = Math.max(0, customer.token_balance + numericAmount);
 
     // 2. Update balance
     const { error: updateError } = await supabase
@@ -62,10 +73,10 @@ export async function POST(request: Request) {
       .from('token_transactions')
       .insert([{
         customer_id: customerId,
-        amount: amount,
-        transaction_type: amount < 0 ? 'purchase' : 'topup',
+        amount: numericAmount,
+        transaction_type: numericAmount < 0 ? 'purchase' : 'topup',
         balance_after: newBalance,
-        reason: reason
+        reason: `[收款金額:${receivedAmount}] ${reason}`
       }]);
 
     if (txError) {
