@@ -15,13 +15,29 @@ interface ContactInfo {
   contact_email: string;
   contact_phone: string;
   contact_note: string;
+  contact_items: ContactItem[];
+}
+
+interface ContactItem {
+  id: string;
+  label: string;
+  value: string;
+  href: string;
 }
 
 const DEFAULT_CONTACT_INFO: ContactInfo = {
   contact_title: '聯絡資訊',
   contact_email: 'roamlinktw@gmail.com',
   contact_phone: '',
-  contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。'
+  contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。',
+  contact_items: [
+    {
+      id: 'email',
+      label: '客服信箱',
+      value: 'roamlinktw@gmail.com',
+      href: 'mailto:roamlinktw@gmail.com'
+    }
+  ]
 };
 
 function stripSortConfig(usageGuide: string | null) {
@@ -34,15 +50,53 @@ function parseContactInfo(usageGuide: string | null): ContactInfo {
 
   try {
     const config = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
+    const contactItems = normalizeContactItems(config);
     return {
       contact_title: config.contact_title || DEFAULT_CONTACT_INFO.contact_title,
-      contact_email: config.contact_email || DEFAULT_CONTACT_INFO.contact_email,
-      contact_phone: config.contact_phone || DEFAULT_CONTACT_INFO.contact_phone,
-      contact_note: config.contact_note || DEFAULT_CONTACT_INFO.contact_note
+      contact_email: contactItems.find(item => item.id === 'email')?.value || config.contact_email || DEFAULT_CONTACT_INFO.contact_email,
+      contact_phone: contactItems.find(item => item.id === 'phone')?.value || config.contact_phone || DEFAULT_CONTACT_INFO.contact_phone,
+      contact_note: config.contact_note || DEFAULT_CONTACT_INFO.contact_note,
+      contact_items: contactItems
     };
   } catch {
     return DEFAULT_CONTACT_INFO;
   }
+}
+
+function normalizeContactItems(config: Partial<ContactInfo>): ContactItem[] {
+  if (Array.isArray(config.contact_items)) {
+    const items = config.contact_items
+      .map((item, index) => ({
+        id: String(item.id || `contact-${index}`),
+        label: String(item.label || '').trim(),
+        value: String(item.value || '').trim(),
+        href: String(item.href || '').trim()
+      }))
+      .filter(item => item.label && item.value);
+
+    if (items.length > 0) return items;
+  }
+
+  const legacyItems: ContactItem[] = [];
+  if (config.contact_email || DEFAULT_CONTACT_INFO.contact_email) {
+    const email = String(config.contact_email || DEFAULT_CONTACT_INFO.contact_email).trim();
+    legacyItems.push({
+      id: 'email',
+      label: '客服信箱',
+      value: email,
+      href: `mailto:${email}`
+    });
+  }
+  if (config.contact_phone) {
+    const phone = String(config.contact_phone).trim();
+    legacyItems.push({
+      id: 'phone',
+      label: '客服電話',
+      value: phone,
+      href: `tel:${phone.replace(/[^+\d]/g, '')}`
+    });
+  }
+  return legacyItems;
 }
 
 export async function GET() {

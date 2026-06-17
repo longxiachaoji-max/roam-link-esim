@@ -14,13 +14,29 @@ interface ContactInfo {
   contact_email: string;
   contact_phone: string;
   contact_note: string;
+  contact_items: ContactItem[];
+}
+
+interface ContactItem {
+  id: string;
+  label: string;
+  value: string;
+  href: string;
 }
 
 const DEFAULTS: ContactInfo = {
   contact_title: '聯絡資訊',
   contact_email: 'roamlinktw@gmail.com',
   contact_phone: '',
-  contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。'
+  contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。',
+  contact_items: [
+    {
+      id: 'email',
+      label: '客服信箱',
+      value: 'roamlinktw@gmail.com',
+      href: 'mailto:roamlinktw@gmail.com'
+    }
+  ]
 };
 
 function parseContactInfo(usageGuide: string | null): Partial<ContactInfo> {
@@ -44,13 +60,51 @@ function withContactInfo(usageGuide: string | null, settings: ContactInfo) {
   return `${cleanGuide}${cleanGuide ? '\n\n' : ''}<!--CONTACT_INFO:${encoded}-->`;
 }
 
+function normalizeContactItems(config: Partial<ContactInfo>): ContactItem[] {
+  if (Array.isArray(config.contact_items)) {
+    const items = config.contact_items
+      .map((item, index) => ({
+        id: String(item.id || `contact-${Date.now()}-${index}`),
+        label: String(item.label || '').trim(),
+        value: String(item.value || '').trim(),
+        href: String(item.href || '').trim()
+      }))
+      .filter(item => item.label && item.value);
+
+    if (items.length > 0) return items;
+  }
+
+  const legacyItems: ContactItem[] = [];
+  if (config.contact_email || DEFAULTS.contact_email) {
+    const email = String(config.contact_email || DEFAULTS.contact_email).trim();
+    legacyItems.push({
+      id: 'email',
+      label: '客服信箱',
+      value: email,
+      href: `mailto:${email}`
+    });
+  }
+  if (config.contact_phone) {
+    const phone = String(config.contact_phone).trim();
+    legacyItems.push({
+      id: 'phone',
+      label: '客服電話',
+      value: phone,
+      href: `tel:${phone.replace(/[^+\d]/g, '')}`
+    });
+  }
+  return legacyItems;
+}
+
 function normalizeSettings(data: any): ContactInfo {
   const config = parseContactInfo(data?.usage_guide);
+  const contactItems = normalizeContactItems(config);
   return {
     contact_title: config.contact_title || DEFAULTS.contact_title,
-    contact_email: config.contact_email || DEFAULTS.contact_email,
-    contact_phone: config.contact_phone || DEFAULTS.contact_phone,
-    contact_note: config.contact_note || DEFAULTS.contact_note
+    contact_email: contactItems.find(item => item.id === 'email')?.value || config.contact_email || DEFAULTS.contact_email,
+    contact_phone: contactItems.find(item => item.id === 'phone')?.value || config.contact_phone || DEFAULTS.contact_phone,
+    contact_note: config.contact_note || DEFAULTS.contact_note,
+    contact_items: contactItems
   };
 }
 
@@ -75,11 +129,17 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
+    const contactItems = normalizeContactItems({
+      contact_items: Array.isArray(body.contact_items) ? body.contact_items : [],
+      contact_email: body.contact_email,
+      contact_phone: body.contact_phone
+    });
     const nextSettings: ContactInfo = {
       contact_title: String(body.contact_title || DEFAULTS.contact_title).trim(),
-      contact_email: String(body.contact_email || DEFAULTS.contact_email).trim(),
-      contact_phone: String(body.contact_phone || '').trim(),
-      contact_note: String(body.contact_note || '').trim()
+      contact_email: contactItems.find(item => item.id === 'email')?.value || contactItems[0]?.value || DEFAULTS.contact_email,
+      contact_phone: contactItems.find(item => item.id === 'phone')?.value || '',
+      contact_note: String(body.contact_note || '').trim(),
+      contact_items: contactItems
     };
 
     const { data: current, error: readError } = await supabase

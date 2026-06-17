@@ -44,7 +44,15 @@ export default function Home() {
     contact_title: '聯絡資訊',
     contact_email: 'roamlinktw@gmail.com',
     contact_phone: '',
-    contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。'
+    contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。',
+    contact_items: [
+      {
+        id: 'email',
+        label: '客服信箱',
+        value: 'roamlinktw@gmail.com',
+        href: 'mailto:roamlinktw@gmail.com'
+      }
+    ]
   });
 
   // 分頁切換
@@ -535,16 +543,17 @@ export default function Home() {
           <div className="text-left md:text-right">
             <h2 className="text-sm font-bold text-white mb-3">{siteSettings.contact_title}</h2>
             <div className="flex flex-col gap-2 text-sm">
-              {siteSettings.contact_email && (
-                <a href={`mailto:${siteSettings.contact_email}`} className="text-cyan hover:text-white transition-colors">
-                  客服信箱：{siteSettings.contact_email}
-                </a>
-              )}
-              {siteSettings.contact_phone && (
-                <a href={`tel:${siteSettings.contact_phone.replace(/[^+\d]/g, '')}`} className="text-cyan hover:text-white transition-colors">
-                  客服電話：{siteSettings.contact_phone}
-                </a>
-              )}
+              {siteSettings.contact_items.map((item) => (
+                item.href ? (
+                  <a key={item.id} href={item.href} className="text-cyan hover:text-white transition-colors">
+                    {item.label}：{item.value}
+                  </a>
+                ) : (
+                  <p key={item.id} className="text-cyan">
+                    {item.label}：{item.value}
+                  </p>
+                )
+              ))}
             </div>
           </div>
         </div>
