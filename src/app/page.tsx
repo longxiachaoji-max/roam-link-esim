@@ -40,7 +40,11 @@ export default function Home() {
     hero_title: '隨時隨地，全球無縫連線',
     hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
     section_title: '熱門目的地',
-    usage_guide: ''
+    usage_guide: '',
+    contact_title: '聯絡資訊',
+    contact_email: 'roamlinktw@gmail.com',
+    contact_phone: '',
+    contact_note: '如需商品或訂單協助，請透過以下方式與我們聯繫。'
   });
 
   // 分頁切換
@@ -518,6 +522,33 @@ export default function Home() {
         </>
         )}
       </section>
+
+      {/* 頁尾聯絡資訊 */}
+      <footer className="border-t border-white/10 bg-[#0D0D1A]/80 px-6 py-10">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-start md:justify-between gap-8">
+          <div>
+            <div className="font-display text-2xl font-extrabold bg-gradient-to-br from-coral to-yellow text-transparent bg-clip-text mb-2">
+              Roam Link.
+            </div>
+            <p className="text-sm text-muted max-w-md">{siteSettings.contact_note}</p>
+          </div>
+          <div className="text-left md:text-right">
+            <h2 className="text-sm font-bold text-white mb-3">{siteSettings.contact_title}</h2>
+            <div className="flex flex-col gap-2 text-sm">
+              {siteSettings.contact_email && (
+                <a href={`mailto:${siteSettings.contact_email}`} className="text-cyan hover:text-white transition-colors">
+                  客服信箱：{siteSettings.contact_email}
+                </a>
+              )}
+              {siteSettings.contact_phone && (
+                <a href={`tel:${siteSettings.contact_phone.replace(/[^+\d]/g, '')}`} className="text-cyan hover:text-white transition-colors">
+                  客服電話：{siteSettings.contact_phone}
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </footer>
 
       {/* 登入 / 註冊對話框 */}
       {isLoginOpen && (
