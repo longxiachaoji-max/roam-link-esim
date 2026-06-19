@@ -300,6 +300,17 @@ export default function Home() {
     }
     if (isCardCheckoutLoading || cart.length === 0) return;
 
+    const standaloneNavigator = navigator as Navigator & { standalone?: boolean };
+    const isStandaloneWebApp = window.matchMedia('(display-mode: standalone)').matches
+      || standaloneNavigator.standalone === true;
+    const paymentWindowName = 'roamLinkEcpayPayment';
+    const paymentWindow = isStandaloneWebApp ? window.open('', paymentWindowName) : null;
+
+    if (isStandaloneWebApp && !paymentWindow) {
+      showToast('請允許彈出式視窗，才能前往綠界付款');
+      return;
+    }
+
     setIsCardCheckoutLoading(true);
     showToast("正在連線至綠界安全付款頁...");
     try {
@@ -323,6 +334,7 @@ export default function Home() {
       form.method = 'POST';
       form.action = result.action;
       form.style.display = 'none';
+      if (paymentWindow) form.target = paymentWindowName;
       Object.entries(result.fields as Record<string, string>).forEach(([name, value]) => {
         const input = document.createElement('input');
         input.type = 'hidden';
@@ -333,6 +345,7 @@ export default function Home() {
       document.body.appendChild(form);
       form.submit();
     } catch (error) {
+      paymentWindow?.close();
       showToast(`付款建立失敗：${error instanceof Error ? error.message : '請稍後再試'}`);
       setIsCardCheckoutLoading(false);
     }
