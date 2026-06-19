@@ -72,6 +72,10 @@ export default function MemberCenter() {
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => showToast('付款成功，訂單已更新'), 0);
+    } else if (payment === 'barcode') {
+      window.localStorage.removeItem('roam-link-cart-v1');
+      window.history.replaceState({}, '', '/member');
+      window.setTimeout(() => showToast('超商條碼已建立，繳費完成後訂單會自動更新'), 0);
     } else if (payment === 'pending') {
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => showToast('付款結果確認中，請稍後重新整理'), 0);

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const paymentMethod = body.paymentMethod || 'Credit';
-    if (paymentMethod !== 'Credit' && paymentMethod !== 'ApplePay') {
+    if (paymentMethod !== 'Credit' && paymentMethod !== 'ApplePay' && paymentMethod !== 'BARCODE') {
       return NextResponse.json({ error: '不支援的付款方式' }, { status: 400 });
     }
     const productIds: string[] = Array.isArray(body.productIds)
@@ -68,6 +68,9 @@ export async function POST(request: Request) {
     const totalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
     if (!Number.isInteger(totalAmount) || totalAmount <= 0) {
       return NextResponse.json({ error: '訂單金額不正確' }, { status: 400 });
+    }
+    if (paymentMethod === 'BARCODE' && (totalAmount < 16 || totalAmount > 20000)) {
+      return NextResponse.json({ error: '超商條碼付款金額需介於 NT$16 至 NT$20,000' }, { status: 400 });
     }
 
     let { data: customer } = await supabase.from('customers').select('*').eq('email', authUser.email).single();
@@ -120,13 +123,19 @@ export async function POST(request: Request) {
       TradeDesc: 'Roam Link eSIM',
       ItemName: itemName || 'Roam Link eSIM',
       ReturnURL: `${origin}/api/ecpay/notify`,
-      OrderResultURL: `${origin}/api/ecpay/result`,
-      ClientBackURL: `${origin}/?payment=cancelled`,
+      ClientBackURL: paymentMethod === 'BARCODE'
+        ? `${origin}/member?payment=barcode`
+        : `${origin}/?payment=cancelled`,
       ChoosePayment: paymentMethod,
       EncryptType: '1',
       Language: 'CHT',
       CustomField1: order.id
     };
+    if (paymentMethod === 'BARCODE') {
+      fields.StoreExpireDate = '3';
+    } else {
+      fields.OrderResultURL = `${origin}/api/ecpay/result`;
+    }
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 
     return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id });

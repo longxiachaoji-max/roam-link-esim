@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShoppingCart, Search, Globe, Zap, CreditCard, ChevronDown, X, User } from "lucide-react";
+import { ShoppingCart, Search, Globe, Zap, CreditCard, Barcode, ChevronDown, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-type EcpayPaymentMethod = 'Credit' | 'ApplePay';
+type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
 
 export default function Home() {
@@ -137,15 +137,25 @@ export default function Home() {
   }, [cart, isCartHydrated]);
 
   useEffect(() => {
-    const resetCheckoutLoading = () => setCheckoutPaymentMethod(null);
+    const resetCheckoutState = () => {
+      setCheckoutPaymentMethod(null);
+      try {
+        const savedCart = window.localStorage.getItem(CART_STORAGE_KEY);
+        const parsedCart = savedCart ? JSON.parse(savedCart) : [];
+        setCart(Array.isArray(parsedCart) ? parsedCart : []);
+      } catch {
+        window.localStorage.removeItem(CART_STORAGE_KEY);
+        setCart([]);
+      }
+    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') resetCheckoutLoading();
+      if (document.visibilityState === 'visible') resetCheckoutState();
     };
 
-    window.addEventListener('pageshow', resetCheckoutLoading);
+    window.addEventListener('pageshow', resetCheckoutState);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('pageshow', resetCheckoutLoading);
+      window.removeEventListener('pageshow', resetCheckoutState);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
@@ -362,7 +372,7 @@ export default function Home() {
           <main style="min-height:100vh;display:grid;place-items:center;background:#0d0d1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
             <div style="text-align:center">
               <div style="width:34px;height:34px;margin:0 auto 18px;border:3px solid rgba(255,255,255,.2);border-top-color:#55c875;border-radius:50%;animation:spin .8s linear infinite"></div>
-              <div style="font-size:16px;font-weight:700">${paymentMethod === 'ApplePay' ? '正在前往 Apple Pay' : '正在連線綠界安全付款'}</div>
+              <div style="font-size:16px;font-weight:700">${paymentMethod === 'ApplePay' ? '正在前往 Apple Pay' : paymentMethod === 'BARCODE' ? '正在產生超商繳費條碼' : '正在連線綠界安全付款'}</div>
             </div>
             <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
           </main>`;
@@ -372,7 +382,11 @@ export default function Home() {
     }
 
     setCheckoutPaymentMethod(paymentMethod);
-    showToast(paymentMethod === 'ApplePay' ? '正在前往 Apple Pay...' : '正在連線至綠界安全付款頁...');
+    showToast(paymentMethod === 'ApplePay'
+      ? '正在前往 Apple Pay...'
+      : paymentMethod === 'BARCODE'
+        ? '正在產生超商繳費條碼...'
+        : '正在連線至綠界安全付款頁...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
@@ -904,6 +918,15 @@ export default function Home() {
                 </span>
               </button>
             )}
+
+            <button
+              onClick={() => startEcpayCheckout('BARCODE')}
+              disabled={checkoutPaymentMethod !== null}
+              className="w-full bg-[#168b55] border border-emerald-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center gap-2 mb-3"
+            >
+              <Barcode size={19} />
+              {checkoutPaymentMethod === 'BARCODE' ? '正在產生條碼...' : `超商條碼付款 (NT$${cartTotal})`}
+            </button>
 
             <button
               onClick={() => startEcpayCheckout('Credit')}
