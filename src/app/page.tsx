@@ -10,6 +10,7 @@ export default function Home() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
+  const [isCardCheckoutLoading, setIsCardCheckoutLoading] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -133,6 +134,17 @@ export default function Home() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
   };
+
+  useEffect(() => {
+    const payment = new URLSearchParams(window.location.search).get('payment');
+    if (payment === 'cancelled') {
+      showToast('已取消信用卡付款，購物車沒有扣款');
+      window.history.replaceState({}, '', '/');
+    } else if (payment === 'failed') {
+      showToast('信用卡付款未完成，請重新操作');
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
 
@@ -276,6 +288,53 @@ export default function Home() {
       await fetchCustomerProfile(user.email);
     } catch (err: any) {
       showToast("❌ " + err.message);
+    }
+  };
+
+  const startCreditCardCheckout = async () => {
+    if (!user) {
+      showToast("請先登入再使用信用卡付款");
+      setIsCheckoutOpen(false);
+      setIsLoginOpen(true);
+      return;
+    }
+    if (isCardCheckoutLoading || cart.length === 0) return;
+
+    setIsCardCheckoutLoading(true);
+    showToast("正在連線至綠界安全付款頁...");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
+
+      const response = await fetch('/api/ecpay/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ productIds: cart.map(item => item.id) })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.action || !result.fields) {
+        throw new Error(result.error || '無法建立綠界付款');
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = result.action;
+      form.style.display = 'none';
+      Object.entries(result.fields as Record<string, string>).forEach(([name, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+    } catch (error) {
+      showToast(`付款建立失敗：${error instanceof Error ? error.message : '請稍後再試'}`);
+      setIsCardCheckoutLoading(false);
     }
   };
 
@@ -753,9 +812,13 @@ export default function Home() {
                 <div className="flex-grow border-t border-white/10"></div>
             </div>
 
-            <button className="w-full bg-card-bg border border-white/20 text-white font-bold py-3 rounded-xl hover:bg-white/5 transition-all flex items-center justify-center gap-2">
+            <button
+              onClick={startCreditCardCheckout}
+              disabled={isCardCheckoutLoading}
+              className="w-full bg-[#2f63e9] border border-blue-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#3b70f1] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-all flex items-center justify-center gap-2"
+            >
               <CreditCard size={18} />
-              信用卡付款 (即將推出)
+              {isCardCheckoutLoading ? '正在前往綠界...' : `信用卡付款 (NT$${cartTotal})`}
             </button>
           </div>
         </div>

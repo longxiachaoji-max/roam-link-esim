@@ -66,6 +66,17 @@ export default function MemberCenter() {
     init();
   }, []);
 
+  useEffect(() => {
+    const payment = new URLSearchParams(window.location.search).get('payment');
+    if (payment === 'success') {
+      window.history.replaceState({}, '', '/member');
+      window.setTimeout(() => showToast('信用卡付款成功，訂單已更新'), 0);
+    } else if (payment === 'pending') {
+      window.history.replaceState({}, '', '/member');
+      window.setTimeout(() => showToast('付款結果確認中，請稍後重新整理'), 0);
+    }
+  }, []);
+
   // Country flag mapping
   const getFlag = (country: string) => {
     const flags: Record<string, string> = {

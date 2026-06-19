@@ -32,6 +32,7 @@ export async function GET(request: Request) {
         id, 
         created_at, 
         total_amount, 
+        payment_status,
         order_status,
         order_items (
           id, 
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
         )
       `)
       .eq('customer_id', customer.id)
+      .eq('payment_status', 'PAID')
       .order('created_at', { ascending: false });
 
     if (ordersError) {

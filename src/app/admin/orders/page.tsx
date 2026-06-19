@@ -163,7 +163,9 @@ export default function OrdersPage() {
   const completedOrders = orders.filter(o => o.order_status === 'COMPLETED').length;
   const pendingOrders = orders.filter(o => o.order_status === 'PENDING').length;
   const pendingFulfillmentCount = orders.reduce(
-    (sum, order) => sum + order.order_items.filter(item => !item.inventory_id).length,
+    (sum, order) => sum + (order.payment_status === 'PAID'
+      ? order.order_items.filter(item => !item.inventory_id).length
+      : 0),
     0
   );
 
@@ -173,24 +175,27 @@ export default function OrdersPage() {
   const currentYear = now.getFullYear();
 
   const calcProfit = (filterFn: (d: Date) => boolean) => {
-    let topupRevenue = 0;
+    let revenue = 0;
     let cost = 0;
 
     for (const transaction of transactions) {
       const transactionDate = new Date(transaction.created_at);
       if (!filterFn(transactionDate)) continue;
-      topupRevenue += getReceivedRevenue(transaction);
+      revenue += getReceivedRevenue(transaction);
     }
 
     for (const order of orders) {
       const orderDate = new Date(order.created_at);
       if (!filterFn(orderDate)) continue;
-      // 儲值金結帳不重複列營收，訂單只扣已配發 eSIM 的成本。
+      // 綠界信用卡訂單直接列營收；儲值金結帳不重複列營收。
+      if (order.payment_method === 'ECPAY' && order.payment_status === 'PAID') {
+        revenue += Number(order.total_amount || 0);
+      }
       for (const item of order.order_items || []) {
         cost += Number(item.e_sim_inventory?.cost || 0);
       }
     }
-    return { revenue: topupRevenue, cost, profit: topupRevenue - cost };
+    return { revenue, cost, profit: revenue - cost };
   };
 
   const monthlyProfit = calcProfit(d => d.getMonth() === currentMonth && d.getFullYear() === currentYear);
