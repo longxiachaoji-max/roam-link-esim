@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   try {
     const authorization = request.headers.get('authorization') || '';
     const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-    if (!accessToken) return NextResponse.json({ error: '請先登入再使用信用卡付款' }, { status: 401 });
+    if (!accessToken) return NextResponse.json({ error: '請先登入再使用線上付款' }, { status: 401 });
 
     const supabase = getSupabase();
     const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
@@ -37,6 +37,10 @@ export async function POST(request: Request) {
     if (authError || !authUser?.email) return NextResponse.json({ error: '登入狀態已過期，請重新登入' }, { status: 401 });
 
     const body = await request.json();
+    const paymentMethod = body.paymentMethod || 'Credit';
+    if (paymentMethod !== 'Credit' && paymentMethod !== 'ApplePay') {
+      return NextResponse.json({ error: '不支援的付款方式' }, { status: 400 });
+    }
     const productIds: string[] = Array.isArray(body.productIds)
       ? body.productIds.map((id: unknown) => String(id || '')).filter(Boolean)
       : [];
@@ -118,7 +122,7 @@ export async function POST(request: Request) {
       ReturnURL: `${origin}/api/ecpay/notify`,
       OrderResultURL: `${origin}/api/ecpay/result`,
       ClientBackURL: `${origin}/?payment=cancelled`,
-      ChoosePayment: 'Credit',
+      ChoosePayment: paymentMethod,
       EncryptType: '1',
       Language: 'CHT',
       CustomField1: order.id

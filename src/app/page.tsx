@@ -4,13 +4,16 @@ import { useState, useEffect } from "react";
 import { ShoppingCart, Search, Globe, Zap, CreditCard, ChevronDown, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+type EcpayPaymentMethod = 'Credit' | 'ApplePay';
+
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
   const [cart, setCart] = useState<any[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
-  const [isCardCheckoutLoading, setIsCardCheckoutLoading] = useState(false);
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<EcpayPaymentMethod | null>(null);
+  const [isApplePayAvailable, setIsApplePayAvailable] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -83,6 +86,8 @@ export default function Home() {
   };
 
   useEffect(() => {
+    setIsApplePayAvailable('ApplePaySession' in window);
+
     // 載入網站設定
     fetch('/api/settings').then(r => r.json()).then(json => {
       if (json.settings) setSiteSettings(json.settings);
@@ -138,10 +143,10 @@ export default function Home() {
   useEffect(() => {
     const payment = new URLSearchParams(window.location.search).get('payment');
     if (payment === 'cancelled') {
-      showToast('已取消信用卡付款，購物車沒有扣款');
+      showToast('已取消付款，購物車沒有扣款');
       window.history.replaceState({}, '', '/');
     } else if (payment === 'failed') {
-      showToast('信用卡付款未完成，請重新操作');
+      showToast('付款未完成，請重新操作');
       window.history.replaceState({}, '', '/');
     }
   }, []);
@@ -291,14 +296,14 @@ export default function Home() {
     }
   };
 
-  const startCreditCardCheckout = async () => {
+  const startEcpayCheckout = async (paymentMethod: EcpayPaymentMethod) => {
     if (!user) {
-      showToast("請先登入再使用信用卡付款");
+      showToast("請先登入再使用線上付款");
       setIsCheckoutOpen(false);
       setIsLoginOpen(true);
       return;
     }
-    if (isCardCheckoutLoading || cart.length === 0) return;
+    if (checkoutPaymentMethod || cart.length === 0) return;
 
     const standaloneNavigator = navigator as Navigator & { standalone?: boolean };
     const isStandaloneWebApp = window.matchMedia('(display-mode: standalone)').matches
@@ -311,8 +316,8 @@ export default function Home() {
       return;
     }
 
-    setIsCardCheckoutLoading(true);
-    showToast("正在連線至綠界安全付款頁...");
+    setCheckoutPaymentMethod(paymentMethod);
+    showToast(paymentMethod === 'ApplePay' ? '正在前往 Apple Pay...' : '正在連線至綠界安全付款頁...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
@@ -323,7 +328,10 @@ export default function Home() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ productIds: cart.map(item => item.id) })
+        body: JSON.stringify({
+          productIds: cart.map(item => item.id),
+          paymentMethod
+        })
       });
       const result = await response.json();
       if (!response.ok || !result.action || !result.fields) {
@@ -344,10 +352,14 @@ export default function Home() {
       });
       document.body.appendChild(form);
       form.submit();
+      if (paymentWindow) {
+        setIsCheckoutOpen(false);
+        setCheckoutPaymentMethod(null);
+      }
     } catch (error) {
       paymentWindow?.close();
       showToast(`付款建立失敗：${error instanceof Error ? error.message : '請稍後再試'}`);
-      setIsCardCheckoutLoading(false);
+      setCheckoutPaymentMethod(null);
     }
   };
 
@@ -825,13 +837,26 @@ export default function Home() {
                 <div className="flex-grow border-t border-white/10"></div>
             </div>
 
+            {isApplePayAvailable && (
+              <button
+                onClick={() => startEcpayCheckout('ApplePay')}
+                disabled={checkoutPaymentMethod !== null}
+                aria-label={`Apple Pay 付款 NT$${cartTotal}`}
+                className="w-full h-12 bg-black border border-white/20 text-white rounded-xl hover:bg-[#171717] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center mb-3"
+              >
+                <span className="text-[22px] leading-none font-semibold tracking-normal" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+                  {checkoutPaymentMethod === 'ApplePay' ? '正在前往 Apple Pay...' : ' Pay'}
+                </span>
+              </button>
+            )}
+
             <button
-              onClick={startCreditCardCheckout}
-              disabled={isCardCheckoutLoading}
+              onClick={() => startEcpayCheckout('Credit')}
+              disabled={checkoutPaymentMethod !== null}
               className="w-full bg-[#2f63e9] border border-blue-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#3b70f1] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-all flex items-center justify-center gap-2"
             >
               <CreditCard size={18} />
-              {isCardCheckoutLoading ? '正在前往綠界...' : `信用卡付款 (NT$${cartTotal})`}
+              {checkoutPaymentMethod === 'Credit' ? '正在前往綠界...' : `信用卡付款 (NT$${cartTotal})`}
             </button>
           </div>
         </div>
