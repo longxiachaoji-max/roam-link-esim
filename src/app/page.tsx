@@ -5,10 +5,12 @@ import { ShoppingCart, Search, Globe, Zap, CreditCard, ChevronDown, X, User } fr
 import { supabase } from "@/lib/supabase";
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay';
+const CART_STORAGE_KEY = 'roam-link-cart-v1';
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
   const [cart, setCart] = useState<any[]>([]);
+  const [isCartHydrated, setIsCartHydrated] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
@@ -109,6 +111,43 @@ export default function Home() {
       setProductsLoading(false);
     };
     fetchProducts();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedCart = window.localStorage.getItem(CART_STORAGE_KEY);
+      if (savedCart) {
+        const parsedCart = JSON.parse(savedCart);
+        if (Array.isArray(parsedCart)) setCart(parsedCart);
+      }
+    } catch {
+      window.localStorage.removeItem(CART_STORAGE_KEY);
+    } finally {
+      setIsCartHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isCartHydrated) return;
+    if (cart.length > 0) {
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } else {
+      window.localStorage.removeItem(CART_STORAGE_KEY);
+    }
+  }, [cart, isCartHydrated]);
+
+  useEffect(() => {
+    const resetCheckoutLoading = () => setCheckoutPaymentMethod(null);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') resetCheckoutLoading();
+    };
+
+    window.addEventListener('pageshow', resetCheckoutLoading);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('pageshow', resetCheckoutLoading);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // 金探子隨機出現 (30% 機率)
@@ -314,6 +353,22 @@ export default function Home() {
     if (isStandaloneWebApp && !paymentWindow) {
       showToast('請允許彈出式視窗，才能前往綠界付款');
       return;
+    }
+
+    if (paymentWindow) {
+      try {
+        paymentWindow.document.title = '正在前往綠界付款';
+        paymentWindow.document.body.innerHTML = `
+          <main style="min-height:100vh;display:grid;place-items:center;background:#0d0d1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+            <div style="text-align:center">
+              <div style="width:34px;height:34px;margin:0 auto 18px;border:3px solid rgba(255,255,255,.2);border-top-color:#55c875;border-radius:50%;animation:spin .8s linear infinite"></div>
+              <div style="font-size:16px;font-weight:700">${paymentMethod === 'ApplePay' ? '正在前往 Apple Pay' : '正在連線綠界安全付款'}</div>
+            </div>
+            <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+          </main>`;
+      } catch {
+        // Reused cross-origin payment windows cannot be restyled before submission.
+      }
     }
 
     setCheckoutPaymentMethod(paymentMethod);

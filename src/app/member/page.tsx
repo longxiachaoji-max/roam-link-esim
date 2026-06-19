@@ -69,8 +69,9 @@ export default function MemberCenter() {
   useEffect(() => {
     const payment = new URLSearchParams(window.location.search).get('payment');
     if (payment === 'success') {
+      window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
-      window.setTimeout(() => showToast('信用卡付款成功，訂單已更新'), 0);
+      window.setTimeout(() => showToast('付款成功，訂單已更新'), 0);
     } else if (payment === 'pending') {
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => showToast('付款結果確認中，請稍後重新整理'), 0);
