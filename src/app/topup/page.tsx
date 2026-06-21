@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import { ArrowUpRight, CreditCard, LockKeyhole, LogOut, Plane, ShieldCheck, UserRound } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { trackAnalyticsEvent, trackPageView } from '@/lib/analytics';
 
 interface CustomerProfile {
   email: string;
@@ -34,6 +35,7 @@ export default function TopupPage() {
   };
 
   useEffect(() => {
+    trackPageView('topup_page_view');
     const initialize = async () => {
       const payment = new URLSearchParams(window.location.search).get('payment') as PaymentNotice;
       if (['success', 'pending', 'failed', 'cancelled'].includes(payment || '')) {
@@ -175,6 +177,7 @@ export default function TopupPage() {
             target="_blank"
             rel="noreferrer"
             aria-label="前往一飛通全球漫遊 eSIM"
+            onClick={() => trackAnalyticsEvent('topup_to_roamlink_click')}
             className="flex min-h-20 items-center gap-4 bg-[#111827] px-4 py-3 text-white hover:bg-[#172033]"
           >
             <span className="flex h-11 w-11 shrink-0 items-center justify-center bg-[#63d4e8] text-[#111827]">

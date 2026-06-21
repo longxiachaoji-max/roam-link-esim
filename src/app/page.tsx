@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ShoppingCart, Search, Globe, Zap, CreditCard, Barcode, ChevronDown, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { trackPageView } from "@/lib/analytics";
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
@@ -88,6 +89,7 @@ export default function Home() {
   };
 
   useEffect(() => {
+    trackPageView('roamlink_page_view');
     setIsApplePayAvailable('ApplePaySession' in window);
 
     // 載入網站設定

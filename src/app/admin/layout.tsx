@@ -17,6 +17,7 @@ export default function AdminLayout({
     { name: '儀表板', href: '/admin' },
     { name: '會員管理', href: '/admin/customers' },
     { name: '儲值紀錄', href: '/admin/topup-history' },
+    { name: '流量統計', href: '/admin/analytics' },
     { name: '訂單管理', href: '/admin/orders' },
     { name: '商品管理', href: '/admin/products' },
     { name: 'eSIM 庫存', href: '/admin/esim-inventory' },
