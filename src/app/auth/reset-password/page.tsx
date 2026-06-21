@@ -10,8 +10,14 @@ export default function ResetPasswordPage() {
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [returnHref, setReturnHref] = useState('/');
+  const [returnLabel, setReturnLabel] = useState('返回首頁');
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('returnTo') === 'topup') {
+      setReturnHref('https://pay.firstesim.space');
+      setReturnLabel('返回拾機儲值');
+    }
     // Supabase 會自動從 URL hash 中讀取 token 並建立 session
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -68,10 +74,10 @@ export default function ResetPasswordPage() {
             <div className="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 mt-6">✓</div>
             <p className="text-green-400 font-bold mb-6">{message}</p>
             <a 
-              href="/"
+              href={returnHref}
               className="inline-block bg-gradient-to-r from-[#FF4E6A] to-[#f5bd61] text-[#0a0a0c] font-black py-3 px-8 rounded-full hover:-translate-y-1 transition-all"
             >
-              返回首頁
+              {returnLabel}
             </a>
           </div>
         ) : !isReady ? (

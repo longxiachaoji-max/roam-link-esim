@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
-import { ArrowUpRight, CreditCard, LockKeyhole, LogOut, Plane, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, CreditCard, KeyRound, LockKeyhole, LogOut, Plane, ShieldCheck, UserPlus, UserRound } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { trackAnalyticsEvent, trackPageView } from '@/lib/analytics';
 
@@ -13,16 +13,20 @@ interface CustomerProfile {
 }
 
 type PaymentNotice = 'success' | 'pending' | 'failed' | 'cancelled' | null;
+type AuthMode = 'login' | 'register' | 'forgot';
 
 export default function TopupPage() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [amount, setAmount] = useState('500');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState<'error' | 'success'>('error');
   const [paymentNotice, setPaymentNotice] = useState<PaymentNotice>(null);
 
   const loadProfile = async (accessToken: string) => {
@@ -63,6 +67,7 @@ export default function TopupPage() {
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
     setMessage('');
+    setMessageType('error');
     setIsLoggingIn(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error || !data.session) {
@@ -79,6 +84,69 @@ export default function TopupPage() {
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleRegister = async (event: FormEvent) => {
+    event.preventDefault();
+    setMessage('');
+    setMessageType('error');
+    if (password.length < 6) {
+      setMessage('密碼至少需要 6 個字元');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setMessage('兩次輸入的密碼不一致');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+    if (error) {
+      setMessage(error.message || '註冊失敗');
+      setIsLoggingIn(false);
+      return;
+    }
+
+    if (data.session?.access_token) {
+      try {
+        await loadProfile(data.session.access_token);
+        setPassword('');
+        setConfirmPassword('');
+      } catch (loadError) {
+        setMessage(loadError instanceof Error ? loadError.message : '會員資料建立失敗');
+      }
+    } else {
+      setAuthMode('login');
+      setPassword('');
+      setConfirmPassword('');
+      setMessageType('success');
+      setMessage('註冊成功，請至信箱完成驗證後再登入。');
+    }
+    setIsLoggingIn(false);
+  };
+
+  const handleForgotPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    setMessage('');
+    setMessageType('error');
+    setIsLoggingIn(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: 'https://firstesim.space/auth/reset-password?returnTo=topup'
+    });
+    if (error) {
+      setMessage(error.message || '重設密碼信寄送失敗');
+    } else {
+      setMessageType('success');
+      setMessage('重設密碼信已寄出，請前往信箱查看。');
+    }
+    setIsLoggingIn(false);
+  };
+
+  const switchAuthMode = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setPassword('');
+    setConfirmPassword('');
+    setMessage('');
   };
 
   const handleLogout = async () => {
@@ -210,26 +278,45 @@ export default function TopupPage() {
                 <Image src="/catch-the-moment-logo.jpeg" alt="拾機 Catch the Moment" fill className="object-cover object-[center_49%]" priority />
               </div>
             </div>
-            <form onSubmit={handleLogin} className="p-6 md:p-10">
+            <form onSubmit={authMode === 'register' ? handleRegister : authMode === 'forgot' ? handleForgotPassword : handleLogin} className="p-6 md:p-10">
               <div className="mb-7 flex items-center gap-3">
-                <UserRound size={22} />
+                {authMode === 'register' ? <UserPlus size={22} /> : authMode === 'forgot' ? <KeyRound size={22} /> : <UserRound size={22} />}
                 <div>
-                  <h2 className="text-xl font-black">會員登入</h2>
-                  <p className="mt-1 text-xs text-black/45">與 First eSIM 使用相同帳號</p>
+                  <h2 className="text-xl font-black">{authMode === 'register' ? '註冊會員' : authMode === 'forgot' ? '忘記密碼' : '會員登入'}</h2>
+                  <p className="mt-1 text-xs text-black/45">{authMode === 'forgot' ? '輸入註冊 Email 以取得重設連結' : '與 First eSIM 使用相同帳號'}</p>
                 </div>
               </div>
               <label className="mb-5 block">
                 <span className="mb-2 block text-xs font-bold text-black/55">Email</span>
                 <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
               </label>
-              <label className="mb-6 block">
-                <span className="mb-2 block text-xs font-bold text-black/55">密碼</span>
-                <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
-              </label>
-              {message && <p className="mb-4 text-sm font-medium text-red-600">{message}</p>}
+              {authMode !== 'forgot' && (
+                <label className="mb-5 block">
+                  <span className="mb-2 block text-xs font-bold text-black/55">密碼</span>
+                  <input type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
+                </label>
+              )}
+              {authMode === 'register' && (
+                <label className="mb-6 block">
+                  <span className="mb-2 block text-xs font-bold text-black/55">確認密碼</span>
+                  <input type="password" minLength={6} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
+                </label>
+              )}
+              {message && <p className={`mb-4 border px-3 py-2 text-sm font-medium ${messageType === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600'}`}>{message}</p>}
               <button type="submit" disabled={isLoggingIn} className="h-12 w-full bg-black font-bold text-white hover:bg-[#272a28] disabled:bg-black/30">
-                {isLoggingIn ? '登入中...' : '登入後儲值'}
+                {isLoggingIn ? '處理中...' : authMode === 'register' ? '建立會員' : authMode === 'forgot' ? '寄送重設信' : '登入後儲值'}
               </button>
+              {authMode === 'login' ? (
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => switchAuthMode('register')} className="h-10 border border-black/15 text-sm font-bold text-black/65 hover:border-black hover:text-black">註冊會員</button>
+                  <button type="button" onClick={() => switchAuthMode('forgot')} className="h-10 border border-black/15 text-sm font-bold text-black/65 hover:border-black hover:text-black">忘記密碼</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => switchAuthMode('login')} className="mt-4 flex h-10 w-full items-center justify-center gap-2 text-sm font-bold text-black/55 hover:text-black">
+                  <ArrowLeft size={16} />
+                  返回會員登入
+                </button>
+              )}
             </form>
           </div>
         ) : (
