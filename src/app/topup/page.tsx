@@ -181,9 +181,9 @@ export default function TopupPage() {
               <Plane size={21} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="mb-1 block text-[10px] font-bold text-[#63d4e8]">一飛通漫遊 · 廣告</span>
-              <span className="block text-sm font-black">全球 eSIM 即買即用</span>
-              <span className="mt-0.5 block text-[11px] text-white/55">查看 190+ 國家與地區方案</span>
+              <span className="mb-1 block text-[10px] font-bold text-[#63d4e8]">友站連結 · 一飛通漫遊</span>
+              <span className="block text-sm font-black">拾機會員優惠中</span>
+              <span className="mt-0.5 block text-[11px] text-white/55">全球 eSIM 即買即用 · 查看 190+ 國家與地區</span>
             </span>
             <ArrowUpRight size={19} className="shrink-0 text-[#ff5b55]" />
           </a>
