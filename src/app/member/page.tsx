@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, CreditCard, Trash2, Edit3, Check, Share2 } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2 } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -12,7 +12,6 @@ export default function MemberCenter() {
   const [isLoading, setIsLoading] = useState(true);
   
   // Modals
-  const [isTopUpOpen, setIsTopUpOpen] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
   
@@ -238,12 +237,12 @@ export default function MemberCenter() {
           <div className="text-xs text-white/40 mb-8 relative z-10">上次儲值: {user?.updated_at ? new Date(user.updated_at).toLocaleDateString() : '無紀錄'}</div>
           
           <div className="grid grid-cols-2 gap-4 relative z-10">
-            <button 
-              onClick={() => setIsTopUpOpen(true)} 
-              className="bg-[#F05A28] hover:bg-[#d94f22] shadow-[0_0_15px_rgba(240,90,40,0.4)] text-white font-bold py-3.5 rounded-2xl transition-all"
+            <a
+              href="https://pay.firstesim.space"
+              className="bg-[#F05A28] hover:bg-[#d94f22] shadow-[0_0_15px_rgba(240,90,40,0.4)] text-white text-center font-bold py-3.5 rounded-2xl transition-all"
             >
               + 儲值
-            </button>
+            </a>
             <Link href="/member/history" className="bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 rounded-2xl transition-all text-center">
                 消費紀錄
             </Link>
@@ -460,44 +459,6 @@ export default function MemberCenter() {
                 確認刪除
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Top-up Modal */}
-      {isTopUpOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-end md:items-center px-4 pb-4 md:pb-0 transition-opacity">
-          <div className="bg-[#1A1A2E] w-full max-w-sm rounded-[2rem] p-8 shadow-2xl relative border border-white/10 animate-fade-in-up">
-            <button onClick={() => setIsTopUpOpen(false)} className="absolute top-5 right-5 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
-            
-            <h3 className="text-2xl font-black mb-6 text-center mt-2">儲值金加值</h3>
-            
-            <div className="bg-black/30 rounded-2xl p-4 mb-6 text-center border border-white/5">
-                <p className="text-white/50 text-sm mb-1">您目前的儲值金餘額</p>
-                <p className="text-4xl font-black text-[#f5bd61]">NT$ {user?.token_balance}</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {[200, 500, 1000].map((amount) => (
-                <button 
-                  key={amount} 
-                  onClick={() => {
-                    showToast(`⚠️ 正在導向 NT$ ${amount} 結帳 (等待綠界串接)`);
-                  }}
-                  className="bg-white/5 border border-white/10 hover:border-[#F05A28] hover:text-[#F05A28] rounded-2xl p-4 flex flex-col items-center gap-1 transition-all"
-                >
-                  <span className="font-bold text-lg">{amount}</span>
-                </button>
-              ))}
-            </div>
-
-            <button 
-              className="w-full bg-white/5 text-white/30 font-black py-4 rounded-2xl flex justify-center items-center gap-2 cursor-not-allowed border border-white/5"
-              disabled
-            >
-              <CreditCard size={20} />
-              信用卡結帳 (等待串接)
-            </button>
           </div>
         </div>
       )}

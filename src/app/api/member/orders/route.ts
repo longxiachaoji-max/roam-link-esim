@@ -45,6 +45,7 @@ export async function GET(request: Request) {
       `)
       .eq('customer_id', customer.id)
       .eq('payment_status', 'PAID')
+      .neq('payment_method', 'ECPAY_TOPUP')
       .order('created_at', { ascending: false });
 
     if (ordersError) {
