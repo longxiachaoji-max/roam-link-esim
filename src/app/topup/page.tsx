@@ -288,18 +288,18 @@ export default function TopupPage() {
               </div>
               <label className="mb-5 block">
                 <span className="mb-2 block text-xs font-bold text-black/55">Email</span>
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
+                <input type="email" name="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
               </label>
               {authMode !== 'forgot' && (
                 <label className="mb-5 block">
                   <span className="mb-2 block text-xs font-bold text-black/55">密碼</span>
-                  <input type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
+                  <input type="password" name="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
                 </label>
               )}
               {authMode === 'register' && (
                 <label className="mb-6 block">
                   <span className="mb-2 block text-xs font-bold text-black/55">確認密碼</span>
-                  <input type="password" minLength={6} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
+                  <input type="password" name="confirmPassword" minLength={6} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" className="h-12 w-full border border-black/15 bg-white px-4 outline-none focus:border-[#168b55]" />
                 </label>
               )}
               {message && <p className={`mb-4 border px-3 py-2 text-sm font-medium ${messageType === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600'}`}>{message}</p>}
