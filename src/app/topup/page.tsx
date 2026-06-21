@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
-import { ArrowUpRight, CreditCard, Globe2, LockKeyhole, LogOut, Plane, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowUpRight, CreditCard, LockKeyhole, LogOut, Plane, ShieldCheck, UserRound } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface CustomerProfile {
@@ -161,15 +161,32 @@ export default function TopupPage() {
       </header>
 
       <div className="mx-auto max-w-5xl px-5 py-8 md:px-8 md:py-14">
-        <div className="mb-8 flex items-end justify-between border-b border-black/10 pb-6">
+        <div className="mb-8 grid gap-5 border-b border-black/10 pb-6 md:grid-cols-[1fr_360px] md:items-end">
           <div>
             <p className="mb-2 text-xs font-bold text-[#168b55]">安全儲值付款</p>
             <h1 className="text-3xl font-black md:text-4xl">會員儲值</h1>
+            <div className="mt-3 flex items-center gap-2 text-xs text-black/45">
+              <ShieldCheck size={16} className="text-[#168b55]" />
+              由綠界科技處理付款
+            </div>
           </div>
-          <div className="hidden items-center gap-2 text-xs text-black/45 md:flex">
-            <ShieldCheck size={16} className="text-[#168b55]" />
-            由綠界科技處理付款
-          </div>
+          <a
+            href="https://firstesim.space"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="前往一飛通全球漫遊 eSIM"
+            className="flex min-h-20 items-center gap-4 bg-[#111827] px-4 py-3 text-white hover:bg-[#172033]"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center bg-[#63d4e8] text-[#111827]">
+              <Plane size={21} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="mb-1 block text-[10px] font-bold text-[#63d4e8]">一飛通漫遊 · 廣告</span>
+              <span className="block text-sm font-black">全球 eSIM 即買即用</span>
+              <span className="mt-0.5 block text-[11px] text-white/55">查看 190+ 國家與地區方案</span>
+            </span>
+            <ArrowUpRight size={19} className="shrink-0 text-[#ff5b55]" />
+          </a>
         </div>
 
         {paymentNotice && (
@@ -287,34 +304,6 @@ export default function TopupPage() {
           </div>
         )}
 
-        <section aria-label="一飛通全球漫遊推薦" className="mt-8 overflow-hidden border border-black/10 bg-[#111827] text-white">
-          <div className="grid md:grid-cols-[1.3fr_0.7fr]">
-            <div className="p-6 md:p-9">
-              <div className="mb-4 flex items-center gap-2 text-xs font-bold text-[#63d4e8]">
-                <Plane size={16} />
-                一飛通全球漫遊 eSIM
-              </div>
-              <h2 className="max-w-lg text-2xl font-black leading-tight md:text-3xl">出國上網，落地就能連線</h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-white/65">日本、韓國、東南亞及全球多國方案，線上選購後即可取得 eSIM 安裝資訊。</p>
-              <a
-                href="https://firstesim.space"
-                target="_blank"
-                rel="noreferrer"
-                className="mt-6 inline-flex h-12 items-center gap-2 bg-[#ff5b55] px-5 text-sm font-black text-white hover:bg-[#e94c47]"
-              >
-                前往一飛通漫遊
-                <ArrowUpRight size={18} />
-              </a>
-            </div>
-            <div className="flex min-h-44 items-center justify-between border-t border-white/10 bg-[#172033] px-7 py-6 md:min-h-0 md:flex-col md:justify-center md:border-l md:border-t-0">
-              <Globe2 size={72} strokeWidth={1.4} className="text-[#63d4e8] md:mb-4 md:h-24 md:w-24" />
-              <div className="text-right md:text-center">
-                <div className="text-3xl font-black text-white">190+</div>
-                <div className="mt-1 text-xs font-bold text-white/50">國家與地區上網</div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </main>
   );
