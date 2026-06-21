@@ -9,8 +9,62 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "一飛通全球漫遊 Roam Link | eSIM 全球通",
-  description: "隨時隨地保持連線。購買一飛通全球漫遊 eSIM，體驗最順暢的跨國網路。",
+  metadataBase: new URL("https://firstesim.space"),
+  title: "一飛通全球漫遊 FirstRoamLink｜日本韓國全球 eSIM",
+  description: "一飛通全球漫遊 FirstRoamLink 提供日本、韓國、東南亞與全球多國 eSIM 上網方案。線上購買、快速取得安裝資訊，出國落地即可連線。",
+  applicationName: "一飛通全球漫遊 FirstRoamLink",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "zh_TW",
+    url: "https://firstesim.space",
+    siteName: "一飛通全球漫遊 FirstRoamLink",
+    title: "一飛通全球漫遊 FirstRoamLink｜全球 eSIM 上網",
+    description: "日本、韓國、東南亞與全球多國 eSIM 方案，線上購買後快速取得安裝資訊。",
+    images: [{
+      url: "/icon.png",
+      width: 512,
+      height: 512,
+      alt: "一飛通全球漫遊 FirstRoamLink",
+    }],
+  },
+  twitter: {
+    card: "summary",
+    title: "一飛通全球漫遊 FirstRoamLink｜全球 eSIM 上網",
+    description: "日本、韓國、東南亞與全球多國 eSIM 方案，出國落地即可連線。",
+    images: ["/icon.png"],
+  },
+};
+
+const websiteStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "一飛通全球漫遊 FirstRoamLink",
+  alternateName: ["FirstRoamLink", "Roam Link eSIM", "一飛通全球漫遊"],
+  url: "https://firstesim.space",
+  inLanguage: "zh-TW",
+};
+
+const organizationStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "一飛通全球漫遊 FirstRoamLink",
+  url: "https://firstesim.space",
+  logo: "https://firstesim.space/icon.png",
+  email: "roamlinktw@gmail.com",
 };
 
 export default function RootLayout({
@@ -21,6 +75,8 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className={spaceGrotesk.variable}>
       <body className="font-sans bg-[#0D0D1A] text-[#F0F0FF] overflow-x-hidden antialiased">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteStructuredData) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationStructuredData) }} />
         {children}
       </body>
     </html>
