@@ -686,6 +686,29 @@ export default function Home() {
         )}
       </section>
 
+      <section className="border-y border-white/10 bg-[#111827] px-6 py-12" aria-labelledby="travel-esim-heading">
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.35fr_0.65fr] md:items-center">
+          <div>
+            <p className="mb-3 text-xs font-bold text-cyan">一飛通全球漫遊 FirstRoamLink</p>
+            <h2 id="travel-esim-heading" className="text-2xl font-black text-white md:text-3xl">熱門旅遊 eSIM 與出國上網方案</h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">
+              正在找日本 eSIM、韓國 eSIM 或 KDDI 原生網路方案？一飛通提供日本 eSIM 吃到飽、每日流量與總量型方案，
+              也有泰國、中國、美國、歐洲等熱門目的地的旅遊 eSIM。線上選購後即可取得安裝資訊，出國落地快速連線。
+            </p>
+          </div>
+          <div className="border-l-0 border-white/10 md:border-l md:pl-8">
+            <h3 className="text-sm font-bold text-white">熱門搜尋</h3>
+            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              {['日本 eSIM', 'KDDI eSIM', '韓國 eSIM', '泰國 eSIM', '中國 eSIM', '全球漫遊 eSIM'].map(keyword => (
+                <a key={keyword} href="#products" className="border-b border-white/10 pb-2 text-white/55 hover:border-cyan hover:text-cyan">
+                  {keyword}
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 頁尾聯絡資訊 */}
       <footer className="border-t border-white/10 bg-[#0D0D1A]/80 px-6 py-10">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-start md:justify-between gap-8">
