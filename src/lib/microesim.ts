@@ -120,7 +120,10 @@ export async function createMicroesimTestInventory(): Promise<MicroesimInventory
     ...parsed,
     raw_lpa: rawLpa,
     topup_id: topupId,
-    iccid: detail.device_ids?.[0] || null,
+    // MicroEsim sandbox returns the same test ICCID repeatedly, while our
+    // inventory table keeps ICCID unique. Store the LPA data for test orders
+    // and leave ICCID empty until production credentials return real values.
+    iccid: null,
     qr_code_url: detail.qrcode?.[0] || null,
     cost: 0
   };
