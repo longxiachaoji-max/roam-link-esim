@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
+import { createMicroesimTestInventory, isMicroesimTestProduct } from '@/lib/microesim';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -232,16 +233,58 @@ export async function POST(request: Request) {
     }
 
     // Create order item
-    const { error: orderItemError } = await supabase
+    const { data: orderItem, error: orderItemError } = await supabase
       .from('order_items')
       .insert([{
         order_id: order.id,
         product_id: product.id,
         inventory_id: assignedInventory ? assignedInventory.id : null,
         price: product.price
-      }]);
+      }])
+      .select('id')
+      .single();
 
     if (orderItemError) throw orderItemError;
+
+    let fulfilledInventory = assignedInventory;
+    if (!fulfilledInventory && totalAmount === 0 && orderItem && isMicroesimTestProduct(product.name)) {
+      try {
+        const esim = await createMicroesimTestInventory();
+        const expiresAt = new Date();
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+        const { data: createdInventory, error: microInventoryError } = await supabase
+          .from('e_sim_inventory')
+          .insert({
+            product_id: product.id,
+            iccid: esim.iccid,
+            smdp_address: esim.smdp_address,
+            activation_code: esim.activation_code,
+            status: 'SOLD',
+            sold_at: new Date().toISOString(),
+            expiry_date: expiresAt.toISOString(),
+            cost: esim.cost
+          })
+          .select('*')
+          .single();
+        if (microInventoryError || !createdInventory) throw microInventoryError || new Error('新增 MicroEsim 測試庫存失敗');
+
+        const { error: microItemError } = await supabase
+          .from('order_items')
+          .update({ inventory_id: createdInventory.id })
+          .eq('id', orderItem.id)
+          .is('inventory_id', null);
+        if (microItemError) throw microItemError;
+
+        await supabase
+          .from('orders')
+          .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
+          .eq('id', order.id);
+        fulfilledInventory = createdInventory;
+      } catch (microError) {
+        console.error('MicroEsim token checkout fulfillment failed:', microError);
+      }
+    }
 
     // Deduct tokens from customer if used
     if (tokensUsed > 0) {
@@ -273,12 +316,12 @@ export async function POST(request: Request) {
       await resend.emails.send({
         from: `Roam Link eSIM <${fromEmail}>`,
         to: [email],
-        subject: assignedInventory ? `Your eSIM for ${product.name} is ready!` : `Your ${product.name} order is being prepared`,
-        html: assignedInventory ? `
+        subject: fulfilledInventory ? `Your eSIM for ${product.name} is ready!` : `Your ${product.name} order is being prepared`,
+        html: fulfilledInventory ? `
           <h1>Thank you for your purchase!</h1>
           <p>Here are your eSIM details for <strong>${product.name}</strong>.</p>
-          <p><strong>SM-DP+ Address:</strong> ${assignedInventory.smdp_address}</p>
-          <p><strong>Activation Code:</strong> ${assignedInventory.activation_code}</p>
+          <p><strong>SM-DP+ Address:</strong> ${fulfilledInventory.smdp_address}</p>
+          <p><strong>Activation Code:</strong> ${fulfilledInventory.activation_code}</p>
           <p>Or scan the QR code (generated from the LPA string) on your device.</p>
           <p>Enjoy your trip to ${product.country}!</p>
         ` : `
@@ -288,9 +331,9 @@ export async function POST(request: Request) {
         `,
       });
 
-      const notificationSettings = !assignedInventory ? await getNotificationSettings() : null;
+      const notificationSettings = !fulfilledInventory ? await getNotificationSettings() : null;
       const notifyEmail = notificationSettings?.order_notify_email || '';
-      if (!assignedInventory && notificationSettings?.notify_email_enabled && notifyEmail) {
+      if (!fulfilledInventory && notificationSettings?.notify_email_enabled && notifyEmail) {
         await resend.emails.send({
           from: `Roam Link eSIM <${fromEmail}>`,
           to: [notifyEmail],
@@ -310,7 +353,7 @@ export async function POST(request: Request) {
       // We don't throw here, order is still successful, but email failed.
     }
 
-    if (!assignedInventory) {
+    if (!fulfilledInventory) {
       const notificationSettings = await getNotificationSettings();
       if (!notificationSettings.notify_telegram_enabled) {
         return NextResponse.json({
@@ -336,8 +379,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       orderId: order.id,
-      inventoryStatus: assignedInventory ? 'ASSIGNED' : 'PENDING',
-      message: assignedInventory ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
+      inventoryStatus: fulfilledInventory ? 'ASSIGNED' : 'PENDING',
+      message: fulfilledInventory ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
     });
 
   } catch (error: any) {
