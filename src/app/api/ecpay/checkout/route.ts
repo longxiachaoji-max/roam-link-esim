@@ -7,6 +7,7 @@ import {
   getEcpayConfig,
   sanitizeEcpayText
 } from '@/lib/ecpay';
+import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,13 +66,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '部分商品已下架，請重新整理購物車' }, { status: 400 });
     }
 
-    const totalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
-    if (!Number.isInteger(totalAmount) || totalAmount <= 0) {
+    const originalTotalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
+    if (!Number.isInteger(originalTotalAmount) || originalTotalAmount <= 0) {
       return NextResponse.json({ error: '訂單金額不正確' }, { status: 400 });
     }
-    if (paymentMethod === 'BARCODE' && (totalAmount < 16 || totalAmount > 20000)) {
-      return NextResponse.json({ error: '超商條碼付款金額需介於 NT$16 至 NT$20,000' }, { status: 400 });
-    }
+    let totalAmount = originalTotalAmount;
+    let referralQuote: ReturnType<typeof buildReferralQuote> | null = null;
 
     let { data: customer } = await supabase.from('customers').select('*').eq('email', authUser.email).single();
     if (!customer) {
@@ -86,6 +86,20 @@ export async function POST(request: Request) {
         .single();
       if (customerError) throw customerError;
       customer = newCustomer;
+    }
+
+    const discountCode = String(body.discountCode || '').trim();
+    if (discountCode) {
+      const { config } = await readReferralConfig(supabase);
+      referralQuote = buildReferralQuote(config, authUser.email, discountCode, originalTotalAmount);
+      totalAmount = referralQuote.payableTotal;
+    }
+    if (totalAmount <= 0) {
+      return NextResponse.json({ error: '折扣後金額為 0，請改用儲值金結帳' }, { status: 400 });
+    }
+
+    if (paymentMethod === 'BARCODE' && (totalAmount < 16 || totalAmount > 20000)) {
+      return NextResponse.json({ error: '超商條碼付款金額需介於 NT$16 至 NT$20,000' }, { status: 400 });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -110,6 +124,24 @@ export async function POST(request: Request) {
       price: product.price
     })));
     if (itemsError) throw itemsError;
+
+    if (referralQuote) {
+      const { usageGuide, config } = await readReferralConfig(supabase);
+      config.pendingRewards[order.id] = {
+        orderId: order.id,
+        customerId: customer.id,
+        customerEmail: authUser.email.toLowerCase(),
+        referrerEmail: referralQuote.referrerEmail,
+        code: referralQuote.code,
+        originalTotal: originalTotalAmount,
+        discountAmount: referralQuote.discountAmount,
+        paidTotal: referralQuote.payableTotal,
+        buyerRewardPercent: referralQuote.buyerRewardPercent,
+        referrerRewardPercent: referralQuote.referrerRewardPercent,
+        createdAt: new Date().toISOString()
+      };
+      await saveReferralConfig(supabase, usageGuide, config);
+    }
 
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;

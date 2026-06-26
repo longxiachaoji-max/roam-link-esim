@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+import { awardReferralRewards } from '@/lib/referrals';
 
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
@@ -223,6 +224,8 @@ export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount:
     .from('orders')
     .update({ order_status: pendingItems.length ? 'PENDING' : 'COMPLETED', updated_at: new Date().toISOString() })
     .eq('id', orderId);
+
+  await awardReferralRewards(supabase, orderId);
 
   const notificationOrder = { ...order, order_items: normalizedItems };
   await sendPaidOrderNotifications(notificationOrder, pendingItems);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShoppingCart, Search, Globe, Zap, CreditCard, Barcode, ChevronDown, X, User } from "lucide-react";
+import { ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { trackPageView } from "@/lib/analytics";
 
@@ -22,6 +22,9 @@ export default function Home() {
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   // TopUp modal moved to /member
   const [toastMsg, setToastMsg] = useState("");
+  const [checkoutCode, setCheckoutCode] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState<any>(null);
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   
   // 模擬登入狀態
   const [user, setUser] = useState<any>(null);
@@ -139,6 +142,10 @@ export default function Home() {
   }, [cart, isCartHydrated]);
 
   useEffect(() => {
+    setAppliedDiscount(null);
+  }, [cart]);
+
+  useEffect(() => {
     const resetCheckoutState = () => {
       setCheckoutPaymentMethod(null);
       try {
@@ -203,6 +210,8 @@ export default function Home() {
   }, []);
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
+  const payableTotal = appliedDiscount?.payableTotal ?? cartTotal;
+  const discountAmount = appliedDiscount?.discountAmount ?? 0;
 
   // Check active session on load
   useEffect(() => {
@@ -326,7 +335,8 @@ export default function Home() {
             name: user.name || user.email.split('@')[0],
             productId: item.id,
             useTokens: true,
-            paymentMethod: 'TOKENS'
+            paymentMethod: 'TOKENS',
+            discountCode: appliedDiscount?.code || undefined
           })
         });
         
@@ -344,6 +354,41 @@ export default function Home() {
       await fetchCustomerProfile(user.email);
     } catch (err: any) {
       showToast("❌ " + err.message);
+    }
+  };
+
+  const applyCheckoutCode = async () => {
+    if (!user) {
+      showToast("請先登入再使用折扣碼");
+      setIsLoginOpen(true);
+      return;
+    }
+    if (!checkoutCode.trim() || isApplyingDiscount) return;
+    setIsApplyingDiscount(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
+      const response = await fetch('/api/checkout/discount', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          productIds: cart.map(item => item.id),
+          code: checkoutCode
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '折扣碼無法使用');
+      setAppliedDiscount(result.quote);
+      setCheckoutCode(result.quote.code);
+      showToast(`已套用折扣碼，折抵 NT$${result.quote.discountAmount}`);
+    } catch (error) {
+      setAppliedDiscount(null);
+      showToast(`折扣碼錯誤：${error instanceof Error ? error.message : '請重新輸入'}`);
+    } finally {
+      setIsApplyingDiscount(false);
     }
   };
 
@@ -401,7 +446,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           productIds: cart.map(item => item.id),
-          paymentMethod
+          paymentMethod,
+          discountCode: appliedDiscount?.code || undefined
         })
       });
       const result = await response.json();
@@ -898,9 +944,40 @@ export default function Home() {
                 <span className="text-muted">購買項目</span>
                 <span className="font-bold">{cart.length} 件</span>
               </div>
-              <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-4">
+              <div className="flex justify-between items-center mb-3">
                 <span className="text-muted">小計</span>
                 <span className="font-bold">NT${cartTotal}</span>
+              </div>
+              <div className="mb-4 border-b border-white/5 pb-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={checkoutCode}
+                    onChange={(e) => setCheckoutCode(e.target.value.toUpperCase())}
+                    placeholder="折扣碼 / 推薦碼"
+                    className="min-w-0 flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-cyan font-mono placeholder:font-sans"
+                  />
+                  <button
+                    type="button"
+                    onClick={applyCheckoutCode}
+                    disabled={isApplyingDiscount || !checkoutCode.trim()}
+                    className="bg-cyan/20 text-cyan hover:bg-cyan/30 disabled:bg-white/5 disabled:text-white/30 disabled:cursor-not-allowed px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+                  >
+                    {isApplyingDiscount ? '套用中' : '套用'}
+                  </button>
+                </div>
+                {appliedDiscount && (
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between text-emerald-300">
+                      <span>折扣碼 {appliedDiscount.code}</span>
+                      <span>-NT${discountAmount}</span>
+                    </div>
+                    <div className="flex justify-between text-yellow font-black">
+                      <span>實付金額</span>
+                      <span>NT${payableTotal}</span>
+                    </div>
+                  </div>
+                )}
               </div>
               
               {user ? (
@@ -913,10 +990,10 @@ export default function Home() {
               )}
             </div>
 
-            {user && user.token_balance >= cartTotal ? (
+            {user && user.token_balance >= payableTotal ? (
                 <button onClick={completeOrder} className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
                     <Zap size={20} />
-                    使用儲值金扣款 (NT${cartTotal})
+                    使用儲值金扣款 (NT${payableTotal})
                 </button>
             ) : (
                 <button disabled className="w-full bg-white/10 text-white/50 font-black py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-2 mb-3">
@@ -935,11 +1012,11 @@ export default function Home() {
               <button
                 onClick={() => startEcpayCheckout('ApplePay')}
                 disabled={checkoutPaymentMethod !== null}
-                aria-label={`Apple Pay 付款 NT$${cartTotal}`}
+                aria-label={`Apple Pay 付款 NT$${payableTotal}`}
                 className="w-full h-12 bg-black border border-white/20 text-white rounded-xl hover:bg-[#171717] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center mb-3"
               >
                 <span className="text-[22px] leading-none font-semibold tracking-normal" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-                  {checkoutPaymentMethod === 'ApplePay' ? '正在前往 Apple Pay...' : ' Pay'}
+                  {checkoutPaymentMethod === 'ApplePay' ? '正在前往 Apple Pay...' : ` Pay NT$${payableTotal}`}
                 </span>
               </button>
             )}
@@ -950,7 +1027,7 @@ export default function Home() {
               className="w-full bg-[#168b55] border border-emerald-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center gap-2 mb-3"
             >
               <Barcode size={19} />
-              {checkoutPaymentMethod === 'BARCODE' ? '正在產生條碼...' : `超商條碼付款 (NT$${cartTotal})`}
+              {checkoutPaymentMethod === 'BARCODE' ? '正在產生條碼...' : `超商條碼付款 (NT$${payableTotal})`}
             </button>
 
             <button
@@ -959,7 +1036,7 @@ export default function Home() {
               className="w-full bg-[#2f63e9] border border-blue-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#3b70f1] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-all flex items-center justify-center gap-2"
             >
               <CreditCard size={18} />
-              {checkoutPaymentMethod === 'Credit' ? '正在前往綠界...' : `信用卡付款 (NT$${cartTotal})`}
+              {checkoutPaymentMethod === 'Credit' ? '正在前往綠界...' : `信用卡付款 (NT$${payableTotal})`}
             </button>
           </div>
         </div>

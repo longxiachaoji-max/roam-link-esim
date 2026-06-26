@@ -29,6 +29,9 @@ export default function MemberCenter() {
   // Promo code redeem
   const [promoCode, setPromoCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
+  const [referralRule, setReferralRule] = useState<any>(null);
+  const [isSavingReferral, setIsSavingReferral] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -55,6 +58,17 @@ export default function MemberCenter() {
         
         if (customer) {
           setUser(customer);
+        }
+        const { data: { session: latestSession } } = await supabase.auth.getSession();
+        if (latestSession?.access_token) {
+          const referralRes = await fetch('/api/member/referral', {
+            headers: { Authorization: `Bearer ${latestSession.access_token}` }
+          });
+          const referralJson = await referralRes.json();
+          if (referralRes.ok) {
+            setReferralRule(referralJson.referral);
+            setReferralCode(referralJson.referral?.code || '');
+          }
         }
         await fetchOrders(session.user.email);
       } else {
@@ -246,6 +260,59 @@ export default function MemberCenter() {
             <Link href="/member/history" className="bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 rounded-2xl transition-all text-center">
                 消費紀錄
             </Link>
+          </div>
+        </div>
+
+        {/* Referral Code */}
+        <div className="bg-[#1a1a24] rounded-2xl p-5 border border-white/5 mb-10">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white/70">我的推薦碼</h3>
+              <p className="text-xs text-white/40 mt-1">朋友結帳輸入後可折扣，系統會依後台設定回饋儲值金。</p>
+            </div>
+            {referralRule?.enabled && (
+              <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-400/20 px-2 py-1 rounded-full text-xs font-bold">啟用中</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="例如 FIRST123"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-[#F05A28]/50 uppercase font-mono"
+            />
+            <button
+              disabled={isSavingReferral || referralCode.trim().length < 4}
+              onClick={async () => {
+                if (isSavingReferral || referralCode.trim().length < 4) return;
+                setIsSavingReferral(true);
+                try {
+                  const { data: { session } } = await supabase.auth.getSession();
+                  if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
+                  const res = await fetch('/api/member/referral', {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({ code: referralCode })
+                  });
+                  const json = await res.json();
+                  if (!res.ok) throw new Error(json.error || '儲存失敗');
+                  setReferralRule(json.referral);
+                  setReferralCode(json.referral.code);
+                  showToast('✅ 推薦碼已更新');
+                } catch (err: any) {
+                  showToast('❌ ' + err.message);
+                } finally {
+                  setIsSavingReferral(false);
+                }
+              }}
+              className="px-5 py-2.5 rounded-xl text-sm font-bold bg-[#F05A28] hover:bg-[#d94f22] disabled:bg-white/5 disabled:text-white/30 disabled:cursor-not-allowed transition-all"
+            >
+              {isSavingReferral ? '儲存中' : '儲存'}
+            </button>
           </div>
         </div>
 

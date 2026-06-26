@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+import { awardReferralRewards, buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -99,7 +100,7 @@ function escapeTelegramHtml(value: string) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, name, productId, useTokens, paymentMethod } = body;
+    const { email, name, productId, useTokens, paymentMethod, discountCode } = body;
 
     if (!email || !productId) {
       return NextResponse.json({ error: 'Email and productId are required' }, { status: 400 });
@@ -152,8 +153,16 @@ export async function POST(request: Request) {
     const assignedInventory = inventoryError ? null : inventory;
 
     // 4. Calculate total amount and token deduction
-    let totalAmount = Number(product.price);
+    const originalTotalAmount = Math.round(Number(product.price));
+    let totalAmount = originalTotalAmount;
     let tokensUsed = 0;
+    let referralQuote: ReturnType<typeof buildReferralQuote> | null = null;
+
+    if (discountCode) {
+      const { config } = await readReferralConfig(supabase);
+      referralQuote = buildReferralQuote(config, email, String(discountCode), originalTotalAmount);
+      totalAmount = referralQuote.payableTotal;
+    }
 
     // Check for sufficient tokens if payment method is TOKENS
     if (paymentMethod === 'TOKENS') {
@@ -188,6 +197,24 @@ export async function POST(request: Request) {
       .single();
 
     if (orderError) throw orderError;
+
+    if (referralQuote) {
+      const { usageGuide, config } = await readReferralConfig(supabase);
+      config.pendingRewards[order.id] = {
+        orderId: order.id,
+        customerId: customer.id,
+        customerEmail: email.toLowerCase(),
+        referrerEmail: referralQuote.referrerEmail,
+        code: referralQuote.code,
+        originalTotal: originalTotalAmount,
+        discountAmount: referralQuote.discountAmount,
+        paidTotal: referralQuote.payableTotal,
+        buyerRewardPercent: referralQuote.buyerRewardPercent,
+        referrerRewardPercent: referralQuote.referrerRewardPercent,
+        createdAt: new Date().toISOString()
+      };
+      await saveReferralConfig(supabase, usageGuide, config);
+    }
 
     // 6. Bind inventory when available. Otherwise the member page will show 處理中.
     if (assignedInventory) {
@@ -236,6 +263,10 @@ export async function POST(request: Request) {
           reason: `購買 eSIM (訂單 #${order.id.split('-')[0]})`
         }]);
       if (txError) console.error("Failed to insert token_transaction:", txError);
+    }
+
+    if (totalAmount === 0 || paymentMethod === 'TOKENS') {
+      await awardReferralRewards(supabase, order.id);
     }
 
     // 7. Send email via Resend
