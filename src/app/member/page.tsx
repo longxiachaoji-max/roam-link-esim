@@ -153,6 +153,22 @@ export default function MemberCenter() {
 
   // Check if item is soft-deleted
   const isSoftDeleted = (item: any) => !!item.user_deleted_at;
+  const isDeleteWindowExpired = (item: any) => {
+    if (!item.user_deleted_at) return false;
+    const deletedAt = new Date(item.user_deleted_at).getTime();
+    if (!Number.isFinite(deletedAt)) return false;
+    return Date.now() - deletedAt >= 24 * 60 * 60 * 1000;
+  };
+  const getDeleteUntilText = (item: any) => {
+    if (!item.user_deleted_at) return '';
+    const deletedAt = new Date(item.user_deleted_at).getTime();
+    if (!Number.isFinite(deletedAt)) return '';
+    const deleteAt = new Date(deletedAt + 24 * 60 * 60 * 1000);
+    return deleteAt.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+  const visibleEsimCount = orders.reduce((sum, order) => (
+    sum + order.order_items.filter((item: any) => !isDeleteWindowExpired(item)).length
+  ), 0);
 
   if (isLoading) {
     return <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center text-white">載入中...</div>;
@@ -375,15 +391,15 @@ export default function MemberCenter() {
         {/* eSIM List */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">我的 eSIM</h2>
-          <span className="text-sm text-white/50">共 {orders.reduce((sum, o) => sum + o.order_items.filter((i: any) => !isSoftDeleted(i)).length, 0)} 筆</span>
+          <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
         </div>
 
         <div className="space-y-4">
-          {orders.map(order => order.order_items.filter((item: any) => !isSoftDeleted(item)).map((item: any) => {
-            const deleted = false;
+          {orders.map(order => order.order_items.filter((item: any) => !isDeleteWindowExpired(item)).map((item: any) => {
+            const deleted = isSoftDeleted(item);
             
             return (
-              <div key={item.id} className="rounded-3xl p-5 border shadow-lg transition-all bg-[#1a1a24] border-white/5">
+              <div key={item.id} className={`rounded-3xl p-5 border shadow-lg transition-all bg-[#1a1a24] border-white/5 ${deleted ? 'opacity-45 grayscale' : ''}`}>
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl shadow-inner">
@@ -396,11 +412,17 @@ export default function MemberCenter() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className={`${item.e_sim_inventory ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300'} border px-2.5 py-1 rounded-lg text-xs font-bold`}>
-                      {item.e_sim_inventory ? '使用中' : '處理中'}
+                    <div className={`${deleted ? 'bg-red-500/10 border-red-500/20 text-red-300' : item.e_sim_inventory ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300'} border px-2.5 py-1 rounded-lg text-xs font-bold`}>
+                      {deleted ? '刪除倒數中' : item.e_sim_inventory ? '使用中' : '處理中'}
                     </div>
                   </div>
                 </div>
+
+                {deleted && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-100/80 rounded-2xl px-4 py-3 text-sm mb-4">
+                    此 eSIM 已標記刪除，預計 {getDeleteUntilText(item)} 後從會員中心隱藏。如需恢復請聯絡客服。
+                  </div>
+                )}
 
                 {/* Note / Memo */}
                 <div className="mb-4">
@@ -462,7 +484,7 @@ export default function MemberCenter() {
                 </div>
 
                 {/* Action Buttons */}
-                {item.e_sim_inventory && (
+                {item.e_sim_inventory && !deleted && (
                   <div className="flex gap-3 mb-3">
                      <a 
                        href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
@@ -479,23 +501,25 @@ export default function MemberCenter() {
                   </div>
                 )}
 
-                {!item.e_sim_inventory && (
+                {!item.e_sim_inventory && !deleted && (
                   <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-100/80 rounded-2xl px-4 py-3 text-sm mb-3">
                     eSIM 正在處理中，配發完成後這裡會自動出現安裝按鈕與 QR Code。
                   </div>
                 )}
 
                 {/* Delete button */}
-                <button
-                  onClick={() => setDeleteConfirmId(item.id)}
-                  className="w-full bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 text-white/40 hover:text-red-400 py-2.5 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <Trash2 size={14} /> 刪除此 eSIM
-                </button>
+                {!deleted && (
+                  <button
+                    onClick={() => setDeleteConfirmId(item.id)}
+                    className="w-full bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 text-white/40 hover:text-red-400 py-2.5 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <Trash2 size={14} /> 刪除此 eSIM
+                  </button>
+                )}
               </div>
             );
           }))}
-          {orders.length === 0 && (
+          {visibleEsimCount === 0 && (
             <div className="text-center py-10 text-white/40">
               目前沒有 eSIM 訂單紀錄
             </div>
@@ -510,7 +534,7 @@ export default function MemberCenter() {
             <h3 className="text-xl font-bold mb-3 text-center">確認刪除</h3>
             <p className="text-white/60 text-sm text-center mb-2">確定要刪除這個 eSIM 嗎？</p>
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-6">
-              <p className="text-red-400 text-xs text-center font-medium">⚠️ 刪除後紀錄將立即從會員中心消失，並於 1 天後自動從系統移除，此操作無法復原。</p>
+              <p className="text-red-400 text-xs text-center font-medium">刪除後會先反灰保留 24 小時，之後才會從會員中心隱藏。如誤刪可請客服從後台恢復。</p>
             </div>
             <div className="flex gap-3">
               <button

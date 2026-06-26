@@ -64,10 +64,27 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { order_item_id, inventory_id } = body;
+    const { order_item_id, inventory_id, action } = body;
 
-    if (!order_item_id || !inventory_id) {
-      return NextResponse.json({ error: '缺少 order_item_id 或 inventory_id' }, { status: 400 });
+    if (!order_item_id) {
+      return NextResponse.json({ error: '缺少 order_item_id' }, { status: 400 });
+    }
+
+    if (action === 'restore_deleted') {
+      const { error } = await supabase
+        .from('order_items')
+        .update({ user_deleted_at: null })
+        .eq('id', order_item_id);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, message: '已恢復客戶 eSIM 顯示' });
+    }
+
+    if (!inventory_id) {
+      return NextResponse.json({ error: '缺少 inventory_id' }, { status: 400 });
     }
 
     const { data: orderItem, error: itemError } = await supabase

@@ -125,6 +125,7 @@ export default function OrdersPage() {
   const [inventoryOptions, setInventoryOptions] = useState<InventoryOption[]>([]);
   const [assignSelections, setAssignSelections] = useState<Record<string, string>>({});
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
+  const [restoringItemId, setRestoringItemId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -279,6 +280,30 @@ export default function OrdersPage() {
       alert(err instanceof Error ? err.message : '刪除訂單失敗');
     } finally {
       setDeletingOrderId(null);
+    }
+  };
+
+  const handleRestoreDeletedItem = async (item: OrderItem) => {
+    const ok = window.confirm(`確定要恢復這筆 eSIM 到客戶會員中心嗎？\n\n商品：${item.products?.name || '未知商品'}`);
+    if (!ok) return;
+
+    setRestoringItemId(item.id);
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: item.id,
+          action: 'restore_deleted'
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '恢復失敗');
+      await fetchOrders();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '恢復失敗');
+    } finally {
+      setRestoringItemId(null);
     }
   };
 
@@ -475,6 +500,15 @@ export default function OrdersPage() {
                       <td className="px-4 py-4 text-sm min-w-[280px]">
                         <div className="flex flex-col gap-2">
                           {item ? renderAssignControls(item, true) : '-'}
+                          {item?.user_deleted_at && (
+                            <button
+                              onClick={() => handleRestoreDeletedItem(item)}
+                              disabled={restoringItemId === item.id}
+                              className="self-start rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
+                            >
+                              {restoringItemId === item.id ? '恢復中...' : '恢復顯示'}
+                            </button>
+                          )}
                           {isFirst && (
                             <button
                               onClick={() => handleDeleteOrder(order)}
@@ -542,6 +576,20 @@ export default function OrdersPage() {
                                           {oi.products?.name || '未知商品'}
                                           {oi.user_deleted_at && <span className="text-red-400 text-xs ml-2">(已刪除)</span>}
                                         </p>
+                                        {oi.user_deleted_at && (
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-red-300/70 text-xs">
+                                              客戶於 {new Date(oi.user_deleted_at).toLocaleString('zh-TW')} 刪除，24 小時內會員中心會反灰保留。
+                                            </p>
+                                            <button
+                                              onClick={() => handleRestoreDeletedItem(oi)}
+                                              disabled={restoringItemId === oi.id}
+                                              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
+                                            >
+                                              {restoringItemId === oi.id ? '恢復中...' : '恢復顯示'}
+                                            </button>
+                                          </div>
+                                        )}
                                         <p className="text-white/50 text-xs">
                                           {oi.products?.country || '-'} · {oi.products?.data_amount || '-'} · {oi.products?.validity_days || '-'}天
                                         </p>
