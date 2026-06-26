@@ -98,8 +98,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '折扣後金額為 0，請改用儲值金結帳' }, { status: 400 });
     }
 
-    if (paymentMethod === 'BARCODE' && (totalAmount < 16 || totalAmount > 20000)) {
-      return NextResponse.json({ error: '超商條碼付款金額需介於 NT$16 至 NT$20,000' }, { status: 400 });
+    if (paymentMethod === 'BARCODE' && (totalAmount < 50 || totalAmount > 20000)) {
+      return NextResponse.json({ error: '超商條碼付款金額需介於 NT$50 至 NT$20,000' }, { status: 400 });
     }
 
     const { data: order, error: orderError } = await supabase
