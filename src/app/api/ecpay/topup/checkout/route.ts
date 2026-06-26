@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createMerchantTradeNo, formatEcpayTradeDate, generateCheckMacValue, getEcpayConfig } from '@/lib/ecpay';
+import { buildReferralRewardQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,12 +41,19 @@ export async function POST(request: Request) {
       customer = createdCustomer;
     }
 
+    const referralCode = String(body.referralCode || '').trim();
+    let referralQuote: ReturnType<typeof buildReferralRewardQuote> | null = null;
+    if (referralCode) {
+      const { config } = await readReferralConfig(supabase);
+      referralQuote = buildReferralRewardQuote(config, authUser.email, referralCode, amount);
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([{
         customer_id: customer.id,
         total_amount: amount,
-        tokens_used: 0,
+        tokens_used: referralQuote ? 1 : 0,
         payment_method: 'ECPAY_TOPUP',
         payment_status: 'PENDING',
         order_status: 'CREATED'
@@ -55,7 +63,34 @@ export async function POST(request: Request) {
     if (orderError || !order) throw orderError || new Error('儲值訂單建立失敗');
     orderId = order.id;
 
-    const paymentOrigin = process.env.NEXT_PUBLIC_PAYMENT_SITE_URL || new URL(request.url).origin;
+    if (referralQuote) {
+      const { usageGuide, config } = await readReferralConfig(supabase);
+      config.pendingRewards[order.id] = {
+        orderId: order.id,
+        source: 'topup',
+        customerId: customer.id,
+        customerEmail: authUser.email.toLowerCase(),
+        referrerEmail: referralQuote.referrerEmail,
+        code: referralQuote.code,
+        originalTotal: amount,
+        discountAmount: 0,
+        paidTotal: amount,
+        buyerRewardPercent: referralQuote.buyerRewardPercent,
+        referrerRewardPercent: referralQuote.referrerRewardPercent,
+        createdAt: new Date().toISOString()
+      };
+      await saveReferralConfig(supabase, usageGuide, config);
+    }
+
+    let paymentOrigin = process.env.NEXT_PUBLIC_PAYMENT_SITE_URL || new URL(request.url).origin;
+    if (body.returnOrigin) {
+      const parsedOrigin = new URL(String(body.returnOrigin));
+      if (parsedOrigin.protocol === 'https:' || parsedOrigin.hostname === 'localhost') {
+        paymentOrigin = parsedOrigin.origin;
+      }
+    }
+    const returnPath = String(body.returnPath || '/');
+    const safeReturnPath = returnPath.startsWith('/') && !returnPath.startsWith('//') ? returnPath : '/';
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
     const fields: Record<string, string> = {
       MerchantID: merchantId,
@@ -67,12 +102,13 @@ export async function POST(request: Request) {
       ItemName: `拾機會員儲值金 ${amount}元`,
       ReturnURL: `${paymentOrigin}/api/ecpay/topup/notify`,
       OrderResultURL: `${paymentOrigin}/api/ecpay/topup/result`,
-      ClientBackURL: `${paymentOrigin}/?payment=cancelled`,
+      ClientBackURL: `${paymentOrigin}${safeReturnPath}?payment=cancelled`,
       ChoosePayment: 'Credit',
       EncryptType: '1',
       Language: 'CHT',
       CustomField1: order.id,
-      CustomField2: 'TOPUP'
+      CustomField2: 'TOPUP',
+      CustomField3: safeReturnPath
     };
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 

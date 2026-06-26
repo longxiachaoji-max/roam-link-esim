@@ -14,6 +14,7 @@ export interface CustomerReferralRule {
 
 export interface PendingReferralReward {
   orderId: string;
+  source?: 'checkout' | 'topup';
   customerId: string;
   customerEmail: string;
   referrerEmail: string;
@@ -176,6 +177,29 @@ export function buildReferralQuote(config: ReferralConfig, customerEmail: string
   };
 }
 
+export function buildReferralRewardQuote(config: ReferralConfig, customerEmail: string, code: string, amount: number): ReferralQuote {
+  const normalizedCode = normalizeReferralCode(code);
+  if (!normalizedCode) throw new Error('請輸入推薦碼');
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('儲值金額不正確');
+
+  const rule = findReferralRuleByCode(config, normalizedCode);
+  if (!rule) throw new Error('推薦碼不存在或尚未啟用');
+  if (normalizeEmail(rule.email) === normalizeEmail(customerEmail)) {
+    throw new Error('不可輸入自己的推薦碼');
+  }
+
+  return {
+    code: normalizedCode,
+    originalTotal: amount,
+    discountPercent: 0,
+    discountAmount: 0,
+    payableTotal: amount,
+    buyerRewardPercent: clampPercent(rule.buyerRewardPercent, config.defaultBuyerRewardPercent),
+    referrerRewardPercent: clampPercent(rule.referrerRewardPercent, config.defaultReferrerRewardPercent),
+    referrerEmail: normalizeEmail(rule.email)
+  };
+}
+
 export async function awardReferralRewards(supabase: SupabaseClient, orderId: string) {
   const { usageGuide, config } = await readReferralConfig(supabase);
   const reward = config.pendingRewards[orderId];
@@ -204,7 +228,7 @@ export async function awardReferralRewards(supabase: SupabaseClient, orderId: st
       amount: buyerReward,
       transaction_type: 'referral_reward',
       balance_after: nextBalance,
-      reason: `折扣碼 ${reward.code} 結帳回饋`
+      reason: `${reward.source === 'topup' ? '儲值推薦碼' : '折扣碼'} ${reward.code} ${reward.source === 'topup' ? '儲值回饋' : '結帳回饋'}`
     });
   }
 
@@ -216,7 +240,7 @@ export async function awardReferralRewards(supabase: SupabaseClient, orderId: st
       amount: referrerReward,
       transaction_type: 'referral_reward',
       balance_after: nextBalance,
-      reason: `推薦碼 ${reward.code} 訂單回饋`
+      reason: `推薦碼 ${reward.code} ${reward.source === 'topup' ? '儲值推薦回饋' : '訂單回饋'}`
     });
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
-import { awardReferralRewards, buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
+import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -198,10 +198,11 @@ export async function POST(request: Request) {
 
     if (orderError) throw orderError;
 
-    if (referralQuote) {
+    if (referralQuote && paymentMethod !== 'TOKENS') {
       const { usageGuide, config } = await readReferralConfig(supabase);
       config.pendingRewards[order.id] = {
         orderId: order.id,
+        source: 'checkout',
         customerId: customer.id,
         customerEmail: email.toLowerCase(),
         referrerEmail: referralQuote.referrerEmail,
@@ -263,10 +264,6 @@ export async function POST(request: Request) {
           reason: `購買 eSIM (訂單 #${order.id.split('-')[0]})`
         }]);
       if (txError) console.error("Failed to insert token_transaction:", txError);
-    }
-
-    if (totalAmount === 0 || paymentMethod === 'TOKENS') {
-      await awardReferralRewards(supabase, order.id);
     }
 
     // 7. Send email via Resend

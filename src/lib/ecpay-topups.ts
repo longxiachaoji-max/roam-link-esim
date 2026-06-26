@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { awardReferralRewards } from '@/lib/referrals';
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -19,7 +20,12 @@ export async function markEcpayTopupPaid(orderId: string, tradeAmount: number) {
   if (orderError || !order) throw new Error('找不到儲值訂單');
   if (order.payment_method !== 'ECPAY_TOPUP') throw new Error('付款方式與儲值訂單不符');
   if (Math.round(Number(order.total_amount)) !== normalizedAmount) throw new Error('綠界付款金額與儲值訂單不符');
-  if (order.payment_status === 'PAID') return { credited: true, alreadyProcessed: true };
+  if (order.payment_status === 'PAID') {
+    if (Number(order.tokens_used || 0) > 0) {
+      await awardReferralRewards(supabase, orderId);
+    }
+    return { credited: true, alreadyProcessed: true };
+  }
 
   const { data: claimed, error: claimError } = await supabase
     .from('orders')
@@ -90,6 +96,10 @@ export async function markEcpayTopupPaid(orderId: string, tradeAmount: number) {
     await supabase.from('customers').update({ token_balance: previousBalance }).eq('id', order.customer_id).eq('token_balance', newBalance);
     await supabase.from('orders').update({ payment_status: 'PENDING', tokens_used: 0 }).eq('id', orderId).eq('payment_status', 'PROCESSING');
     throw paidError;
+  }
+
+  if (Number(order.tokens_used || 0) > 0) {
+    await awardReferralRewards(supabase, orderId);
   }
 
   return { credited: true, alreadyProcessed: false, newBalance };

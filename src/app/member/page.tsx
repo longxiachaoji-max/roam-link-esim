@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2 } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -25,6 +25,12 @@ export default function MemberCenter() {
 
   // Delete confirm
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Credit card topup
+  const [isTopupOpen, setIsTopupOpen] = useState(false);
+  const [topupAmount, setTopupAmount] = useState('500');
+  const [topupReferralCode, setTopupReferralCode] = useState('');
+  const [isTopupPaying, setIsTopupPaying] = useState(false);
 
   // Promo code redeem
   const [promoCode, setPromoCode] = useState('');
@@ -125,6 +131,59 @@ export default function MemberCenter() {
       await fetchOrders(user.email);
     } catch (err: any) {
       showToast('❌ ' + err.message);
+    }
+  };
+
+  const startTopupCheckout = async () => {
+    const numericAmount = Number(topupAmount);
+    if (!Number.isInteger(numericAmount) || numericAmount < 200) {
+      showToast('❌ 儲值金額最低 NT$200');
+      return;
+    }
+    if (numericAmount > 100000) {
+      showToast('❌ 單筆儲值不得超過 NT$100,000');
+      return;
+    }
+    if (isTopupPaying) return;
+    setIsTopupPaying(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
+
+      const res = await fetch('/api/ecpay/topup/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          amount: numericAmount,
+          referralCode: topupReferralCode.trim() || undefined,
+          returnOrigin: window.location.origin,
+          returnPath: '/member'
+        })
+      });
+      const result = await res.json();
+      if (!res.ok || !result.action || !result.fields) {
+        throw new Error(result.error || '無法建立儲值付款');
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = result.action;
+      form.style.display = 'none';
+      Object.entries(result.fields as Record<string, string>).forEach(([name, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+    } catch (err: any) {
+      showToast('❌ ' + err.message);
+      setIsTopupPaying(false);
     }
   };
 
@@ -267,17 +326,95 @@ export default function MemberCenter() {
           <div className="text-xs text-white/40 mb-8 relative z-10">上次儲值: {user?.updated_at ? new Date(user.updated_at).toLocaleDateString() : '無紀錄'}</div>
           
           <div className="grid grid-cols-2 gap-4 relative z-10">
-            <a
-              href="https://pay.firstesim.space"
+            <button
+              type="button"
+              onClick={() => setIsTopupOpen(true)}
               className="bg-[#F05A28] hover:bg-[#d94f22] shadow-[0_0_15px_rgba(240,90,40,0.4)] text-white text-center font-bold py-3.5 rounded-2xl transition-all"
             >
               + 儲值
-            </a>
+            </button>
             <Link href="/member/history" className="bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 rounded-2xl transition-all text-center">
                 消費紀錄
             </Link>
           </div>
         </div>
+
+        {isTopupOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-center px-4">
+            <div className="bg-[#1A1A2E] w-full max-w-md rounded-[2rem] p-6 shadow-2xl relative border border-white/10">
+              <button
+                onClick={() => { if (!isTopupPaying) setIsTopupOpen(false); }}
+                className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white"
+              >
+                ✕
+              </button>
+              <h3 className="text-2xl font-black mb-2">信用卡儲值</h3>
+              <p className="text-sm text-white/45 mb-6">付款完成後會自動加入會員儲值金，最低 NT$200。</p>
+
+              <label className="block mb-4">
+                <span className="block text-sm text-white/60 mb-2">儲值金額</span>
+                <div className="flex items-center bg-black/30 border border-white/10 rounded-2xl px-4 py-3 focus-within:border-[#F05A28]/60">
+                  <span className="text-white/40 font-bold mr-2">NT$</span>
+                  <input
+                    type="number"
+                    min="200"
+                    max="100000"
+                    step="1"
+                    inputMode="numeric"
+                    value={topupAmount}
+                    onChange={(e) => setTopupAmount(e.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-3xl font-black text-white outline-none"
+                    autoFocus
+                  />
+                </div>
+              </label>
+
+              <div className="grid grid-cols-4 gap-2 mb-5">
+                {[200, 500, 1000, 2000].map(amount => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => setTopupAmount(String(amount))}
+                    className={`rounded-xl py-2 text-sm font-bold border transition-colors ${Number(topupAmount) === amount ? 'bg-[#F05A28] border-[#F05A28] text-white' : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10'}`}
+                  >
+                    {amount}
+                  </button>
+                ))}
+              </div>
+
+              <label className="block mb-5">
+                <span className="block text-sm text-white/60 mb-2">推薦碼（選填）</span>
+                <input
+                  type="text"
+                  value={topupReferralCode}
+                  onChange={(e) => setTopupReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
+                  placeholder="儲值不折扣，只依設定回饋"
+                  className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-white outline-none focus:border-[#F05A28]/60 font-mono placeholder:font-sans placeholder:text-white/25"
+                />
+              </label>
+
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
+                <div className="flex justify-between text-sm text-white/55 mb-2">
+                  <span>儲值金</span>
+                  <span>NT${(Number(topupAmount) || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-end">
+                  <span className="font-bold">應付金額</span>
+                  <span className="text-2xl font-black text-[#f5bd61]">NT${(Number(topupAmount) || 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={startTopupCheckout}
+                disabled={isTopupPaying || Number(topupAmount) < 200}
+                className="w-full bg-[#168b55] hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <CreditCard size={20} />
+                {isTopupPaying ? '正在前往綠界...' : '信用卡付款'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Referral Code */}
         <div className="bg-[#1a1a24] rounded-2xl p-5 border border-white/5 mb-10">

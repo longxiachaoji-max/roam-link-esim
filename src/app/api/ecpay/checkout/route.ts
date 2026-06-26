@@ -129,6 +129,7 @@ export async function POST(request: Request) {
       const { usageGuide, config } = await readReferralConfig(supabase);
       config.pendingRewards[order.id] = {
         orderId: order.id,
+        source: 'checkout',
         customerId: customer.id,
         customerEmail: authUser.email.toLowerCase(),
         referrerEmail: referralQuote.referrerEmail,
