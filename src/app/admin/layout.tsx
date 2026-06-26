@@ -22,6 +22,7 @@ export default function AdminLayout({
     { name: '商品管理', href: '/admin/products' },
     { name: 'eSIM 庫存', href: '/admin/esim-inventory' },
     { name: '優惠代碼', href: '/admin/promo-codes' },
+    { name: '付款限制', href: '/admin/payment-limits' },
     { name: '訂單提醒設定', href: '/admin/notifications' },
     { name: '聯絡資訊設定', href: '/admin/contact' },
     { name: '系統設定', href: '/admin/settings' },
