@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { awardReferralRewards } from '@/lib/referrals';
+import { createMicroesimTestInventory, isMicroesimTestProduct } from '@/lib/microesim';
 
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
@@ -142,6 +143,48 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
   }
 }
 
+async function fulfillMicroesimTestItem(
+  supabase: ReturnType<typeof getAdminClient>,
+  item: FulfillmentItem
+) {
+  if (!item.product_id || !isMicroesimTestProduct(item.products?.name)) return false;
+
+  const esim = await createMicroesimTestInventory();
+  const expiresAt = new Date();
+  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+  const { data: inventory, error: inventoryError } = await supabase
+    .from('e_sim_inventory')
+    .insert({
+      product_id: item.product_id,
+      iccid: esim.iccid,
+      smdp_address: esim.smdp_address,
+      activation_code: esim.activation_code,
+      status: 'SOLD',
+      sold_at: new Date().toISOString(),
+      expiry_date: expiresAt.toISOString(),
+      cost: esim.cost
+    })
+    .select('id')
+    .single();
+  if (inventoryError || !inventory) throw inventoryError || new Error('新增 MicroEsim 測試庫存失敗');
+
+  const { data: updatedItems, error: itemUpdateError } = await supabase
+    .from('order_items')
+    .update({ inventory_id: inventory.id })
+    .eq('id', item.id)
+    .is('inventory_id', null)
+    .select('id');
+
+  if (itemUpdateError || !updatedItems?.length) {
+    await supabase.from('e_sim_inventory').delete().eq('id', inventory.id);
+    if (itemUpdateError) throw itemUpdateError;
+    return false;
+  }
+
+  return true;
+}
+
 export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount: number) {
   const supabase = getAdminClient();
   const { data: orderData, error: orderError } = await supabase
@@ -205,6 +248,19 @@ export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount:
         continue;
       }
       break;
+    }
+
+    const { data: currentItem } = await supabase
+      .from('order_items')
+      .select('id, inventory_id')
+      .eq('id', item.id)
+      .single();
+    if (!currentItem?.inventory_id) {
+      try {
+        await fulfillMicroesimTestItem(supabase, item);
+      } catch (error) {
+        console.error('MicroEsim test fulfillment failed:', error);
+      }
     }
   }
 
