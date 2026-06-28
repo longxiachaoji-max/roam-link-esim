@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -30,7 +30,7 @@ export default function MemberCenter() {
   const [isTopupOpen, setIsTopupOpen] = useState(false);
   const [topupAmount, setTopupAmount] = useState('500');
   const [topupReferralCode, setTopupReferralCode] = useState('');
-  const [isTopupPaying, setIsTopupPaying] = useState(false);
+  const [topupPayingMethod, setTopupPayingMethod] = useState<'Credit' | 'BARCODE' | null>(null);
 
   // Promo code redeem
   const [promoCode, setPromoCode] = useState('');
@@ -134,7 +134,7 @@ export default function MemberCenter() {
     }
   };
 
-  const startTopupCheckout = async () => {
+  const startTopupCheckout = async (paymentMethod: 'Credit' | 'BARCODE') => {
     const numericAmount = Number(topupAmount);
     if (!Number.isInteger(numericAmount) || numericAmount < 200) {
       showToast('❌ 儲值金額最低 NT$200');
@@ -144,8 +144,8 @@ export default function MemberCenter() {
       showToast('❌ 單筆儲值不得超過 NT$100,000');
       return;
     }
-    if (isTopupPaying) return;
-    setIsTopupPaying(true);
+    if (topupPayingMethod) return;
+    setTopupPayingMethod(paymentMethod);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
@@ -158,6 +158,7 @@ export default function MemberCenter() {
         },
         body: JSON.stringify({
           amount: numericAmount,
+          paymentMethod,
           referralCode: topupReferralCode.trim() || undefined,
           returnOrigin: window.location.origin,
           returnPath: '/member'
@@ -183,7 +184,7 @@ export default function MemberCenter() {
       form.submit();
     } catch (err: any) {
       showToast('❌ ' + err.message);
-      setIsTopupPaying(false);
+      setTopupPayingMethod(null);
     }
   };
 
@@ -343,12 +344,12 @@ export default function MemberCenter() {
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-center px-4">
             <div className="bg-[#1A1A2E] w-full max-w-md rounded-[2rem] p-6 shadow-2xl relative border border-white/10">
               <button
-                onClick={() => { if (!isTopupPaying) setIsTopupOpen(false); }}
+                onClick={() => { if (!topupPayingMethod) setIsTopupOpen(false); }}
                 className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white"
               >
                 ✕
               </button>
-              <h3 className="text-2xl font-black mb-2">信用卡儲值</h3>
+              <h3 className="text-2xl font-black mb-2">會員儲值</h3>
               <p className="text-sm text-white/45 mb-6">付款完成後會自動加入會員儲值金，最低 NT$200。</p>
 
               <label className="block mb-4">
@@ -405,12 +406,20 @@ export default function MemberCenter() {
               </div>
 
               <button
-                onClick={startTopupCheckout}
-                disabled={isTopupPaying || Number(topupAmount) < 200}
-                className="w-full bg-[#168b55] hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors"
+                onClick={() => startTopupCheckout('Credit')}
+                disabled={topupPayingMethod !== null || Number(topupAmount) < 200}
+                className="w-full bg-[#168b55] hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors mb-3"
               >
                 <CreditCard size={20} />
-                {isTopupPaying ? '正在前往綠界...' : '信用卡付款'}
+                {topupPayingMethod === 'Credit' ? '正在前往綠界...' : '信用卡付款'}
+              </button>
+              <button
+                onClick={() => startTopupCheckout('BARCODE')}
+                disabled={topupPayingMethod !== null || Number(topupAmount) < 200}
+                className="w-full bg-white/10 hover:bg-white/15 border border-white/10 disabled:bg-white/5 disabled:text-white/30 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <Barcode size={20} />
+                {topupPayingMethod === 'BARCODE' ? '正在產生條碼...' : '超商條碼付款'}
               </button>
             </div>
           </div>

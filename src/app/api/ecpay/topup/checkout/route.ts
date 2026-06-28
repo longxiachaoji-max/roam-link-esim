@@ -26,6 +26,10 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const amount = Number(body.amount);
+    const paymentMethod = String(body.paymentMethod || 'Credit');
+    if (paymentMethod !== 'Credit' && paymentMethod !== 'ApplePay' && paymentMethod !== 'BARCODE') {
+      return NextResponse.json({ error: '不支援的儲值付款方式' }, { status: 400 });
+    }
     if (!Number.isInteger(amount) || amount < 200 || amount > 100000) {
       return NextResponse.json({ error: '儲值金額需介於 NT$200 至 NT$100,000' }, { status: 400 });
     }
@@ -101,15 +105,21 @@ export async function POST(request: Request) {
       TradeDesc: 'Catch the Moment Member Topup',
       ItemName: `拾機會員儲值金 ${amount}元`,
       ReturnURL: `${paymentOrigin}/api/ecpay/topup/notify`,
-      OrderResultURL: `${paymentOrigin}/api/ecpay/topup/result`,
-      ClientBackURL: `${paymentOrigin}${safeReturnPath}?payment=cancelled`,
-      ChoosePayment: 'Credit',
+      ClientBackURL: paymentMethod === 'BARCODE'
+        ? `${paymentOrigin}${safeReturnPath}?payment=barcode`
+        : `${paymentOrigin}${safeReturnPath}?payment=cancelled`,
+      ChoosePayment: paymentMethod,
       EncryptType: '1',
       Language: 'CHT',
       CustomField1: order.id,
       CustomField2: 'TOPUP',
       CustomField3: safeReturnPath
     };
+    if (paymentMethod === 'BARCODE') {
+      fields.StoreExpireDate = '3';
+    } else {
+      fields.OrderResultURL = `${paymentOrigin}/api/ecpay/topup/result`;
+    }
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 
     return NextResponse.json({ action: checkoutUrl, fields });

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, CreditCard, KeyRound, LockKeyhole, LogOut, Plane, ShieldCheck, UserPlus, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Barcode, CreditCard, KeyRound, LockKeyhole, LogOut, Plane, ShieldCheck, UserPlus, UserRound } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { trackAnalyticsEvent, trackPageView } from '@/lib/analytics';
 
@@ -12,7 +12,7 @@ interface CustomerProfile {
   token_balance: number;
 }
 
-type PaymentNotice = 'success' | 'pending' | 'failed' | 'cancelled' | null;
+type PaymentNotice = 'success' | 'pending' | 'failed' | 'cancelled' | 'barcode' | null;
 type AuthMode = 'login' | 'register' | 'forgot';
 
 export default function TopupPage() {
@@ -24,7 +24,7 @@ export default function TopupPage() {
   const [amount, setAmount] = useState('500');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isPaying, setIsPaying] = useState(false);
+  const [payingMethod, setPayingMethod] = useState<'Credit' | 'BARCODE' | null>(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'error' | 'success'>('error');
   const [paymentNotice, setPaymentNotice] = useState<PaymentNotice>(null);
@@ -42,7 +42,7 @@ export default function TopupPage() {
     trackPageView('topup_page_view');
     const initialize = async () => {
       const payment = new URLSearchParams(window.location.search).get('payment') as PaymentNotice;
-      if (['success', 'pending', 'failed', 'cancelled'].includes(payment || '')) {
+      if (['success', 'pending', 'failed', 'cancelled', 'barcode'].includes(payment || '')) {
         setPaymentNotice(payment);
         window.history.replaceState({}, '', '/');
       }
@@ -59,7 +59,7 @@ export default function TopupPage() {
     };
 
     initialize();
-    const resetPaymentState = () => setIsPaying(false);
+    const resetPaymentState = () => setPayingMethod(null);
     window.addEventListener('pageshow', resetPaymentState);
     return () => window.removeEventListener('pageshow', resetPaymentState);
   }, []);
@@ -157,7 +157,7 @@ export default function TopupPage() {
     setPaymentNotice(null);
   };
 
-  const startCheckout = async () => {
+  const startCheckout = async (paymentMethod: 'Credit' | 'BARCODE') => {
     const numericAmount = Number(amount);
     if (!Number.isInteger(numericAmount) || numericAmount < 200) {
       setMessage('儲值金額最低為 NT$200');
@@ -170,7 +170,7 @@ export default function TopupPage() {
 
     setMessage('');
     setPaymentNotice(null);
-    setIsPaying(true);
+    setPayingMethod(paymentMethod);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
@@ -181,7 +181,7 @@ export default function TopupPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ amount: numericAmount })
+        body: JSON.stringify({ amount: numericAmount, paymentMethod })
       });
       const result = await response.json();
       if (!response.ok || !result.action || !result.fields) {
@@ -203,7 +203,7 @@ export default function TopupPage() {
       form.submit();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '儲值付款建立失敗');
-      setIsPaying(false);
+      setPayingMethod(null);
     }
   };
 
@@ -266,6 +266,7 @@ export default function TopupPage() {
             {paymentNotice === 'pending' && '付款結果確認中，請稍後重新開啟頁面。'}
             {paymentNotice === 'failed' && '付款未完成，本次沒有增加餘額。'}
             {paymentNotice === 'cancelled' && '已取消付款，本次沒有增加餘額。'}
+            {paymentNotice === 'barcode' && '超商條碼已建立，繳費完成後系統會自動增加會員餘額。'}
           </div>
         )}
 
@@ -381,9 +382,13 @@ export default function TopupPage() {
               </div>
 
               <div>
-                <button onClick={startCheckout} disabled={isPaying || numericAmount < 200} className="flex h-14 w-full items-center justify-center gap-2 bg-[#168b55] font-black text-white hover:bg-[#117244] disabled:bg-black/20">
+                <button onClick={() => startCheckout('Credit')} disabled={payingMethod !== null || numericAmount < 200} className="flex h-14 w-full items-center justify-center gap-2 bg-[#168b55] font-black text-white hover:bg-[#117244] disabled:bg-black/20">
                   <CreditCard size={20} />
-                  {isPaying ? '正在前往綠界...' : '信用卡付款'}
+                  {payingMethod === 'Credit' ? '正在前往綠界...' : '信用卡付款'}
+                </button>
+                <button onClick={() => startCheckout('BARCODE')} disabled={payingMethod !== null || numericAmount < 200} className="mt-3 flex h-14 w-full items-center justify-center gap-2 border border-black/10 bg-white font-black text-black hover:bg-black hover:text-white disabled:bg-black/10 disabled:text-black/30">
+                  <Barcode size={20} />
+                  {payingMethod === 'BARCODE' ? '正在產生條碼...' : '超商條碼付款'}
                 </button>
                 <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-black/45">
                   <LockKeyhole size={15} className="mt-0.5 shrink-0" />
