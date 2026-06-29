@@ -305,7 +305,9 @@ export default function MicroesimPlansPage() {
                     <td className="px-3 py-3 align-top">
                       <div className="font-semibold text-white">{plan.name}</div>
                       <div className="mt-1 text-xs text-cyan-200/80">{plan.data_amount} · {plan.validity_days}天 · {plan.hotspot_sharing}</div>
-                      <div className="mt-1 text-xs text-white/35">{plan.networks || '無網路商資料'}</div>
+                      <div className="mt-1 text-xs text-white/35">
+                        {plan.carrier ? `電信商：${plan.carrier}` : '供應商網路資訊已收合'}
+                      </div>
                     </td>
                     <td className="px-3 py-3 align-top">
                       <div className="text-white/70">{plan.supplier_plan_name}</div>
