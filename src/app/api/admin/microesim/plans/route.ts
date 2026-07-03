@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchKoreaMicroesimPlans } from '@/lib/microesim';
+import { fetchMicroesimPlansByCountry, MICROESIM_COUNTRY_OPTIONS } from '@/lib/microesim';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,9 +11,10 @@ function getNumberParam(url: URL, key: string, fallback: number) {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const country = url.searchParams.get('country') || 'KR';
-    if (country !== 'KR') {
-      return NextResponse.json({ error: '目前測試版先開放韓國方案' }, { status: 400 });
+    const countryCode = (url.searchParams.get('country') || 'KR').toUpperCase();
+    const country = MICROESIM_COUNTRY_OPTIONS.find(option => option.code === countryCode);
+    if (!country) {
+      return NextResponse.json({ error: '不支援的國家代碼' }, { status: 400 });
     }
 
     const hkdRate = getNumberParam(url, 'hkdRate', 4.15);
@@ -21,11 +22,11 @@ export async function GET(request: Request) {
     const markup = getNumberParam(url, 'markup', 1.65);
     const maxPages = getNumberParam(url, 'maxPages', 60);
 
-    const data = await fetchKoreaMicroesimPlans({ hkdRate, usdRate, markup, maxPages });
+    const data = await fetchMicroesimPlansByCountry(countryCode, { hkdRate, usdRate, markup, maxPages });
     return NextResponse.json({
       ...data,
       rates: { hkdRate, usdRate, markup },
-      country: '韓國'
+      country
     });
   } catch (error) {
     return NextResponse.json({

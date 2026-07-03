@@ -35,17 +35,52 @@ type SupplierPlan = {
   raw: Record<string, unknown>;
 };
 
+type CountryOption = {
+  code: string;
+  name: string;
+};
+
 type SyncResult = {
   plans: SupplierPlan[];
   scanned: number;
   total: number;
   totalPages: number;
+  country: CountryOption;
   rates: {
     hkdRate: number;
     usdRate: number;
     markup: number;
   };
 };
+
+const countryOptions: CountryOption[] = [
+  { code: 'KR', name: '韓國' },
+  { code: 'JP', name: '日本' },
+  { code: 'TH', name: '泰國' },
+  { code: 'VN', name: '越南' },
+  { code: 'SG', name: '新加坡' },
+  { code: 'MY', name: '馬來西亞' },
+  { code: 'CN', name: '中國' },
+  { code: 'HK', name: '香港' },
+  { code: 'MO', name: '澳門' },
+  { code: 'TW', name: '台灣' },
+  { code: 'US', name: '美國' },
+  { code: 'CA', name: '加拿大' },
+  { code: 'GB', name: '英國' },
+  { code: 'FR', name: '法國' },
+  { code: 'DE', name: '德國' },
+  { code: 'IT', name: '義大利' },
+  { code: 'ES', name: '西班牙' },
+  { code: 'NL', name: '荷蘭' },
+  { code: 'CH', name: '瑞士' },
+  { code: 'TR', name: '土耳其' },
+  { code: 'AU', name: '澳洲' },
+  { code: 'NZ', name: '紐西蘭' },
+  { code: 'ID', name: '印尼' },
+  { code: 'PH', name: '菲律賓' },
+  { code: 'IN', name: '印度' },
+  { code: 'KH', name: '柬埔寨' }
+];
 
 const dayOptions = ['全部', '1', '3', '5', '7', '10', '15', '30'];
 
@@ -65,6 +100,7 @@ export default function MicroesimPlansPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedCountry, setSelectedCountry] = useState('KR');
   const [search, setSearch] = useState('');
   const [day, setDay] = useState('全部');
   const [hideKyc, setHideKyc] = useState(false);
@@ -76,6 +112,8 @@ export default function MicroesimPlansPage() {
   const [markup, setMarkup] = useState('1.65');
 
   const plans = useMemo(() => data?.plans || [], [data]);
+  const selectedCountryName = countryOptions.find(country => country.code === selectedCountry)?.name || '韓國';
+  const syncedCountryName = data?.country?.name || selectedCountryName;
 
   const filteredPlans = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -127,7 +165,7 @@ export default function MicroesimPlansPage() {
     setSelected(new Set());
     try {
       const params = new URLSearchParams({
-        country: 'KR',
+        country: selectedCountry,
         hkdRate,
         usdRate,
         markup
@@ -136,7 +174,7 @@ export default function MicroesimPlansPage() {
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || '同步失敗');
       setData(json);
-      setMessage(`同步完成：掃描 ${json.scanned} 筆，找到韓國 ${json.plans?.length || 0} 筆`);
+      setMessage(`同步完成：掃描 ${json.scanned} 筆，找到${json.country?.name || selectedCountryName} ${json.plans?.length || 0} 筆`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失敗');
     } finally {
@@ -146,7 +184,7 @@ export default function MicroesimPlansPage() {
 
   const importSelected = async () => {
     if (selectedPlans.length === 0 || importing) return;
-    if (!confirm(`即將上架 ${selectedPlans.length} 個韓國商品，是否確認？`)) return;
+    if (!confirm(`即將上架 ${selectedPlans.length} 個${syncedCountryName}商品，是否確認？`)) return;
 
     setImporting(true);
     setError('');
@@ -176,8 +214,8 @@ export default function MicroesimPlansPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">MicroEsim 韓國方案庫</h1>
-          <p className="mt-1 text-sm text-white/45">先同步韓國方案，轉成一飛通商品名稱與中文注意事項，再勾選一鍵上架。</p>
+          <h1 className="text-2xl font-semibold text-white">MicroEsim 方案庫</h1>
+          <p className="mt-1 text-sm text-white/45">選擇國家後同步方案，轉成一飛通商品名稱與中文注意事項，再勾選一鍵上架。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -186,7 +224,7 @@ export default function MicroesimPlansPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <DownloadCloud className="h-4 w-4" />}
-            同步韓國方案
+            同步{selectedCountryName}方案
           </button>
           <button
             onClick={importSelected}
@@ -201,7 +239,7 @@ export default function MicroesimPlansPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <p className="text-xs text-white/40">韓國方案</p>
+          <p className="text-xs text-white/40">{syncedCountryName}方案</p>
           <p className="mt-1 text-2xl font-bold text-white">{plans.length}</p>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
@@ -223,7 +261,25 @@ export default function MicroesimPlansPage() {
           <Filter className="h-4 w-4 text-cyan-300" />
           同步與篩選
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
+          <label className="text-xs text-white/50">
+            國家
+            <select
+              value={selectedCountry}
+              onChange={(event) => {
+                setSelectedCountry(event.target.value);
+                setData(null);
+                setMessage('');
+                setError('');
+                clearSelected();
+              }}
+              className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white"
+            >
+              {countryOptions.map(country => (
+                <option key={country.code} value={country.code} className="text-black">{country.name}</option>
+              ))}
+            </select>
+          </label>
           <label className="text-xs text-white/50">
             HKD 匯率
             <input value={hkdRate} onChange={(event) => setHkdRate(event.target.value)} className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white" />

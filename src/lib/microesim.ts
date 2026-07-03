@@ -41,6 +41,41 @@ export interface MicroesimPlan {
   special_desc?: string;
 }
 
+export interface MicroesimCountryOption {
+  code: string;
+  name: string;
+  aliases: string[];
+}
+
+export const MICROESIM_COUNTRY_OPTIONS: MicroesimCountryOption[] = [
+  { code: 'KR', name: '韓國', aliases: ['korea', 'southkorea', 'south korea'] },
+  { code: 'JP', name: '日本', aliases: ['japan'] },
+  { code: 'TH', name: '泰國', aliases: ['thailand'] },
+  { code: 'VN', name: '越南', aliases: ['vietnam'] },
+  { code: 'SG', name: '新加坡', aliases: ['singapore'] },
+  { code: 'MY', name: '馬來西亞', aliases: ['malaysia'] },
+  { code: 'CN', name: '中國', aliases: ['china'] },
+  { code: 'HK', name: '香港', aliases: ['hongkong', 'hong kong'] },
+  { code: 'MO', name: '澳門', aliases: ['macau', 'macao'] },
+  { code: 'TW', name: '台灣', aliases: ['taiwan'] },
+  { code: 'US', name: '美國', aliases: ['usa', 'united states', 'america'] },
+  { code: 'CA', name: '加拿大', aliases: ['canada'] },
+  { code: 'GB', name: '英國', aliases: ['uk', 'united kingdom', 'britain'] },
+  { code: 'FR', name: '法國', aliases: ['france'] },
+  { code: 'DE', name: '德國', aliases: ['germany'] },
+  { code: 'IT', name: '義大利', aliases: ['italy'] },
+  { code: 'ES', name: '西班牙', aliases: ['spain'] },
+  { code: 'NL', name: '荷蘭', aliases: ['netherlands', 'holland'] },
+  { code: 'CH', name: '瑞士', aliases: ['switzerland'] },
+  { code: 'TR', name: '土耳其', aliases: ['turkey', 'turkiye'] },
+  { code: 'AU', name: '澳洲', aliases: ['australia'] },
+  { code: 'NZ', name: '紐西蘭', aliases: ['new zealand', 'newzealand'] },
+  { code: 'ID', name: '印尼', aliases: ['indonesia'] },
+  { code: 'PH', name: '菲律賓', aliases: ['philippines'] },
+  { code: 'IN', name: '印度', aliases: ['india'] },
+  { code: 'KH', name: '柬埔寨', aliases: ['cambodia'] }
+];
+
 interface MicroesimPlanPage {
   pageNo: number;
   pageSize: number;
@@ -172,14 +207,22 @@ function normalizeText(value?: string | null) {
   return (value || '').trim();
 }
 
-function isKoreaPlan(plan: MicroesimPlan) {
+function getCountryOption(countryCode: string) {
+  const normalized = countryCode.trim().toUpperCase();
+  return MICROESIM_COUNTRY_OPTIONS.find(country => country.code === normalized) || MICROESIM_COUNTRY_OPTIONS[0];
+}
+
+function isCountryPlan(plan: MicroesimPlan, country: MicroesimCountryOption) {
   const haystack = [
     plan.code,
     plan.channel_dataplan_name,
     plan.networks
   ].filter(Boolean).join(' ').toLowerCase();
+  const code = country.code.toLowerCase();
 
-  return /\bkr\b/.test(haystack) || haystack.includes('korea') || haystack.includes('southkorea');
+  return new RegExp(`\\b${code}\\b`).test(haystack)
+    || haystack.includes(`${code}:`)
+    || country.aliases.some(alias => haystack.includes(alias));
 }
 
 function getCarrier(plan: MicroesimPlan) {
@@ -324,9 +367,9 @@ function convertCostToTwd(price: number, currency: string, rates: { hkd: number;
 
 export function transformMicroesimPlan(
   plan: MicroesimPlan,
-  options: { hkdRate?: number; usdRate?: number; markup?: number } = {}
+  options: { countryName?: string; hkdRate?: number; usdRate?: number; markup?: number } = {}
 ): TransformedMicroesimPlan {
-  const country = isKoreaPlan(plan) ? '韓國' : normalizeText(plan.code) || '其他';
+  const country = options.countryName || getCountryOption(plan.code || '').name || normalizeText(plan.code) || '其他';
   const carrier = getCarrier(plan);
   const data = parseDataLabel(plan);
   const activeTypeNote = translateActiveType(plan.active_type);
@@ -388,7 +431,11 @@ export async function fetchMicroesimPlanPage(pageNo = 1, pageSize = 500) {
   return microesimGet<MicroesimPlanPage>(`/allesim/v1/esimDataplanListPage?pageNo=${pageNo}&pageSize=${pageSize}`);
 }
 
-export async function fetchKoreaMicroesimPlans(options: { hkdRate?: number; usdRate?: number; markup?: number; maxPages?: number } = {}) {
+export async function fetchMicroesimPlansByCountry(
+  countryCode = 'KR',
+  options: { hkdRate?: number; usdRate?: number; markup?: number; maxPages?: number } = {}
+) {
+  const country = getCountryOption(countryCode);
   const firstPage = await fetchMicroesimPlanPage(1, 500);
   const totalPages = Math.min(firstPage.totalPages || 1, options.maxPages || 60);
   const allPlans = [...(firstPage.list || [])];
@@ -402,9 +449,9 @@ export async function fetchKoreaMicroesimPlans(options: { hkdRate?: number; usdR
     }
   }
 
-  const koreaPlans = allPlans
-    .filter(isKoreaPlan)
-    .map(plan => transformMicroesimPlan(plan, options))
+  const plans = allPlans
+    .filter(plan => isCountryPlan(plan, country))
+    .map(plan => transformMicroesimPlan(plan, { ...options, countryName: country.name }))
     .sort((a, b) => {
       if (a.validity_days !== b.validity_days) return a.validity_days - b.validity_days;
       if (a.data_amount !== b.data_amount) return a.data_amount.localeCompare(b.data_amount, 'zh-Hant');
@@ -415,8 +462,13 @@ export async function fetchKoreaMicroesimPlans(options: { hkdRate?: number; usdR
     total: firstPage.total || allPlans.length,
     totalPages: firstPage.totalPages || totalPages,
     scanned: allPlans.length,
-    plans: koreaPlans
+    country,
+    plans
   };
+}
+
+export async function fetchKoreaMicroesimPlans(options: { hkdRate?: number; usdRate?: number; markup?: number; maxPages?: number } = {}) {
+  return fetchMicroesimPlansByCountry('KR', options);
 }
 
 function parseLpa(rawLpa: string) {
