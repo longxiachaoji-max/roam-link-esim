@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, Replace, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { CheckSquare, ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, Replace, RotateCcw, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -49,6 +49,12 @@ type ReplaceResult = {
 type SortResult = {
   error?: string;
   success?: boolean;
+};
+
+type BulkDeleteResult = {
+  error?: string;
+  deleted?: number;
+  warning?: string;
 };
 
 type SortKind = 'countries' | 'plans';
@@ -104,6 +110,10 @@ export default function ProductsPage() {
   const [isSortLoading, setIsSortLoading] = useState(false);
   const [isSortSubmitting, setIsSortSubmitting] = useState(false);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<BulkDeleteResult | null>(null);
 
   const splitList = (value: string) => value
     .split(/[,，\n]/)
@@ -419,6 +429,68 @@ export default function ProductsPage() {
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  const selectedProducts = products.filter(product => selectedProductIds.has(product.id));
+
+  const toggleSelectionMode = () => {
+    setIsSelectionMode(prev => {
+      const next = !prev;
+      if (!next) {
+        setSelectedProductIds(new Set());
+        setBulkDeleteResult(null);
+      }
+      return next;
+    });
+  };
+
+  const toggleProductSelected = (id: string) => {
+    setBulkDeleteResult(null);
+    setSelectedProductIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllProducts = () => {
+    setBulkDeleteResult(null);
+    setSelectedProductIds(new Set(products.map(product => product.id)));
+  };
+
+  const clearSelectedProducts = () => {
+    setBulkDeleteResult(null);
+    setSelectedProductIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (isBulkDeleting || selectedProducts.length === 0) return;
+    const previewNames = selectedProducts.slice(0, 5).map(product => product.name).join('\n');
+    const extraCount = selectedProducts.length > 5 ? `\n...另 ${selectedProducts.length - 5} 筆` : '';
+    if (!confirm(`即將刪除 ${selectedProducts.length} 個商品：\n${previewNames}${extraCount}\n\n是否確認？`)) return;
+
+    setIsBulkDeleting(true);
+    setBulkDeleteResult(null);
+    try {
+      const response = await fetch('/api/admin/products/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedProductIds) })
+      });
+      const json = await response.json();
+      if (!response.ok || json.error) throw new Error(json.error || '批量刪除失敗');
+      setBulkDeleteResult({
+        deleted: json.deleted || 0,
+        warning: json.warning
+      });
+      setSelectedProductIds(new Set());
+      fetchProducts();
+    } catch (err) {
+      setBulkDeleteResult({ error: err instanceof Error ? err.message : '批量刪除失敗' });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -692,6 +764,13 @@ export default function ProductsPage() {
         <h1 className="text-2xl font-semibold text-white">商品管理</h1>
         <div className="flex flex-wrap justify-end gap-2">
           <button
+            onClick={toggleSelectionMode}
+            className={`${isSelectionMode ? 'bg-red-500/90 text-white hover:bg-red-500' : 'bg-white/10 text-white hover:bg-white/20'} px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2`}
+          >
+            <CheckSquare className="h-4 w-4" />
+            {isSelectionMode ? '結束編輯' : '編輯模式'}
+          </button>
+          <button
             onClick={() => { setQuickForm(QUICK_DEFAULTS); setQuickResult(null); setIsQuickOpen(true); }}
             className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-500 transition-colors flex items-center gap-2"
           >
@@ -768,6 +847,48 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {isSelectionMode && (
+        <div className="mb-6 rounded-lg border border-red-400/20 bg-red-500/10 px-4 py-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-bold text-white">批量編輯模式</p>
+              <p className="mt-1 text-xs text-white/45">已選 {selectedProducts.length} 筆商品。批量刪除會一次處理，不會每筆重整。</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={selectAllProducts}
+                disabled={products.length === 0}
+                className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/10 disabled:opacity-40"
+              >
+                全選全部商品
+              </button>
+              <button
+                onClick={clearSelectedProducts}
+                disabled={selectedProducts.length === 0}
+                className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/10 disabled:opacity-40"
+              >
+                清除勾選
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting || selectedProducts.length === 0}
+                className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isBulkDeleting ? '刪除中...' : `刪除已選 ${selectedProducts.length}`}
+              </button>
+            </div>
+          </div>
+          {bulkDeleteResult && (
+            <div className={`mt-3 rounded-md border px-3 py-2 text-sm ${bulkDeleteResult.error ? 'border-red-400/25 bg-red-500/10 text-red-200' : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'}`}>
+              {bulkDeleteResult.error
+                ? bulkDeleteResult.error
+                : `已刪除 ${bulkDeleteResult.deleted || 0} 筆商品${bulkDeleteResult.warning ? `，${bulkDeleteResult.warning}` : ''}`}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Products - Grouped by Country & Data */}
       {loading ? (
         <div className="text-center py-8 text-white/50">載入中...</div>
@@ -827,8 +948,22 @@ export default function ProductsPage() {
                       {dataProducts
                         .sort((a, b) => a.validity_days - b.validity_days)
                         .map((product) => (
-                        <div key={product.id} className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors">
+                        <div key={product.id} className={`flex items-center justify-between px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : 'hover:bg-white/5'}`}>
                           <div className="flex items-center gap-6 flex-1 min-w-0">
+                            {isSelectionMode && (
+                              <button
+                                type="button"
+                                onClick={() => toggleProductSelected(product.id)}
+                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                                  selectedProductIds.has(product.id)
+                                    ? 'border-red-300 bg-red-500 text-white'
+                                    : 'border-white/20 text-transparent hover:border-red-300'
+                                }`}
+                                aria-label="選取商品"
+                              >
+                                <CheckSquare className="h-4 w-4" />
+                              </button>
+                            )}
                             <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
                             <span className="text-sm text-white/90 font-medium truncate">{product.name}</span>
                             {duplicateNameCounts[product.name] > 1 && (
@@ -850,7 +985,7 @@ export default function ProductsPage() {
                               <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${product.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
                             </button>
                             <button onClick={() => openEditModal(product)} className="text-blue-400 hover:text-blue-300 text-xs transition-colors">編輯</button>
-                            <button onClick={() => setDeleteConfirmId(product.id)} className="text-red-400 hover:text-red-300 text-xs transition-colors">刪除</button>
+                            {!isSelectionMode && <button onClick={() => setDeleteConfirmId(product.id)} className="text-red-400 hover:text-red-300 text-xs transition-colors">刪除</button>}
                           </div>
                         </div>
                       ))}
