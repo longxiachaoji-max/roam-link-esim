@@ -89,7 +89,7 @@ type PlanTypeFilter = 'metered' | 'daily' | 'unlimited' | 'throttledUnlimited' |
 
 const planTypeOptions: { key: PlanTypeFilter; label: string }[] = [
   { key: 'metered', label: '計量型' },
-  { key: 'daily', label: '記日型' },
+  { key: 'daily', label: '計日型' },
   { key: 'unlimited', label: '吃到飽' },
   { key: 'throttledUnlimited', label: '限速吃到飽' },
   { key: 'highSpeedUnlimited', label: '高速吃到飽' }
@@ -104,14 +104,30 @@ function yesNoBadge(active: boolean, label: string, activeClass = 'bg-red-500/15
   return <span className={`inline-flex rounded-md border px-1.5 py-0.5 text-[11px] ${activeClass}`}>{label}</span>;
 }
 
+function rawPlanText(plan: SupplierPlan) {
+  const raw = plan.raw || {};
+  return [
+    plan.name,
+    plan.data_amount,
+    plan.rule_desc_zh,
+    plan.customer_note,
+    plan.supplier_plan_name,
+    raw.channel_dataplan_name,
+    raw.data,
+    raw.rule_desc,
+    raw.special_desc
+  ].filter(value => typeof value === 'string' || typeof value === 'number').join(' ').toLowerCase();
+}
+
 function getPlanTypeKeys(plan: SupplierPlan): PlanTypeFilter[] {
-  const text = `${plan.name} ${plan.data_amount} ${plan.rule_desc_zh} ${plan.customer_note}`.toLowerCase();
-  const isUnlimited = text.includes('吃到飽') || text.includes('unlimited');
-  const isDaily = text.includes('每日') || /daily|\/day/.test(text);
-  const hasSpeedLimit = plan.flags.speedLimit || /128kb|256kb|512kb|1mbps|3mbps|5mbps|10mbps/.test(text);
+  const text = rawPlanText(plan);
+  const isUnlimited = text.includes('吃到飽') || /unlimited|吃放題|無限/.test(text);
+  const isDaily = text.includes('每日') || /daily|\/day|per day|daypass|day pass/.test(text);
+  const isTotal = text.includes('總量') || /total|fixed|package/.test(text);
+  const hasSpeedLimit = plan.flags.speedLimit || /128\s?kb|256\s?kb|384\s?kb|512\s?kb|1\s?mbps|3\s?mbps|5\s?mbps|10\s?mbps|limited speed|throttl/.test(text);
   const keys: PlanTypeFilter[] = [];
 
-  if (!isUnlimited && !isDaily) keys.push('metered');
+  if (!isUnlimited && (isTotal || !isDaily)) keys.push('metered');
   if (!isUnlimited && isDaily) keys.push('daily');
   if (isUnlimited) keys.push('unlimited');
   if (isUnlimited && hasSpeedLimit) keys.push('throttledUnlimited');
