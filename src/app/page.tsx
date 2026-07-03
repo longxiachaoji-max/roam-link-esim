@@ -7,6 +7,12 @@ import { trackPageView } from "@/lib/analytics";
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
+const shortenHotspotText = (value?: string) => {
+  const text = (value || '').trim();
+  if (!text) return '';
+  if (text.length <= 24) return text;
+  return `${text.slice(0, 24)}...`;
+};
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
@@ -654,7 +660,9 @@ export default function Home() {
                               <span>{plan.data}</span>
                             </span>
                             {currentOption.hotspot_sharing && (
-                              <span className="text-cyan font-medium">{currentOption.hotspot_sharing}</span>
+                              <span className="max-w-full truncate text-cyan font-medium" title={currentOption.hotspot_sharing}>
+                                {shortenHotspotText(currentOption.hotspot_sharing)}
+                              </span>
                             )}
                           </div>
                           <div className="flex items-center gap-3">

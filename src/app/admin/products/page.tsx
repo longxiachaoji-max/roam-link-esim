@@ -57,6 +57,21 @@ type BulkDeleteResult = {
   warning?: string;
 };
 
+type ProductEditDraft = {
+  country: string;
+  name: string;
+  data_amount: string;
+  description: string;
+  validity_days: string;
+  price: string;
+};
+
+type InlineEditResult = {
+  error?: string;
+  updated?: number;
+  failed?: number;
+};
+
 type SortKind = 'countries' | 'plans';
 
 type DragItem = {
@@ -114,6 +129,9 @@ export default function ProductsPage() {
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [bulkDeleteResult, setBulkDeleteResult] = useState<BulkDeleteResult | null>(null);
+  const [productDrafts, setProductDrafts] = useState<Record<string, ProductEditDraft>>({});
+  const [isInlineSaving, setIsInlineSaving] = useState(false);
+  const [inlineEditResult, setInlineEditResult] = useState<InlineEditResult | null>(null);
 
   const splitList = (value: string) => value
     .split(/[,，\n]/)
@@ -431,15 +449,92 @@ export default function ProductsPage() {
 
   const selectedProducts = products.filter(product => selectedProductIds.has(product.id));
 
+  const createProductDrafts = (items: Product[]) => Object.fromEntries(items.map(product => [product.id, {
+    country: product.country,
+    name: product.name,
+    data_amount: product.data_amount || '',
+    description: product.description || '',
+    validity_days: String(product.validity_days),
+    price: String(product.price)
+  }]));
+
+  const inlineEditChanges = products
+    .map(product => {
+      const draft = productDrafts[product.id];
+      if (!draft) return null;
+      const updates: Record<string, string | number | null> = {};
+      if (draft.country.trim() !== product.country) updates.country = draft.country.trim();
+      if (draft.name.trim() !== product.name) updates.name = draft.name.trim();
+      if (draft.data_amount.trim() !== (product.data_amount || '')) updates.data_amount = draft.data_amount.trim() || null;
+      if (draft.description.trim() !== (product.description || '')) updates.description = draft.description.trim() || null;
+      if (Number(draft.validity_days) !== product.validity_days) updates.validity_days = Number(draft.validity_days);
+      if (Number(draft.price) !== Number(product.price)) updates.price = Number(draft.price);
+      return Object.keys(updates).length > 0 ? { id: product.id, ...updates } : null;
+    })
+    .filter(Boolean) as Array<Record<string, string | number | null>>;
+
   const toggleSelectionMode = () => {
     setIsSelectionMode(prev => {
       const next = !prev;
       if (!next) {
         setSelectedProductIds(new Set());
         setBulkDeleteResult(null);
+        setInlineEditResult(null);
+        setProductDrafts({});
+      } else {
+        setProductDrafts(createProductDrafts(products));
       }
       return next;
     });
+  };
+
+  const updateProductDraft = (id: string, field: keyof ProductEditDraft, value: string) => {
+    setInlineEditResult(null);
+    setProductDrafts(prev => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || createProductDrafts(products)[id]),
+        [field]: value
+      }
+    }));
+  };
+
+  const resetInlineDrafts = () => {
+    setInlineEditResult(null);
+    setProductDrafts(createProductDrafts(products));
+  };
+
+  const handleInlineSave = async () => {
+    if (isInlineSaving || inlineEditChanges.length === 0) return;
+    const invalid = inlineEditChanges.find(item => {
+      if ('name' in item && !String(item.name || '').trim()) return true;
+      if ('country' in item && !String(item.country || '').trim()) return true;
+      if ('validity_days' in item && (!Number.isFinite(Number(item.validity_days)) || Number(item.validity_days) < 1)) return true;
+      if ('price' in item && (!Number.isFinite(Number(item.price)) || Number(item.price) < 0)) return true;
+      return false;
+    });
+    if (invalid) {
+      setInlineEditResult({ error: '有商品名稱、國家、天數或價格格式不正確，請先修正' });
+      return;
+    }
+
+    setIsInlineSaving(true);
+    setInlineEditResult(null);
+    try {
+      const res = await fetch('/api/admin/products/batch-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: inlineEditChanges })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '儲存失敗');
+      setInlineEditResult({ updated: json.updated || 0, failed: json.failed || 0 });
+      await fetchProducts();
+    } catch (err) {
+      setInlineEditResult({ error: err instanceof Error ? err.message : '儲存失敗' });
+    } finally {
+      setIsInlineSaving(false);
+    }
   };
 
   const toggleProductSelected = (id: string) => {
@@ -521,6 +616,7 @@ export default function ProductsPage() {
       if (json.products) {
         const productList = json.products as Product[];
         setProducts(productList);
+        if (isSelectionMode) setProductDrafts(createProductDrafts(productList));
         if (!hasInitializedCollapse.current) {
           setCollapsedGroups(new Set(productList.map(product => product.country)));
           hasInitializedCollapse.current = true;
@@ -851,10 +947,24 @@ export default function ProductsPage() {
         <div className="mb-6 rounded-lg border border-red-400/20 bg-red-500/10 px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-bold text-white">批量編輯模式</p>
-              <p className="mt-1 text-xs text-white/45">已選 {selectedProducts.length} 筆商品。批量刪除會一次處理，不會每筆重整。</p>
+              <p className="text-sm font-bold text-white">表格編輯模式</p>
+              <p className="mt-1 text-xs text-white/45">可直接修改欄位後一次儲存。已修改 {inlineEditChanges.length} 筆，已選 {selectedProducts.length} 筆。</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleInlineSave}
+                disabled={isInlineSaving || inlineEditChanges.length === 0}
+                className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isInlineSaving ? '儲存中...' : `儲存變更 ${inlineEditChanges.length}`}
+              </button>
+              <button
+                onClick={resetInlineDrafts}
+                disabled={inlineEditChanges.length === 0}
+                className="rounded-md border border-white/15 px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/10 disabled:opacity-40"
+              >
+                還原變更
+              </button>
               <button
                 onClick={selectAllProducts}
                 disabled={products.length === 0}
@@ -884,6 +994,13 @@ export default function ProductsPage() {
               {bulkDeleteResult.error
                 ? bulkDeleteResult.error
                 : `已刪除 ${bulkDeleteResult.deleted || 0} 筆商品${bulkDeleteResult.warning ? `，${bulkDeleteResult.warning}` : ''}`}
+            </div>
+          )}
+          {inlineEditResult && (
+            <div className={`mt-3 rounded-md border px-3 py-2 text-sm ${inlineEditResult.error ? 'border-red-400/25 bg-red-500/10 text-red-200' : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'}`}>
+              {inlineEditResult.error
+                ? inlineEditResult.error
+                : `已儲存 ${inlineEditResult.updated || 0} 筆商品${inlineEditResult.failed ? `，失敗 ${inlineEditResult.failed} 筆` : ''}`}
             </div>
           )}
         </div>
@@ -947,9 +1064,13 @@ export default function ProductsPage() {
                       {/* Products in this group */}
                       {dataProducts
                         .sort((a, b) => a.validity_days - b.validity_days)
-                        .map((product) => (
-                        <div key={product.id} className={`flex items-center justify-between px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : 'hover:bg-white/5'}`}>
-                          <div className="flex items-center gap-6 flex-1 min-w-0">
+                        .map((product) => {
+                          const draft = productDrafts[product.id];
+                          const isChanged = Boolean(inlineEditChanges.find(item => item.id === product.id));
+                          return (
+                        <div key={product.id} className={`px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : isChanged ? 'bg-emerald-400/10' : 'hover:bg-white/5'}`}>
+                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.5fr)_minmax(120px,1fr)_minmax(180px,1.4fr)_96px_96px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
+                            <div className={`${isSelectionMode ? 'contents' : 'flex items-center gap-6 flex-1 min-w-0'}`}>
                             {isSelectionMode && (
                               <button
                                 type="button"
@@ -964,16 +1085,64 @@ export default function ProductsPage() {
                                 <CheckSquare className="h-4 w-4" />
                               </button>
                             )}
-                            <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
-                            <span className="text-sm text-white/90 font-medium truncate">{product.name}</span>
+                            {isSelectionMode ? (
+                              <>
+                                <input
+                                  value={draft?.country || product.country}
+                                  onChange={(event) => updateProductDraft(product.id, 'country', event.target.value)}
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
+                                  aria-label="國家"
+                                />
+                                <input
+                                  value={draft?.name || product.name}
+                                  onChange={(event) => updateProductDraft(product.id, 'name', event.target.value)}
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
+                                  aria-label="商品名稱"
+                                />
+                                <input
+                                  value={draft?.data_amount ?? product.data_amount ?? ''}
+                                  onChange={(event) => updateProductDraft(product.id, 'data_amount', event.target.value)}
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
+                                  aria-label="流量規格"
+                                />
+                                <input
+                                  value={draft?.description ?? product.description ?? ''}
+                                  onChange={(event) => updateProductDraft(product.id, 'description', event.target.value)}
+                                  placeholder="熱點/短備註"
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white placeholder:text-white/25"
+                                  aria-label="熱點分享"
+                                />
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={draft?.validity_days || String(product.validity_days)}
+                                  onChange={(event) => updateProductDraft(product.id, 'validity_days', event.target.value)}
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
+                                  aria-label="有效天數"
+                                />
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={draft?.price || String(product.price)}
+                                  onChange={(event) => updateProductDraft(product.id, 'price', event.target.value)}
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
+                                  aria-label="價格"
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
+                                <span className="text-sm text-white/90 font-medium truncate">{product.name}</span>
+                              </>
+                            )}
                             {duplicateNameCounts[product.name] > 1 && (
                               <span className="text-[10px] text-white/40 bg-white/10 rounded px-1.5 py-0.5 shrink-0">
                                 ID {product.id.slice(0, 8)}
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 shrink-0">
-                            <span className="text-sm font-bold text-white/90">NT${product.price}</span>
+                          <div className="flex items-center justify-end gap-4 shrink-0">
+                            {!isSelectionMode && <span className="text-sm font-bold text-white/90">NT${product.price}</span>}
                             <span className="text-xs w-12 text-center">
                               <span className={product.stock.available > 0 ? 'text-green-400' : 'text-red-400'}>{product.stock.available}</span>
                               <span className="text-white/30">/{product.stock.total}</span>
@@ -987,8 +1156,10 @@ export default function ProductsPage() {
                             <button onClick={() => openEditModal(product)} className="text-blue-400 hover:text-blue-300 text-xs transition-colors">編輯</button>
                             {!isSelectionMode && <button onClick={() => setDeleteConfirmId(product.id)} className="text-red-400 hover:text-red-300 text-xs transition-colors">刪除</button>}
                           </div>
+                          </div>
                         </div>
-                      ))}
+                      );
+                    })}
                     </div>
                   ))}
                 </div>

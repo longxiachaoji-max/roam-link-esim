@@ -12,12 +12,15 @@ function getSupabase() {
 
 type ProductTextUpdate = {
   id?: string;
+  country?: string | null;
   name?: string;
   data_amount?: string | null;
+  validity_days?: number | string | null;
+  price?: number | string | null;
   description?: string | null;
 };
 
-const allowedFields = ['name', 'data_amount', 'description'] as const;
+const textFields = ['name', 'country', 'data_amount', 'description'] as const;
 
 export async function POST(request: Request) {
   try {
@@ -41,11 +44,27 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const updateData: Record<string, string | null> = {};
-      for (const field of allowedFields) {
+      const updateData: Record<string, string | number | null> = {};
+      for (const field of textFields) {
         if (field in item) {
           updateData[field] = item[field] ?? null;
         }
+      }
+      if ('validity_days' in item) {
+        const days = Number(item.validity_days);
+        if (!Number.isFinite(days) || days < 1) {
+          failed.push({ id: item.id, reason: '有效天數格式錯誤' });
+          continue;
+        }
+        updateData.validity_days = days;
+      }
+      if ('price' in item) {
+        const price = Number(item.price);
+        if (!Number.isFinite(price) || price < 0) {
+          failed.push({ id: item.id, reason: '價格格式錯誤' });
+          continue;
+        }
+        updateData.price = price;
       }
 
       if (Object.keys(updateData).length === 0) {
