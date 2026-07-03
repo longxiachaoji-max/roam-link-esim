@@ -8,34 +8,50 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// GET - 取得所有商品，按 country 排序
-export async function GET() {
-  try {
-    let { data, error } = await supabase
+async function fetchProductsWithOptionalColumns() {
+  const baseColumns = 'id, name, description, price, country, data_amount, validity_days, is_active, created_at';
+  const attempts = [
+    {
+      select: `id, name, description, internal_note, price, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at`,
+      map: (products: any[]) => products
+    },
+    {
+      select: `${baseColumns}, supplier_cost_twd`,
+      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null }))
+    },
+    {
+      select: `${baseColumns}, internal_note`,
+      map: (products: any[]) => products.map(product => ({ ...product, supplier_cost_twd: null }))
+    },
+    {
+      select: baseColumns,
+      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, supplier_cost_twd: null }))
+    }
+  ];
+
+  let lastError: any = null;
+  for (const attempt of attempts) {
+    const result = await supabase
       .from('products')
-      .select('id, name, description, internal_note, price, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at')
+      .select(attempt.select)
       .order('country', { ascending: true })
       .order('price', { ascending: true });
 
-    if (error && /internal_note|column/i.test(error.message || '')) {
-      const fallback = await supabase
-        .from('products')
-        .select('id, name, description, price, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at')
-        .order('country', { ascending: true })
-        .order('price', { ascending: true });
-      data = (fallback.data || []).map((product: any) => ({ ...product, internal_note: null }));
-      error = fallback.error;
+    if (!result.error) {
+      return { data: attempt.map(result.data || []), error: null };
     }
 
-    if (error && /supplier_cost_twd|column/i.test(error.message || '')) {
-      const fallback = await supabase
-        .from('products')
-        .select('id, name, description, internal_note, price, country, data_amount, validity_days, is_active, created_at')
-        .order('country', { ascending: true })
-        .order('price', { ascending: true });
-      data = (fallback.data || []).map((product: any) => ({ ...product, supplier_cost_twd: null }));
-      error = fallback.error;
-    }
+    lastError = result.error;
+    if (!/column|internal_note|supplier_cost_twd/i.test(result.error.message || '')) break;
+  }
+
+  return { data: null, error: lastError };
+}
+
+// GET - 取得所有商品，按 country 排序
+export async function GET() {
+  try {
+    const { data, error } = await fetchProductsWithOptionalColumns();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
