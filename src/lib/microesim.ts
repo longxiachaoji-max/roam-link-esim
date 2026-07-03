@@ -404,7 +404,7 @@ export function transformMicroesimPlan(
     supplier: 'microesim',
     supplier_plan_id: plan.channel_dataplan_id,
     supplier_plan_name: plan.channel_dataplan_name,
-    name: `${country}${carrier ? ` ${carrier}` : ''} 高速上網 ${plan.day}天/${data.nameData}`,
+    name: `${country} 高速上網 ${plan.day}天/${data.nameData}`,
     country,
     data_amount: data.dataAmount,
     hotspot_sharing: hotspot,
