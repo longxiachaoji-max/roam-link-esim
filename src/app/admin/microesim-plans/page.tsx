@@ -83,7 +83,6 @@ const countryOptions: CountryOption[] = [
   { code: 'KH', name: '柬埔寨' }
 ];
 
-const dayOptions = ['全部', '1', '3', '5', '7', '10', '15', '30'];
 type SortField = 'default' | 'name' | 'supplierName' | 'carrier' | 'cost' | 'suggestedPrice' | 'note' | 'flags';
 type SortDirection = 'asc' | 'desc';
 type PlanTypeFilter = 'metered' | 'daily' | 'unlimited' | 'throttledUnlimited' | 'highSpeedUnlimited';
@@ -238,7 +237,7 @@ export default function MicroesimPlansPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedCountry, setSelectedCountry] = useState('KR');
   const [search, setSearch] = useState('');
-  const [day, setDay] = useState('全部');
+  const [day, setDay] = useState('');
   const [hideKyc, setHideKyc] = useState(false);
   const [hideNoHotspot, setHideNoHotspot] = useState(false);
   const [hideNoGpt, setHideNoGpt] = useState(false);
@@ -260,7 +259,8 @@ export default function MicroesimPlansPage() {
     const keyword = search.trim().toLowerCase();
     const filtered = plans.filter(plan => {
       if (favoritesOnly && !favoritePlanIds.has(plan.supplier_plan_id)) return false;
-      if (day !== '全部' && String(plan.validity_days) !== day) return false;
+      const dayKeyword = day.trim();
+      if (dayKeyword && String(plan.validity_days) !== dayKeyword) return false;
       if (hideKyc && plan.flags.kyc) return false;
       if (hideNoHotspot && plan.flags.noHotspot) return false;
       if (hideNoGpt && plan.flags.noGpt) return false;
@@ -475,9 +475,15 @@ export default function MicroesimPlansPage() {
           </label>
           <label className="text-xs text-white/50">
             天數
-            <select value={day} onChange={(event) => setDay(event.target.value)} className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white">
-              {dayOptions.map(option => <option key={option} value={option} className="text-black">{option}</option>)}
-            </select>
+            <input
+              type="number"
+              min="1"
+              inputMode="numeric"
+              value={day}
+              onChange={(event) => setDay(event.target.value)}
+              placeholder="空白為全部"
+              className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30"
+            />
           </label>
           <label className="relative text-xs text-white/50 xl:col-span-2">
             搜尋
