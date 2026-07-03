@@ -13,17 +13,27 @@ export async function GET() {
   try {
     let { data, error } = await supabase
       .from('products')
-      .select('id, name, description, internal_note, price, country, data_amount, validity_days, is_active, created_at')
+      .select('id, name, description, internal_note, price, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at')
       .order('country', { ascending: true })
       .order('price', { ascending: true });
 
     if (error && /internal_note|column/i.test(error.message || '')) {
       const fallback = await supabase
         .from('products')
-        .select('id, name, description, price, country, data_amount, validity_days, is_active, created_at')
+        .select('id, name, description, price, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at')
         .order('country', { ascending: true })
         .order('price', { ascending: true });
       data = (fallback.data || []).map((product: any) => ({ ...product, internal_note: null }));
+      error = fallback.error;
+    }
+
+    if (error && /supplier_cost_twd|column/i.test(error.message || '')) {
+      const fallback = await supabase
+        .from('products')
+        .select('id, name, description, internal_note, price, country, data_amount, validity_days, is_active, created_at')
+        .order('country', { ascending: true })
+        .order('price', { ascending: true });
+      data = (fallback.data || []).map((product: any) => ({ ...product, supplier_cost_twd: null }));
       error = fallback.error;
     }
 

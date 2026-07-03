@@ -12,6 +12,7 @@ interface Product {
   data_amount: string | null;
   validity_days: number;
   price: number;
+  supplier_cost_twd: number | null;
   is_active: boolean;
   created_at: string;
   stock: { available: number; total: number };
@@ -101,6 +102,16 @@ const REPLACE_DEFAULTS = {
   findText: '每日熱點2GB',
   replaceText: '熱點總量4GB'
 };
+
+function money(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '未填';
+  return `NT$${Math.round(Number(value)).toLocaleString('zh-TW')}`;
+}
+
+function getMargin(price: number, cost: number | null | undefined) {
+  if (cost === null || cost === undefined || Number.isNaN(Number(cost))) return null;
+  return Number(price) - Number(cost);
+}
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -1090,9 +1101,10 @@ export default function ProductsPage() {
                         .map((product) => {
                           const draft = productDrafts[product.id];
                           const isChanged = Boolean(inlineEditChanges.find(item => item.id === product.id));
+                          const margin = getMargin(Number(draft?.price || product.price), product.supplier_cost_twd);
                           return (
                         <div key={product.id} className={`px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : isChanged ? 'bg-emerald-400/10' : 'hover:bg-white/5'}`}>
-                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.4fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
+                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.4fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_112px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
                             <div className={`${isSelectionMode ? 'contents' : 'flex items-center gap-6 flex-1 min-w-0'}`}>
                             {isSelectionMode && (
                               <button
@@ -1158,6 +1170,12 @@ export default function ProductsPage() {
                                   className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
                                   aria-label="價格"
                                 />
+                                <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] leading-4 text-white/55">
+                                  <div>成本 {money(product.supplier_cost_twd)}</div>
+                                  <div className={margin === null ? 'text-white/30' : margin >= 0 ? 'text-emerald-300/80' : 'text-red-300/80'}>
+                                    毛利 {margin === null ? '未算' : money(margin)}
+                                  </div>
+                                </div>
                               </>
                             ) : (
                               <>
@@ -1172,7 +1190,15 @@ export default function ProductsPage() {
                             )}
                           </div>
                           <div className="flex items-center justify-end gap-4 shrink-0">
-                            {!isSelectionMode && <span className="text-sm font-bold text-white/90">NT${product.price}</span>}
+                            {!isSelectionMode && (
+                              <div className="text-right">
+                                <div className="text-sm font-bold text-white/90">NT${product.price}</div>
+                                <div className="text-[11px] text-white/40">
+                                  成本 {money(product.supplier_cost_twd)}
+                                  {margin !== null && <span className={margin >= 0 ? 'text-emerald-300/70' : 'text-red-300/70'}> / 利 {money(margin)}</span>}
+                                </div>
+                              </div>
+                            )}
                             <span className="text-xs w-12 text-center">
                               <span className={product.stock.available > 0 ? 'text-green-400' : 'text-red-400'}>{product.stock.available}</span>
                               <span className="text-white/30">/{product.stock.total}</span>
