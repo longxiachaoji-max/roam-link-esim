@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, Check, DownloadCloud, Filter, Loader2, Search, UploadCloud } from 'lucide-react';
+import { ArrowDownUp, Check, DownloadCloud, Filter, Loader2, Search, Star, UploadCloud } from 'lucide-react';
 
 type SupplierPlan = {
   supplier_plan_id: string;
@@ -95,6 +95,8 @@ const planTypeOptions: { key: PlanTypeFilter; label: string }[] = [
   { key: 'highSpeedUnlimited', label: '高速吃到飽' }
 ];
 
+const FAVORITES_STORAGE_KEY = 'firstroamlink.microesim.favoritePlanIds';
+
 function money(value: number) {
   return `NT$${Math.round(value || 0).toLocaleString('zh-TW')}`;
 }
@@ -102,6 +104,19 @@ function money(value: number) {
 function yesNoBadge(active: boolean, label: string, activeClass = 'bg-red-500/15 text-red-200 border-red-400/30') {
   if (!active) return null;
   return <span className={`inline-flex rounded-md border px-1.5 py-0.5 text-[11px] ${activeClass}`}>{label}</span>;
+}
+
+function loadFavoritePlanIds() {
+  if (typeof window === 'undefined') return new Set<string>();
+  try {
+    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set(parsed.filter(id => typeof id === 'string'));
+  } catch {
+    return new Set<string>();
+  }
 }
 
 function rawPlanText(plan: SupplierPlan) {
@@ -156,6 +171,8 @@ export default function MicroesimPlansPage() {
   const [sortField, setSortField] = useState<SortField>('default');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [planTypeFilters, setPlanTypeFilters] = useState<Set<PlanTypeFilter>>(new Set());
+  const [favoritePlanIds, setFavoritePlanIds] = useState<Set<string>>(loadFavoritePlanIds);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const plans = useMemo(() => data?.plans || [], [data]);
   const selectedCountryName = countryOptions.find(country => country.code === selectedCountry)?.name || '韓國';
@@ -164,6 +181,7 @@ export default function MicroesimPlansPage() {
   const filteredPlans = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     const filtered = plans.filter(plan => {
+      if (favoritesOnly && !favoritePlanIds.has(plan.supplier_plan_id)) return false;
       if (day !== '全部' && String(plan.validity_days) !== day) return false;
       if (hideKyc && plan.flags.kyc) return false;
       if (hideNoHotspot && plan.flags.noHotspot) return false;
@@ -192,9 +210,10 @@ export default function MicroesimPlansPage() {
         : a.cost_twd - b.cost_twd;
       return sortDirection === 'asc' ? result : -result;
     });
-  }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, sortField, sortDirection]);
+  }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
 
   const selectedPlans = plans.filter(plan => selected.has(plan.supplier_plan_id));
+  const favoriteCount = plans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
 
   const toggleSelected = (id: string) => {
     setSelected(prev => {
@@ -220,6 +239,16 @@ export default function MicroesimPlansPage() {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
+      return next;
+    });
+  };
+
+  const toggleFavorite = (id: string) => {
+    setFavoritePlanIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(Array.from(next)));
       return next;
     });
   };
@@ -326,8 +355,8 @@ export default function MicroesimPlansPage() {
           <p className="mt-1 text-2xl font-bold text-white">{money(avgCost)}</p>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <p className="text-xs text-white/40">含限制備註</p>
-          <p className="mt-1 text-2xl font-bold text-white">{riskyCount}</p>
+          <p className="text-xs text-white/40">我的最愛 / 含限制</p>
+          <p className="mt-1 text-2xl font-bold text-white">{favoriteCount}<span className="text-base text-white/35"> / {riskyCount}</span></p>
         </div>
       </div>
 
@@ -386,6 +415,18 @@ export default function MicroesimPlansPage() {
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-white/60">
+          <button
+            type="button"
+            onClick={() => setFavoritesOnly(prev => !prev)}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-bold transition-colors ${
+              favoritesOnly
+                ? 'border-yellow-300/60 bg-yellow-400/15 text-yellow-100'
+                : 'border-white/15 text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Star className={`h-3.5 w-3.5 ${favoritesOnly ? 'fill-yellow-300' : ''}`} />
+            只看我的最愛 {favoriteCount}
+          </button>
           {planTypeOptions.map(option => {
             const isActive = planTypeFilters.has(option.key);
             return (
@@ -424,7 +465,7 @@ export default function MicroesimPlansPage() {
           <table className="w-full min-w-[1260px] text-sm">
             <thead className="sticky top-0 bg-[#17172a] text-xs text-white/45">
               <tr>
-                <th className="w-10 px-3 py-3 text-left"></th>
+                <th className="w-20 px-3 py-3 text-left"></th>
                 <th className="px-3 py-3 text-left">一飛通商品名稱</th>
                 <th className="px-3 py-3 text-left">MicroEsim 原名稱</th>
                 <th className="px-3 py-3 text-left">
@@ -462,9 +503,24 @@ export default function MicroesimPlansPage() {
                 <tr><td colSpan={8} className="px-3 py-12 text-center text-white/35">尚未同步，或目前篩選沒有資料</td></tr>
               ) : filteredPlans.map(plan => {
                 const checked = selected.has(plan.supplier_plan_id);
+                const isFavorite = favoritePlanIds.has(plan.supplier_plan_id);
                 return (
-                  <tr key={plan.supplier_plan_id} className={checked ? 'bg-cyan-400/10' : 'hover:bg-white/[0.03]'}>
+                  <tr key={plan.supplier_plan_id} className={checked ? 'bg-cyan-400/10' : isFavorite ? 'bg-yellow-400/[0.04]' : 'hover:bg-white/[0.03]'}>
                     <td className="px-3 py-3 align-top">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite(plan.supplier_plan_id)}
+                          className={`flex h-6 w-6 items-center justify-center rounded-md border ${
+                            isFavorite
+                              ? 'border-yellow-300/60 bg-yellow-400/15 text-yellow-200'
+                              : 'border-white/15 text-white/35 hover:border-yellow-300/50 hover:text-yellow-200'
+                          }`}
+                          aria-label={isFavorite ? '移除我的最愛' : '加入我的最愛'}
+                          title={isFavorite ? '移除我的最愛' : '加入我的最愛'}
+                        >
+                          <Star className={`h-4 w-4 ${isFavorite ? 'fill-yellow-300' : ''}`} />
+                        </button>
                       <button
                         onClick={() => toggleSelected(plan.supplier_plan_id)}
                         className={`flex h-6 w-6 items-center justify-center rounded-md border ${checked ? 'border-cyan-300 bg-cyan-500 text-white' : 'border-white/20 text-transparent hover:border-cyan-300'}`}
@@ -472,6 +528,7 @@ export default function MicroesimPlansPage() {
                       >
                         <Check className="h-4 w-4" />
                       </button>
+                      </div>
                     </td>
                     <td className="px-3 py-3 align-top">
                       <div className="font-semibold text-white">{plan.name}</div>
