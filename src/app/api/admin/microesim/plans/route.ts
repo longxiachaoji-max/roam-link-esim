@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchMicroesimPlansByCountry, MICROESIM_COUNTRY_OPTIONS } from '@/lib/microesim';
+import { fetchMicroesimPlansByCountry, MICROESIM_COUNTRY_OPTIONS, MICROESIM_REGION_OPTION } from '@/lib/microesim';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,9 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const countryCode = (url.searchParams.get('country') || 'KR').toUpperCase();
-    const country = MICROESIM_COUNTRY_OPTIONS.find(option => option.code === countryCode);
+    const country = countryCode === MICROESIM_REGION_OPTION.code
+      ? MICROESIM_REGION_OPTION
+      : MICROESIM_COUNTRY_OPTIONS.find(option => option.code === countryCode);
     if (!country) {
       return NextResponse.json({ error: '不支援的國家代碼' }, { status: 400 });
     }

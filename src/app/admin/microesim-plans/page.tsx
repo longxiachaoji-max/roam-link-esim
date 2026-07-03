@@ -54,6 +54,7 @@ type SyncResult = {
 };
 
 const countryOptions: CountryOption[] = [
+  { code: 'MULTI', name: '多國/區域' },
   { code: 'KR', name: '韓國' },
   { code: 'JP', name: '日本' },
   { code: 'TH', name: '泰國' },

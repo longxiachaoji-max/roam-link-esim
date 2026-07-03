@@ -76,6 +76,12 @@ export const MICROESIM_COUNTRY_OPTIONS: MicroesimCountryOption[] = [
   { code: 'KH', name: '柬埔寨', aliases: ['cambodia'] }
 ];
 
+export const MICROESIM_REGION_OPTION: MicroesimCountryOption = {
+  code: 'MULTI',
+  name: '多國/區域',
+  aliases: ['multi', 'regional', 'region', 'asia', 'europe', 'global']
+};
+
 interface MicroesimPlanPage {
   pageNo: number;
   pageSize: number;
@@ -223,6 +229,36 @@ function isCountryPlan(plan: MicroesimPlan, country: MicroesimCountryOption) {
   return new RegExp(`\\b${code}\\b`).test(haystack)
     || haystack.includes(`${code}:`)
     || country.aliases.some(alias => haystack.includes(alias));
+}
+
+function getPlanCountryCodes(plan: MicroesimPlan) {
+  const codes = new Set<string>();
+  const planCode = normalizeText(plan.code).toUpperCase();
+  if (/^[A-Z]{2}$/.test(planCode)) codes.add(planCode);
+
+  const networks = normalizeText(plan.networks).toUpperCase();
+  for (const match of networks.matchAll(/(?:^|\|)\s*([A-Z]{2})\s*:/g)) {
+    codes.add(match[1]);
+  }
+
+  return Array.from(codes);
+}
+
+function isMultiCountryPlan(plan: MicroesimPlan) {
+  const codes = getPlanCountryCodes(plan);
+  if (codes.length > 1) return true;
+
+  const text = `${plan.channel_dataplan_name} ${plan.code || ''} ${plan.networks || ''}`.toLowerCase();
+  return /multi|regional|global|world|asia|europe|north america|latin america|middle east|\d+\s*(countries|countrys|regions|國|国)/.test(text);
+}
+
+function getRegionCountryName(plan: MicroesimPlan) {
+  const text = `${plan.channel_dataplan_name} ${plan.code || ''} ${plan.networks || ''}`.toLowerCase();
+  if (/global|world|worldwide|全球/.test(text)) return '全球多國';
+  if (/europe|eu\b|歐洲|欧洲/.test(text)) return '歐洲多國';
+  if (/asia|asian|東南亞|东南亚|亞洲|亚洲/.test(text)) return '亞洲多國';
+  if (/north america|america|usa|canada|美加/.test(text)) return '美洲多國';
+  return '多國/區域';
 }
 
 function normalizeCarrierName(rawCarrier: string, countryCode: string) {
@@ -420,7 +456,10 @@ export function transformMicroesimPlan(
   plan: MicroesimPlan,
   options: { countryCode?: string; countryName?: string; hkdRate?: number; usdRate?: number; markup?: number } = {}
 ): TransformedMicroesimPlan {
-  const country = options.countryName || getCountryOption(plan.code || '').name || normalizeText(plan.code) || '其他';
+  const isRegional = isMultiCountryPlan(plan);
+  const country = isRegional
+    ? getRegionCountryName(plan)
+    : options.countryName || getCountryOption(plan.code || '').name || normalizeText(plan.code) || '其他';
   const carrier = getCarrier(plan, options.countryCode);
   const data = parseDataLabel(plan);
   const activeTypeNote = translateActiveType(plan.active_type);
@@ -486,7 +525,9 @@ export async function fetchMicroesimPlansByCountry(
   countryCode = 'KR',
   options: { hkdRate?: number; usdRate?: number; markup?: number; maxPages?: number } = {}
 ) {
-  const country = getCountryOption(countryCode);
+  const normalizedCountryCode = countryCode.trim().toUpperCase();
+  const isRegionMode = normalizedCountryCode === MICROESIM_REGION_OPTION.code;
+  const country = isRegionMode ? MICROESIM_REGION_OPTION : getCountryOption(normalizedCountryCode);
   const firstPage = await fetchMicroesimPlanPage(1, 500);
   const totalPages = Math.min(firstPage.totalPages || 1, options.maxPages || 60);
   const allPlans = [...(firstPage.list || [])];
@@ -501,8 +542,12 @@ export async function fetchMicroesimPlansByCountry(
   }
 
   const plans = allPlans
-    .filter(plan => isCountryPlan(plan, country))
-    .map(plan => transformMicroesimPlan(plan, { ...options, countryCode: country.code, countryName: country.name }))
+    .filter(plan => isRegionMode ? isMultiCountryPlan(plan) : isCountryPlan(plan, country))
+    .map(plan => transformMicroesimPlan(plan, {
+      ...options,
+      countryCode: isRegionMode ? undefined : country.code,
+      countryName: isRegionMode ? getRegionCountryName(plan) : country.name
+    }))
     .sort((a, b) => {
       if (a.validity_days !== b.validity_days) return a.validity_days - b.validity_days;
       if (a.data_amount !== b.data_amount) return a.data_amount.localeCompare(b.data_amount, 'zh-Hant');
