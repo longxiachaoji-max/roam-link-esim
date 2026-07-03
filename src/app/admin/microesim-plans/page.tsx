@@ -83,7 +83,7 @@ const countryOptions: CountryOption[] = [
 ];
 
 const dayOptions = ['全部', '1', '3', '5', '7', '10', '15', '30'];
-type SortField = 'default' | 'cost' | 'carrier';
+type SortField = 'default' | 'name' | 'supplierName' | 'carrier' | 'cost' | 'suggestedPrice' | 'note' | 'flags';
 type SortDirection = 'asc' | 'desc';
 type PlanTypeFilter = 'metered' | 'daily' | 'unlimited' | 'throttledUnlimited' | 'highSpeedUnlimited';
 
@@ -97,6 +97,16 @@ const planTypeOptions: { key: PlanTypeFilter; label: string }[] = [
 
 const FAVORITES_STORAGE_KEY = 'firstroamlink.microesim.favoritePlanIds';
 
+const sortLabels: Partial<Record<SortField, [string, string]>> = {
+  name: ['A-Z', 'Z-A'],
+  supplierName: ['A-Z', 'Z-A'],
+  carrier: ['A-Z', 'Z-A'],
+  cost: ['低到高', '高到低'],
+  suggestedPrice: ['低到高', '高到低'],
+  note: ['A-Z', 'Z-A'],
+  flags: ['少到多', '多到少']
+};
+
 function money(value: number) {
   return `NT$${Math.round(value || 0).toLocaleString('zh-TW')}`;
 }
@@ -104,6 +114,36 @@ function money(value: number) {
 function yesNoBadge(active: boolean, label: string, activeClass = 'bg-red-500/15 text-red-200 border-red-400/30') {
   if (!active) return null;
   return <span className={`inline-flex rounded-md border px-1.5 py-0.5 text-[11px] ${activeClass}`}>{label}</span>;
+}
+
+function SortHeader({
+  label,
+  field,
+  align = 'left',
+  sortField,
+  sortDirection,
+  onSort
+}: {
+  label: string;
+  field: Exclude<SortField, 'default'>;
+  align?: 'left' | 'right';
+  sortField: SortField;
+  sortDirection: SortDirection;
+  onSort: (field: Exclude<SortField, 'default'>) => void;
+}) {
+  const isActive = sortField === field;
+  const activeLabel = sortLabels[field]?.[sortDirection === 'asc' ? 0 : 1];
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(field)}
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white ${align === 'right' ? 'ml-auto' : ''}`}
+    >
+      {label}
+      <ArrowDownUp className="h-3.5 w-3.5" />
+      {isActive && activeLabel && <span className="text-cyan-200">{activeLabel}</span>}
+    </button>
+  );
 }
 
 function loadFavoritePlanIds() {
@@ -149,6 +189,43 @@ function getPlanTypeKeys(plan: SupplierPlan): PlanTypeFilter[] {
   if (isUnlimited && !hasSpeedLimit) keys.push('highSpeedUnlimited');
 
   return keys;
+}
+
+function flagSortValue(plan: SupplierPlan) {
+  return [
+    plan.flags.kyc,
+    plan.flags.noHotspot,
+    plan.flags.noGpt,
+    plan.flags.noReinstall,
+    plan.flags.speedLimit,
+    plan.flags.terminateAfterUse
+  ].filter(Boolean).length;
+}
+
+function getSortValue(plan: SupplierPlan, field: SortField) {
+  switch (field) {
+    case 'name':
+      return `${plan.name} ${plan.validity_days.toString().padStart(3, '0')} ${plan.data_amount}`;
+    case 'supplierName':
+      return `${plan.supplier_plan_name} ${plan.supplier_plan_id}`;
+    case 'carrier':
+      return plan.carrier || '未標示';
+    case 'cost':
+      return plan.cost_twd;
+    case 'suggestedPrice':
+      return plan.suggested_price;
+    case 'note':
+      return `${plan.customer_note || '無特別備註'} ${plan.active_type_note || ''}`;
+    case 'flags':
+      return flagSortValue(plan);
+    default:
+      return 0;
+  }
+}
+
+function compareSortValues(a: string | number, b: string | number) {
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  return String(a).localeCompare(String(b), 'zh-Hant', { numeric: true });
 }
 
 export default function MicroesimPlansPage() {
@@ -205,9 +282,7 @@ export default function MicroesimPlansPage() {
     });
     if (sortField === 'default') return filtered;
     return [...filtered].sort((a, b) => {
-      const result = sortField === 'carrier'
-        ? (a.carrier || '未標示').localeCompare(b.carrier || '未標示', 'zh-Hant')
-        : a.cost_twd - b.cost_twd;
+      const result = compareSortValues(getSortValue(a, sortField), getSortValue(b, sortField));
       return sortDirection === 'asc' ? result : -result;
     });
   }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
@@ -466,34 +541,27 @@ export default function MicroesimPlansPage() {
             <thead className="sticky top-0 bg-[#17172a] text-xs text-white/45">
               <tr>
                 <th className="w-20 px-3 py-3 text-left"></th>
-                <th className="px-3 py-3 text-left">一飛通商品名稱</th>
-                <th className="px-3 py-3 text-left">MicroEsim 原名稱</th>
                 <th className="px-3 py-3 text-left">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('carrier')}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white"
-                  >
-                    電信商
-                    <ArrowDownUp className="h-3.5 w-3.5" />
-                    {sortField === 'carrier' && <span className="text-cyan-200">{sortDirection === 'asc' ? 'A-Z' : 'Z-A'}</span>}
-                  </button>
+                  <SortHeader label="一飛通商品名稱" field="name" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
+                </th>
+                <th className="px-3 py-3 text-left">
+                  <SortHeader label="MicroEsim 原名稱" field="supplierName" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
+                </th>
+                <th className="px-3 py-3 text-left">
+                  <SortHeader label="電信商" field="carrier" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
                 </th>
                 <th className="px-3 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('cost')}
-                    className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white"
-                  >
-                    成本
-                    <ArrowDownUp className="h-3.5 w-3.5" />
-                    {sortField === 'cost' && sortDirection === 'asc' && <span className="text-cyan-200">低到高</span>}
-                    {sortField === 'cost' && sortDirection === 'desc' && <span className="text-cyan-200">高到低</span>}
-                  </button>
+                  <SortHeader label="成本" field="cost" align="right" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
                 </th>
-                <th className="px-3 py-3 text-right">建議售價</th>
-                <th className="px-3 py-3 text-left">中文備註</th>
-                <th className="px-3 py-3 text-left">限制</th>
+                <th className="px-3 py-3 text-right">
+                  <SortHeader label="建議售價" field="suggestedPrice" align="right" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
+                </th>
+                <th className="px-3 py-3 text-left">
+                  <SortHeader label="中文備註" field="note" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
+                </th>
+                <th className="px-3 py-3 text-left">
+                  <SortHeader label="限制" field="flags" sortField={sortField} sortDirection={sortDirection} onSort={toggleSort} />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
