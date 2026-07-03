@@ -11,11 +11,21 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // GET - 取得所有商品，按 country 排序
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('products')
-      .select('id, name, description, price, country, data_amount, validity_days, is_active, created_at')
+      .select('id, name, description, internal_note, price, country, data_amount, validity_days, is_active, created_at')
       .order('country', { ascending: true })
       .order('price', { ascending: true });
+
+    if (error && /internal_note|column/i.test(error.message || '')) {
+      const fallback = await supabase
+        .from('products')
+        .select('id, name, description, price, country, data_amount, validity_days, is_active, created_at')
+        .order('country', { ascending: true })
+        .order('price', { ascending: true });
+      data = (fallback.data || []).map((product: any) => ({ ...product, internal_note: null }));
+      error = fallback.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -54,24 +64,38 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, country, data_amount, validity_days, price, description } = body;
+    const { name, country, data_amount, validity_days, price, description, internal_note } = body;
 
     if (!name || !country || !validity_days || price === undefined) {
       return NextResponse.json({ error: '缺少必要欄位 (name, country, validity_days, price)' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const insertPayload: any = {
+      name,
+      country,
+      data_amount: data_amount || '',
+      validity_days: Number(validity_days),
+      price: Number(price),
+      description: description || null,
+      internal_note: internal_note || null
+    };
+
+    let { data, error } = await supabase
       .from('products')
-      .insert({
-        name,
-        country,
-        data_amount: data_amount || '',
-        validity_days: Number(validity_days),
-        price: Number(price),
-        description: description || null
-      })
+      .insert(insertPayload)
       .select()
       .single();
+
+    if (error && /internal_note|column/i.test(error.message || '')) {
+      delete insertPayload.internal_note;
+      const fallback = await supabase
+        .from('products')
+        .insert(insertPayload)
+        .select()
+        .single();
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -87,7 +111,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, country, data_amount, validity_days, price, description, is_active } = body;
+    const { id, name, country, data_amount, validity_days, price, description, internal_note, is_active } = body;
 
     if (!id) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
@@ -100,12 +124,22 @@ export async function PUT(request: Request) {
     if (validity_days !== undefined) updateData.validity_days = Number(validity_days);
     if (price !== undefined) updateData.price = Number(price);
     if (description !== undefined) updateData.description = description;
+    if (internal_note !== undefined) updateData.internal_note = internal_note;
     if (is_active !== undefined) updateData.is_active = is_active;
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('products')
       .update(updateData)
       .eq('id', id);
+
+    if (error && /internal_note|column/i.test(error.message || '')) {
+      delete updateData.internal_note;
+      const fallback = await supabase
+        .from('products')
+        .update(updateData)
+        .eq('id', id);
+      error = fallback.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

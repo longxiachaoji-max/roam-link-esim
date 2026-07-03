@@ -18,9 +18,10 @@ type ProductTextUpdate = {
   validity_days?: number | string | null;
   price?: number | string | null;
   description?: string | null;
+  internal_note?: string | null;
 };
 
-const textFields = ['name', 'country', 'data_amount', 'description'] as const;
+const textFields = ['name', 'country', 'data_amount', 'description', 'internal_note'] as const;
 
 export async function POST(request: Request) {
   try {
@@ -72,10 +73,19 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from('products')
         .update(updateData)
         .eq('id', item.id);
+
+      if (error && /internal_note|column/i.test(error.message || '')) {
+        delete updateData.internal_note;
+        const fallback = await supabase
+          .from('products')
+          .update(updateData)
+          .eq('id', item.id);
+        error = fallback.error;
+      }
 
       if (error) {
         failed.push({ id: item.id, reason: error.message });

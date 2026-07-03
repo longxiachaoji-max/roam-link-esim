@@ -8,6 +8,7 @@ interface Product {
   name: string;
   country: string;
   description: string | null;
+  internal_note: string | null;
   data_amount: string | null;
   validity_days: number;
   price: number;
@@ -31,9 +32,10 @@ type QuickDraft = {
   validity_days: string;
   price: string;
   description: string;
+  internal_note: string;
 };
 
-type ReplaceField = 'name' | 'data_amount' | 'description' | 'all';
+type ReplaceField = 'name' | 'data_amount' | 'description' | 'internal_note' | 'all';
 
 type QuickResult = {
   error?: string;
@@ -62,6 +64,7 @@ type ProductEditDraft = {
   name: string;
   data_amount: string;
   description: string;
+  internal_note: string;
   validity_days: string;
   price: string;
 };
@@ -88,7 +91,8 @@ const QUICK_DEFAULTS = {
   hotspotGb: '4',
   suffix: '原生網路',
   dataPrefix: '不限速上網吃到飽',
-  description: ''
+  description: '',
+  internal_note: ''
 };
 
 const REPLACE_DEFAULTS = {
@@ -155,7 +159,8 @@ export default function ProductsPage() {
       hotspot_sharing: hotspot,
       validity_days: days,
       price: prices[index] || '',
-      description: quickForm.description.trim() || hotspot
+      description: quickForm.description.trim() || hotspot,
+      internal_note: quickForm.internal_note.trim()
     };
   }).filter(item => item.name && item.country && item.validity_days);
 
@@ -165,13 +170,13 @@ export default function ProductsPage() {
   };
 
   const replaceFields: Exclude<ReplaceField, 'all'>[] = replaceForm.field === 'all'
-    ? ['name', 'data_amount', 'description']
+    ? ['name', 'data_amount', 'description', 'internal_note']
     : [replaceForm.field];
 
   const replacePreview = products
     .filter(product => replaceForm.country === '全部' || product.country === replaceForm.country)
     .map(product => {
-      const updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description'>> = {};
+      const updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description' | 'internal_note'>> = {};
       let changed = false;
 
       for (const field of replaceFields) {
@@ -184,7 +189,7 @@ export default function ProductsPage() {
 
       return changed ? { product, updates } : null;
     })
-    .filter(Boolean) as { product: Product; updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description'>> }[];
+    .filter(Boolean) as { product: Product; updates: Partial<Pick<Product, 'name' | 'data_amount' | 'description' | 'internal_note'>> }[];
 
   const suggestedCountrySort = Array.from(new Set(products.map(product => product.country))).filter(Boolean);
   const suggestedPlanSort = Array.from(new Set(
@@ -209,6 +214,7 @@ export default function ProductsPage() {
         validity_days: hasHotspotColumn ? cols[4]?.trim() || '' : cols[3]?.trim() || '',
         price: hasHotspotColumn ? cols[5]?.trim() || '' : cols[4]?.trim() || '',
         description: hasHotspotColumn ? cols[3]?.trim() || '' : '',
+        internal_note: hasHotspotColumn ? cols[6]?.trim() || '' : '',
       };
     }).filter(r => r.name && r.country);
   };
@@ -454,6 +460,7 @@ export default function ProductsPage() {
     name: product.name,
     data_amount: product.data_amount || '',
     description: product.description || '',
+    internal_note: product.internal_note || '',
     validity_days: String(product.validity_days),
     price: String(product.price)
   }]));
@@ -467,6 +474,7 @@ export default function ProductsPage() {
       if (draft.name.trim() !== product.name) updates.name = draft.name.trim();
       if (draft.data_amount.trim() !== (product.data_amount || '')) updates.data_amount = draft.data_amount.trim() || null;
       if (draft.description.trim() !== (product.description || '')) updates.description = draft.description.trim() || null;
+      if (draft.internal_note.trim() !== (product.internal_note || '')) updates.internal_note = draft.internal_note.trim() || null;
       if (Number(draft.validity_days) !== product.validity_days) updates.validity_days = Number(draft.validity_days);
       if (Number(draft.price) !== Number(product.price)) updates.price = Number(draft.price);
       return Object.keys(updates).length > 0 ? { id: product.id, ...updates } : null;
@@ -602,7 +610,8 @@ export default function ProductsPage() {
     data_amount: '',
     validity_days: '',
     price: '',
-    description: ''
+    description: '',
+    internal_note: ''
   };
 
   const [formData, setFormData] = useState(emptyForm);
@@ -671,7 +680,8 @@ export default function ProductsPage() {
           data_amount: formData.data_amount || null,
           validity_days: Number(formData.validity_days),
           price: Number(formData.price),
-          description: formData.description || null
+          description: formData.description || null,
+          internal_note: formData.internal_note || null
         })
       });
       const json = await res.json();
@@ -698,7 +708,8 @@ export default function ProductsPage() {
       data_amount: product.data_amount || '',
       validity_days: String(product.validity_days),
       price: String(product.price),
-      description: product.description || ''
+      description: product.description || '',
+      internal_note: product.internal_note || ''
     });
     setIsEditModalOpen(true);
   };
@@ -718,7 +729,8 @@ export default function ProductsPage() {
           data_amount: editFormData.data_amount || null,
           validity_days: Number(editFormData.validity_days),
           price: Number(editFormData.price),
-          description: editFormData.description || null
+          description: editFormData.description || null,
+          internal_note: editFormData.internal_note || null
         })
       });
       const json = await res.json();
@@ -842,13 +854,24 @@ export default function ProductsPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-white/70 mb-1">熱點分享（選填）</label>
+        <label className="block text-sm font-medium text-white/70 mb-1">給客人看的備註（選填）</label>
         <input
           type="text"
-          placeholder="例如：熱點分享總量2GB、每日熱點2GB"
+          placeholder="例如：熱點分享總量2GB、每日熱點2GB、需實名認證"
           className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
           value={data.description}
           onChange={(e) => setData({ ...data, description: e.target.value })}
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-white/70 mb-1">內部備註（不顯示給客人）</label>
+        <textarea
+          rows={3}
+          placeholder="例如：供應商原文限制、KYC、不可重複安裝、成本注意事項"
+          className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
+          value={data.internal_note}
+          onChange={(e) => setData({ ...data, internal_note: e.target.value })}
         />
       </div>
     </div>
@@ -1069,7 +1092,7 @@ export default function ProductsPage() {
                           const isChanged = Boolean(inlineEditChanges.find(item => item.id === product.id));
                           return (
                         <div key={product.id} className={`px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : isChanged ? 'bg-emerald-400/10' : 'hover:bg-white/5'}`}>
-                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.5fr)_minmax(120px,1fr)_minmax(180px,1.4fr)_96px_96px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
+                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.4fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
                             <div className={`${isSelectionMode ? 'contents' : 'flex items-center gap-6 flex-1 min-w-0'}`}>
                             {isSelectionMode && (
                               <button
@@ -1110,7 +1133,14 @@ export default function ProductsPage() {
                                   onChange={(event) => updateProductDraft(product.id, 'description', event.target.value)}
                                   placeholder="熱點/短備註"
                                   className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white placeholder:text-white/25"
-                                  aria-label="熱點分享"
+                                  aria-label="給客人看的備註"
+                                />
+                                <input
+                                  value={draft?.internal_note ?? product.internal_note ?? ''}
+                                  onChange={(event) => updateProductDraft(product.id, 'internal_note', event.target.value)}
+                                  placeholder="內部備註"
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white placeholder:text-white/25"
+                                  aria-label="內部備註"
                                 />
                                 <input
                                   type="number"
@@ -1343,12 +1373,22 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white/70 mb-1">熱點分享（選填）</label>
+                  <label className="block text-sm font-medium text-white/70 mb-1">給客人看的備註（選填）</label>
                   <input
                     className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
                     value={quickForm.description}
                     onChange={(e) => setQuickForm({ ...quickForm, description: e.target.value })}
                     placeholder={hotspotText}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">內部備註（選填）</label>
+                  <textarea
+                    rows={3}
+                    className="w-full border-white/20 rounded-md p-2 border text-white bg-black/40 placeholder:text-white/30"
+                    value={quickForm.internal_note}
+                    onChange={(e) => setQuickForm({ ...quickForm, internal_note: e.target.value })}
+                    placeholder="不顯示給客人，例如供應商限制、成本備註"
                   />
                 </div>
               </div>
@@ -1427,10 +1467,11 @@ export default function ProductsPage() {
                   value={replaceForm.field}
                   onChange={(e) => setReplaceForm({ ...replaceForm, field: e.target.value as ReplaceField })}
                 >
-                  <option value="all" className="text-black">商品名稱 + 流量規格 + 熱點分享</option>
+                  <option value="all" className="text-black">商品名稱 + 流量規格 + 客人備註 + 內部備註</option>
                   <option value="name" className="text-black">只改商品名稱</option>
                   <option value="data_amount" className="text-black">只改流量規格</option>
-                  <option value="description" className="text-black">只改熱點分享</option>
+                  <option value="description" className="text-black">只改客人備註</option>
+                  <option value="internal_note" className="text-black">只改內部備註</option>
                 </select>
               </div>
               <div>
@@ -1558,13 +1599,13 @@ export default function ProductsPage() {
               </button>
             </div>
 
-            <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → 國家 → 流量規格 → 熱點分享 → 有效天數 → 價格</span></p>
+            <p className="text-sm text-white/50 mb-2">從 Google 試算表複製貼上，欄位順序：<span className="text-white/70">商品名稱 → 國家 → 流量規格 → 客人備註 → 有效天數 → 價格 → 內部備註</span></p>
             <p className="text-xs text-white/30 mb-3">舊的 5 欄格式仍可匯入；第一行如果是標題會自動跳過，重複的商品 (同名稱+國家+天數) 會自動排除</p>
 
             <textarea
               rows={8}
               className="w-full bg-black/40 border border-white/20 rounded-lg p-3 text-sm text-white font-mono placeholder:text-white/20 mb-3 resize-none"
-              placeholder="從 Google 試算表複製貼上... 日本 KDDI 5G不限速吃到飽3天	日本	KIDD原生網路不限速上網吃到飽	熱點分享總量2GB	3	399"
+              placeholder="從 Google 試算表複製貼上... 日本 KDDI 5G不限速吃到飽3天	日本	KIDD原生網路不限速上網吃到飽	熱點分享總量2GB	3	399	供應商原文或內部注意事項"
               value={batchText}
               onChange={(e) => {
                 setBatchText(e.target.value);
@@ -1582,7 +1623,8 @@ export default function ProductsPage() {
                       <th className="px-3 py-1.5 text-left">名稱</th>
                       <th className="px-3 py-1.5 text-left">國家</th>
                       <th className="px-3 py-1.5 text-left">流量</th>
-                      <th className="px-3 py-1.5 text-left">熱點</th>
+                      <th className="px-3 py-1.5 text-left">客人備註</th>
+                      <th className="px-3 py-1.5 text-left">內部備註</th>
                       <th className="px-3 py-1.5 text-right">天數</th>
                       <th className="px-3 py-1.5 text-right">價格</th>
                     </tr></thead>
@@ -1592,6 +1634,7 @@ export default function ProductsPage() {
                         <td className="px-3 py-1.5 text-white/60">{r.country}</td>
                         <td className="px-3 py-1.5 text-white/60">{r.data_amount}</td>
                         <td className="px-3 py-1.5 text-cyan-300/80">{r.hotspot_sharing}</td>
+                        <td className="px-3 py-1.5 text-amber-200/70">{r.internal_note}</td>
                         <td className="px-3 py-1.5 text-right text-white/60">{r.validity_days}</td>
                         <td className="px-3 py-1.5 text-right text-white/80">NT${r.price}</td>
                       </tr>

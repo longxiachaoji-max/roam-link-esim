@@ -17,10 +17,13 @@ type ExistingProduct = {
 
 function cleanPlan(plan: Partial<TransformedMicroesimPlan>) {
   const price = Number(plan.price || plan.suggested_price || 0);
-  const descriptionParts = [
-    plan.hotspot_sharing,
+  const customerNote = String(plan.hotspot_sharing || plan.customer_note || '').trim();
+  const internalNoteParts = [
+    plan.internal_warning,
     plan.special_desc_zh,
-    plan.rule_desc_zh
+    plan.rule_desc_zh,
+    plan.active_type_note,
+    plan.supplier_plan_name
   ].filter(Boolean);
 
   return {
@@ -29,7 +32,8 @@ function cleanPlan(plan: Partial<TransformedMicroesimPlan>) {
     data_amount: String(plan.data_amount || '').trim(),
     validity_days: Number(plan.validity_days || 0),
     price,
-    description: Array.from(new Set(descriptionParts)).join('｜') || null,
+    description: customerNote || null,
+    internal_note: Array.from(new Set(internalNoteParts)).join('｜') || null,
     is_active: true,
     supplier: 'microesim',
     supplier_plan_id: String(plan.supplier_plan_id || '').trim(),
@@ -49,8 +53,14 @@ function stripSupplierColumns(product: ReturnType<typeof cleanPlan>) {
     validity_days: product.validity_days,
     price: product.price,
     description: product.description,
+    internal_note: product.internal_note,
     is_active: product.is_active
   };
+}
+
+function stripInternalNote<T extends { internal_note?: string | null }>(product: T) {
+  const { internal_note: _internalNote, ...rest } = product;
+  return rest;
 }
 
 export async function POST(request: Request) {
@@ -128,6 +138,12 @@ export async function POST(request: Request) {
       usedBasicFallback = true;
       const basicProducts = toInsert.map(stripSupplierColumns);
       const fallback = await supabase.from('products').insert(basicProducts);
+      insertError = fallback.error;
+    }
+
+    if (insertError && /internal_note|column/i.test(insertError.message || '')) {
+      const withoutInternalNote = insertPayload.map(stripInternalNote);
+      const fallback = await supabase.from('products').insert(withoutInternalNote);
       insertError = fallback.error;
     }
 

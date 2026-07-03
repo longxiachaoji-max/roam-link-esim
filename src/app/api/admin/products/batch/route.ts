@@ -50,13 +50,18 @@ export async function POST(request: Request) {
         validity_days: Number(item.validity_days),
         price: Number(item.price),
         description: item.description || null,
+        internal_note: item.internal_note || null,
         is_active: true
       });
     }
 
     let inserted = 0;
     if (toInsert.length > 0) {
-      const { error } = await supabase.from('products').insert(toInsert);
+      let { error } = await supabase.from('products').insert(toInsert);
+      if (error && /internal_note|column/i.test(error.message || '')) {
+        const fallback = await supabase.from('products').insert(toInsert.map(({ internal_note, ...item }) => item));
+        error = fallback.error;
+      }
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
