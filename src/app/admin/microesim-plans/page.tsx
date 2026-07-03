@@ -83,7 +83,17 @@ const countryOptions: CountryOption[] = [
 ];
 
 const dayOptions = ['全部', '1', '3', '5', '7', '10', '15', '30'];
-type CostSort = 'default' | 'asc' | 'desc';
+type SortField = 'default' | 'cost' | 'carrier';
+type SortDirection = 'asc' | 'desc';
+type PlanTypeFilter = 'metered' | 'daily' | 'unlimited' | 'throttledUnlimited' | 'highSpeedUnlimited';
+
+const planTypeOptions: { key: PlanTypeFilter; label: string }[] = [
+  { key: 'metered', label: '計量型' },
+  { key: 'daily', label: '記日型' },
+  { key: 'unlimited', label: '吃到飽' },
+  { key: 'throttledUnlimited', label: '限速吃到飽' },
+  { key: 'highSpeedUnlimited', label: '高速吃到飽' }
+];
 
 function money(value: number) {
   return `NT$${Math.round(value || 0).toLocaleString('zh-TW')}`;
@@ -92,6 +102,22 @@ function money(value: number) {
 function yesNoBadge(active: boolean, label: string, activeClass = 'bg-red-500/15 text-red-200 border-red-400/30') {
   if (!active) return null;
   return <span className={`inline-flex rounded-md border px-1.5 py-0.5 text-[11px] ${activeClass}`}>{label}</span>;
+}
+
+function getPlanTypeKeys(plan: SupplierPlan): PlanTypeFilter[] {
+  const text = `${plan.name} ${plan.data_amount} ${plan.rule_desc_zh} ${plan.customer_note}`.toLowerCase();
+  const isUnlimited = text.includes('吃到飽') || text.includes('unlimited');
+  const isDaily = text.includes('每日') || /daily|\/day/.test(text);
+  const hasSpeedLimit = plan.flags.speedLimit || /128kb|256kb|512kb|1mbps|3mbps|5mbps|10mbps/.test(text);
+  const keys: PlanTypeFilter[] = [];
+
+  if (!isUnlimited && !isDaily) keys.push('metered');
+  if (!isUnlimited && isDaily) keys.push('daily');
+  if (isUnlimited) keys.push('unlimited');
+  if (isUnlimited && hasSpeedLimit) keys.push('throttledUnlimited');
+  if (isUnlimited && !hasSpeedLimit) keys.push('highSpeedUnlimited');
+
+  return keys;
 }
 
 export default function MicroesimPlansPage() {
@@ -111,7 +137,9 @@ export default function MicroesimPlansPage() {
   const [hkdRate, setHkdRate] = useState('4.15');
   const [usdRate, setUsdRate] = useState('32.5');
   const [markup, setMarkup] = useState('1.65');
-  const [costSort, setCostSort] = useState<CostSort>('default');
+  const [sortField, setSortField] = useState<SortField>('default');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [planTypeFilters, setPlanTypeFilters] = useState<Set<PlanTypeFilter>>(new Set());
 
   const plans = useMemo(() => data?.plans || [], [data]);
   const selectedCountryName = countryOptions.find(country => country.code === selectedCountry)?.name || '韓國';
@@ -125,6 +153,10 @@ export default function MicroesimPlansPage() {
       if (hideNoHotspot && plan.flags.noHotspot) return false;
       if (hideNoGpt && plan.flags.noGpt) return false;
       if (hideNoReinstall && plan.flags.noReinstall) return false;
+      if (planTypeFilters.size > 0) {
+        const planTypes = getPlanTypeKeys(plan);
+        if (!planTypes.some(type => planTypeFilters.has(type))) return false;
+      }
       if (!keyword) return true;
       const text = [
         plan.name,
@@ -137,12 +169,14 @@ export default function MicroesimPlansPage() {
       ].join(' ').toLowerCase();
       return text.includes(keyword);
     });
-    if (costSort === 'default') return filtered;
+    if (sortField === 'default') return filtered;
     return [...filtered].sort((a, b) => {
-      const result = a.cost_twd - b.cost_twd;
-      return costSort === 'asc' ? result : -result;
+      const result = sortField === 'carrier'
+        ? (a.carrier || '未標示').localeCompare(b.carrier || '未標示', 'zh-Hant')
+        : a.cost_twd - b.cost_twd;
+      return sortDirection === 'asc' ? result : -result;
     });
-  }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, costSort]);
+  }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, sortField, sortDirection]);
 
   const selectedPlans = plans.filter(plan => selected.has(plan.supplier_plan_id));
 
@@ -165,8 +199,22 @@ export default function MicroesimPlansPage() {
 
   const clearSelected = () => setSelected(new Set());
 
-  const toggleCostSort = () => {
-    setCostSort(prev => prev === 'asc' ? 'desc' : 'asc');
+  const togglePlanType = (type: PlanTypeFilter) => {
+    setPlanTypeFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  const toggleSort = (field: Exclude<SortField, 'default'>) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortField(field);
+    setSortDirection('asc');
   };
 
   const fetchPlans = async () => {
@@ -282,6 +330,7 @@ export default function MicroesimPlansPage() {
                 setData(null);
                 setMessage('');
                 setError('');
+                setPlanTypeFilters(new Set());
                 clearSelected();
               }}
               className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white"
@@ -321,6 +370,23 @@ export default function MicroesimPlansPage() {
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-white/60">
+          {planTypeOptions.map(option => {
+            const isActive = planTypeFilters.has(option.key);
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => togglePlanType(option.key)}
+                className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors ${
+                  isActive
+                    ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-100'
+                    : 'border-white/15 text-white/60 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideKyc} onChange={(event) => setHideKyc(event.target.checked)} /> 排除 KYC</label>
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoHotspot} onChange={(event) => setHideNoHotspot(event.target.checked)} /> 排除不可熱點</label>
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoGpt} onChange={(event) => setHideNoGpt(event.target.checked)} /> 排除不可 GPT</label>
@@ -339,22 +405,33 @@ export default function MicroesimPlansPage() {
           {data && <div className="text-xs text-white/35">掃描 {data.scanned}/{data.total} 筆，頁數 {data.totalPages}</div>}
         </div>
         <div className="max-h-[68vh] overflow-auto">
-          <table className="w-full min-w-[1180px] text-sm">
+          <table className="w-full min-w-[1260px] text-sm">
             <thead className="sticky top-0 bg-[#17172a] text-xs text-white/45">
               <tr>
                 <th className="w-10 px-3 py-3 text-left"></th>
                 <th className="px-3 py-3 text-left">一飛通商品名稱</th>
                 <th className="px-3 py-3 text-left">MicroEsim 原名稱</th>
+                <th className="px-3 py-3 text-left">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('carrier')}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white"
+                  >
+                    電信商
+                    <ArrowDownUp className="h-3.5 w-3.5" />
+                    {sortField === 'carrier' && <span className="text-cyan-200">{sortDirection === 'asc' ? 'A-Z' : 'Z-A'}</span>}
+                  </button>
+                </th>
                 <th className="px-3 py-3 text-right">
                   <button
                     type="button"
-                    onClick={toggleCostSort}
+                    onClick={() => toggleSort('cost')}
                     className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white"
                   >
                     成本
                     <ArrowDownUp className="h-3.5 w-3.5" />
-                    {costSort === 'asc' && <span className="text-cyan-200">低到高</span>}
-                    {costSort === 'desc' && <span className="text-cyan-200">高到低</span>}
+                    {sortField === 'cost' && sortDirection === 'asc' && <span className="text-cyan-200">低到高</span>}
+                    {sortField === 'cost' && sortDirection === 'desc' && <span className="text-cyan-200">高到低</span>}
                   </button>
                 </th>
                 <th className="px-3 py-3 text-right">建議售價</th>
@@ -364,9 +441,9 @@ export default function MicroesimPlansPage() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
-                <tr><td colSpan={7} className="px-3 py-12 text-center text-white/45"><Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />同步中...</td></tr>
+                <tr><td colSpan={8} className="px-3 py-12 text-center text-white/45"><Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />同步中...</td></tr>
               ) : filteredPlans.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-12 text-center text-white/35">尚未同步，或目前篩選沒有資料</td></tr>
+                <tr><td colSpan={8} className="px-3 py-12 text-center text-white/35">尚未同步，或目前篩選沒有資料</td></tr>
               ) : filteredPlans.map(plan => {
                 const checked = selected.has(plan.supplier_plan_id);
                 return (
@@ -388,6 +465,9 @@ export default function MicroesimPlansPage() {
                       <div className="text-white/70">{plan.supplier_plan_name}</div>
                       <div className="mt-1 font-mono text-[11px] text-white/30">{plan.supplier_plan_id}</div>
                     </td>
+                    <td className="px-3 py-3 align-top text-white/70">
+                      {plan.carrier || '未標示'}
+                    </td>
                     <td className="px-3 py-3 text-right align-top">
                       <div className="font-semibold text-white">{money(plan.cost_twd)}</div>
                       <div className="text-xs text-white/35">{plan.cost_original} {plan.cost_currency}</div>
@@ -397,7 +477,6 @@ export default function MicroesimPlansPage() {
                       <div className="text-xs text-white/35">毛利 {money(plan.margin_twd)}</div>
                     </td>
                     <td className="max-w-[300px] px-3 py-3 align-top text-xs leading-5 text-white/65">
-                      {plan.carrier && <div className="mb-1 text-cyan-200/75">電信商：{plan.carrier}</div>}
                       <div>{plan.customer_note || '無特別備註'}</div>
                       {plan.active_type_note && <div className="mt-1 text-white/35">{plan.active_type_note}</div>}
                     </td>

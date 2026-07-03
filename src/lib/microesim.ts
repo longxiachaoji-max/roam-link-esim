@@ -225,12 +225,63 @@ function isCountryPlan(plan: MicroesimPlan, country: MicroesimCountryOption) {
     || country.aliases.some(alias => haystack.includes(alias));
 }
 
-function getCarrier(plan: MicroesimPlan) {
-  const text = `${plan.channel_dataplan_name} ${plan.networks || ''}`.toLowerCase();
+function normalizeCarrierName(rawCarrier: string, countryCode: string) {
+  const raw = rawCarrier.trim().replace(/\s+/g, ' ');
+  const lower = raw.toLowerCase();
+  const code = countryCode.toUpperCase();
+
+  if (code === 'TW') {
+    if (lower.includes('chunghwa') || lower === 'cht' || lower.includes('中華')) return '中華電信';
+    if (lower.includes('taiwan mobile') || lower.includes('台灣大')) return '台灣大哥大';
+    if (lower.includes('far eastone') || lower === 'fet' || lower.includes('遠傳')) return '遠傳電信';
+    if (lower.includes('taiwan star') || lower.includes('台灣之星')) return '台灣之星';
+    if (lower.includes('asia pacific') || lower.includes('亞太')) return '亞太電信';
+  }
+
+  if (code === 'JP') {
+    if (lower.includes('softbank') || lower.includes('sottbank')) return 'SoftBank';
+    if (lower.includes('docomo') || lower.includes('iij')) return 'Docomo';
+    if (lower.includes('kddi') || lower.includes('au')) return 'KDDI';
+    if (lower.includes('rakuten')) return 'Rakuten';
+  }
+
+  if (code === 'KR') {
+    if (lower.includes('skt') || lower.includes('sk telecom')) return 'SKT';
+    if (/\bkt\b/.test(lower) || lower.includes('korea telecom')) return 'KT';
+    if (lower.includes('lg u') || lower.includes('lgu') || lower.includes('lg+')) return 'LG U+';
+  }
+
+  return raw;
+}
+
+function getCarrier(plan: MicroesimPlan, countryCode?: string) {
+  const code = (countryCode || plan.code || '').trim().toUpperCase();
+  const networks = normalizeText(plan.networks);
   const carriers: string[] = [];
-  if (text.includes('skt') || text.includes('sk telecom')) carriers.push('SKT');
-  if (/\bkt\b/.test(text) || text.includes('korea telecom')) carriers.push('KT');
-  if (text.includes('lgu') || text.includes('lg u') || text.includes('lg+') || text.includes('lg telecom')) carriers.push('LG U+');
+
+  if (code && networks) {
+    const networkEntries = networks.split('|').map(entry => entry.trim()).filter(Boolean);
+    for (const entry of networkEntries) {
+      if (!entry.toUpperCase().startsWith(`${code}:`)) continue;
+      const carrierPart = entry.slice(code.length + 1).trim();
+      for (const carrierCandidate of carrierPart.split(',')) {
+        const carrierName = carrierCandidate.split('[')[0]?.trim();
+        if (carrierName) carriers.push(normalizeCarrierName(carrierName, code));
+      }
+    }
+  }
+
+  if (carriers.length > 0) {
+    return Array.from(new Set(carriers)).join('/');
+  }
+
+  if (code === 'KR') {
+    const text = `${plan.channel_dataplan_name} ${networks}`.toLowerCase();
+    if (text.includes('skt') || text.includes('sk telecom')) carriers.push('SKT');
+    if (/\bkt\b/.test(text) || text.includes('korea telecom')) carriers.push('KT');
+    if (text.includes('lgu') || text.includes('lg u') || text.includes('lg+')) carriers.push('LG U+');
+  }
+
   return carriers.length ? Array.from(new Set(carriers)).join('/') : '';
 }
 
@@ -367,10 +418,10 @@ function convertCostToTwd(price: number, currency: string, rates: { hkd: number;
 
 export function transformMicroesimPlan(
   plan: MicroesimPlan,
-  options: { countryName?: string; hkdRate?: number; usdRate?: number; markup?: number } = {}
+  options: { countryCode?: string; countryName?: string; hkdRate?: number; usdRate?: number; markup?: number } = {}
 ): TransformedMicroesimPlan {
   const country = options.countryName || getCountryOption(plan.code || '').name || normalizeText(plan.code) || '其他';
-  const carrier = getCarrier(plan);
+  const carrier = getCarrier(plan, options.countryCode);
   const data = parseDataLabel(plan);
   const activeTypeNote = translateActiveType(plan.active_type);
   const ruleDescZh = translateRule(plan.rule_desc);
@@ -451,7 +502,7 @@ export async function fetchMicroesimPlansByCountry(
 
   const plans = allPlans
     .filter(plan => isCountryPlan(plan, country))
-    .map(plan => transformMicroesimPlan(plan, { ...options, countryName: country.name }))
+    .map(plan => transformMicroesimPlan(plan, { ...options, countryCode: country.code, countryName: country.name }))
     .sort((a, b) => {
       if (a.validity_days !== b.validity_days) return a.validity_days - b.validity_days;
       if (a.data_amount !== b.data_amount) return a.data_amount.localeCompare(b.data_amount, 'zh-Hant');
