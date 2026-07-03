@@ -96,6 +96,7 @@ const planTypeOptions: { key: PlanTypeFilter; label: string }[] = [
 ];
 
 const FAVORITES_STORAGE_KEY = 'firstroamlink.microesim.favoritePlanIds';
+const FAVORITES_BACKUP_STORAGE_KEY = 'firstroamlink.microesim.favoritePlanIds.backup';
 
 const sortLabels: Partial<Record<SortField, [string, string]>> = {
   name: ['A-Z', 'Z-A'],
@@ -149,13 +150,23 @@ function SortHeader({
 function loadFavoritePlanIds() {
   if (typeof window === 'undefined') return new Set<string>();
   try {
-    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY)
+      || window.localStorage.getItem(FAVORITES_BACKUP_STORAGE_KEY);
     if (!raw) return new Set<string>();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set<string>();
     return new Set(parsed.filter(id => typeof id === 'string'));
   } catch {
     return new Set<string>();
+  }
+}
+
+function saveFavoritePlanIds(ids: Set<string>) {
+  if (typeof window === 'undefined') return;
+  const serialized = JSON.stringify(Array.from(ids));
+  window.localStorage.setItem(FAVORITES_STORAGE_KEY, serialized);
+  if (ids.size > 0) {
+    window.localStorage.setItem(FAVORITES_BACKUP_STORAGE_KEY, serialized);
   }
 }
 
@@ -289,7 +300,9 @@ export default function MicroesimPlansPage() {
   }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
 
   const selectedPlans = plans.filter(plan => selected.has(plan.supplier_plan_id));
-  const favoriteCount = plans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
+  const favoriteVisibleCount = plans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
+  const favoriteFilteredCount = filteredPlans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
+  const favoriteTotalCount = favoritePlanIds.size;
 
   const toggleSelected = (id: string) => {
     setSelected(prev => {
@@ -304,6 +317,16 @@ export default function MicroesimPlansPage() {
     setSelected(prev => {
       const next = new Set(prev);
       filteredPlans.forEach(plan => next.add(plan.supplier_plan_id));
+      return next;
+    });
+  };
+
+  const selectFavoritePlans = () => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      filteredPlans
+        .filter(plan => favoritePlanIds.has(plan.supplier_plan_id))
+        .forEach(plan => next.add(plan.supplier_plan_id));
       return next;
     });
   };
@@ -324,7 +347,7 @@ export default function MicroesimPlansPage() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      saveFavoritePlanIds(next);
       return next;
     });
   };
@@ -369,6 +392,7 @@ export default function MicroesimPlansPage() {
     setImporting(true);
     setError('');
     setMessage('');
+    saveFavoritePlanIds(favoritePlanIds);
     try {
       const response = await fetch('/api/admin/microesim/import-products', {
         method: 'POST',
@@ -377,7 +401,7 @@ export default function MicroesimPlansPage() {
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || '上架失敗');
-      setMessage(`上架完成：新增 ${json.inserted || 0} 筆，跳過 ${json.skipped || 0} 筆${json.usedBasicFallback ? '。提醒：目前資料庫尚未建立供應商內部欄位，已先用基本商品欄位上架。' : ''}`);
+      setMessage(`上架完成：新增 ${json.inserted || 0} 筆，跳過 ${json.skipped || 0} 筆。我的最愛保留 ${favoriteTotalCount} 筆${json.usedBasicFallback ? '。提醒：目前資料庫尚未建立供應商內部欄位，已先用基本商品欄位上架。' : ''}`);
       clearSelected();
     } catch (err) {
       setError(err instanceof Error ? err.message : '上架失敗');
@@ -432,7 +456,8 @@ export default function MicroesimPlansPage() {
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
           <p className="text-xs text-white/40">我的最愛 / 含限制</p>
-          <p className="mt-1 text-2xl font-bold text-white">{favoriteCount}<span className="text-base text-white/35"> / {riskyCount}</span></p>
+          <p className="mt-1 text-2xl font-bold text-white">{favoriteVisibleCount}<span className="text-base text-white/35"> / {riskyCount}</span></p>
+          <p className="mt-1 text-[11px] text-white/35">全部收藏 {favoriteTotalCount} 筆</p>
         </div>
       </div>
 
@@ -507,7 +532,7 @@ export default function MicroesimPlansPage() {
             }`}
           >
             <Star className={`h-3.5 w-3.5 ${favoritesOnly ? 'fill-yellow-300' : ''}`} />
-            只看我的最愛 {favoriteCount}
+            只看我的最愛 {favoriteVisibleCount}/{favoriteTotalCount}
           </button>
           {planTypeOptions.map(option => {
             const isActive = planTypeFilters.has(option.key);
@@ -531,6 +556,7 @@ export default function MicroesimPlansPage() {
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoGpt} onChange={(event) => setHideNoGpt(event.target.checked)} /> 排除不可 GPT</label>
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoReinstall} onChange={(event) => setHideNoReinstall(event.target.checked)} /> 排除不可重複安裝</label>
           <button onClick={selectFiltered} disabled={filteredPlans.length === 0} className="ml-auto rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold text-white/75 hover:bg-white/10 disabled:opacity-40">勾選目前篩選 {filteredPlans.length}</button>
+          <button onClick={selectFavoritePlans} disabled={favoriteFilteredCount === 0} className="rounded-md border border-yellow-300/30 px-3 py-1.5 text-xs font-bold text-yellow-100/80 hover:bg-yellow-400/10 disabled:opacity-40">勾選我的最愛 {favoriteFilteredCount}</button>
           <button onClick={clearSelected} className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold text-white/55 hover:bg-white/10">清除勾選</button>
         </div>
       </div>
