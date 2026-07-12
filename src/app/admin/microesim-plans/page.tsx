@@ -401,7 +401,7 @@ export default function MicroesimPlansPage() {
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || '上架失敗');
-      setMessage(`上架完成：新增 ${json.inserted || 0} 筆，跳過 ${json.skipped || 0} 筆。我的最愛保留 ${favoriteTotalCount} 筆${json.usedBasicFallback ? '。提醒：目前資料庫尚未建立供應商內部欄位，已先用基本商品欄位上架。' : ''}`);
+      setMessage(`上架完成：新增 ${json.inserted || 0} 筆，補上連結 ${json.linked || 0} 筆，跳過 ${json.skipped || 0} 筆。我的最愛保留 ${favoriteTotalCount} 筆${json.usedBasicFallback ? '。提醒：目前資料庫尚未建立供應商內部欄位，已先用基本商品欄位上架。' : ''}`);
       clearSelected();
     } catch (err) {
       setError(err instanceof Error ? err.message : '上架失敗');

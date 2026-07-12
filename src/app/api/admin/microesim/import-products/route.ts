@@ -9,6 +9,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 type ExistingProduct = {
+  id: string;
   name: string;
   country: string;
   validity_days: number;
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     let existingError: { message?: string } | null = null;
     const existingResult = await supabase
       .from('products')
-      .select('name, country, validity_days, supplier_plan_id');
+      .select('id, name, country, validity_days, supplier_plan_id');
     existingProducts = existingResult.data;
     existingError = existingResult.error;
 
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
       hasSupplierColumns = false;
       const fallback = await supabase
         .from('products')
-        .select('name, country, validity_days');
+        .select('id, name, country, validity_days');
       existingProducts = fallback.data;
       existingError = fallback.error;
     }
@@ -94,12 +95,16 @@ export async function POST(request: Request) {
 
     const existingKeys = new Set<string>();
     const existingSupplierIds = new Set<string>();
+    const existingByKey = new Map<string, ExistingProduct>();
     for (const product of existingProducts || []) {
-      existingKeys.add(`${product.name}||${product.country}||${product.validity_days}`);
+      const key = `${product.name}||${product.country}||${product.validity_days}`;
+      existingKeys.add(key);
+      if (!existingByKey.has(key)) existingByKey.set(key, product);
       if (hasSupplierColumns && product.supplier_plan_id) existingSupplierIds.add(product.supplier_plan_id);
     }
 
     const toInsert = [];
+    const toLinkExisting: { id: string; product: ReturnType<typeof cleanPlan> }[] = [];
     const skipped = [];
 
     for (const rawPlan of plans) {
@@ -115,6 +120,12 @@ export async function POST(request: Request) {
         continue;
       }
       if (existingKeys.has(key)) {
+        const existingProduct = existingByKey.get(key);
+        if (hasSupplierColumns && existingProduct?.id && !existingProduct.supplier_plan_id) {
+          toLinkExisting.push({ id: existingProduct.id, product });
+          existingSupplierIds.add(product.supplier_plan_id);
+          continue;
+        }
         skipped.push({ name: product.name, reason: '已存在相同商品名稱/國家/天數' });
         continue;
       }
@@ -124,36 +135,64 @@ export async function POST(request: Request) {
       toInsert.push(product);
     }
 
-    if (toInsert.length === 0) {
-      return NextResponse.json({ success: true, inserted: 0, skipped: skipped.length, skippedItems: skipped });
+    if (toInsert.length === 0 && toLinkExisting.length === 0) {
+      return NextResponse.json({ success: true, inserted: 0, linked: 0, skipped: skipped.length, skippedItems: skipped });
     }
 
     let insertError: { message?: string } | null = null;
     let usedBasicFallback = false;
-    const insertPayload = hasSupplierColumns ? toInsert : toInsert.map(stripSupplierColumns);
-    const { error } = await supabase.from('products').insert(insertPayload);
-    insertError = error;
+    if (toInsert.length > 0) {
+      const insertPayload = hasSupplierColumns ? toInsert : toInsert.map(stripSupplierColumns);
+      const { error } = await supabase.from('products').insert(insertPayload);
+      insertError = error;
 
-    if (insertError && /supplier_|supplier|column/i.test(insertError.message || '')) {
-      usedBasicFallback = true;
-      const basicProducts = toInsert.map(stripSupplierColumns);
-      const fallback = await supabase.from('products').insert(basicProducts);
-      insertError = fallback.error;
+      if (insertError && /supplier_|supplier|column/i.test(insertError.message || '')) {
+        usedBasicFallback = true;
+        const basicProducts = toInsert.map(stripSupplierColumns);
+        const fallback = await supabase.from('products').insert(basicProducts);
+        insertError = fallback.error;
+      }
+
+      if (insertError && /internal_note|column/i.test(insertError.message || '')) {
+        const withoutInternalNote = insertPayload.map(stripInternalNote);
+        const fallback = await supabase.from('products').insert(withoutInternalNote);
+        insertError = fallback.error;
+      }
+
+      if (insertError) {
+        return NextResponse.json({ error: insertError.message }, { status: 500 });
+      }
     }
 
-    if (insertError && /internal_note|column/i.test(insertError.message || '')) {
-      const withoutInternalNote = insertPayload.map(stripInternalNote);
-      const fallback = await supabase.from('products').insert(withoutInternalNote);
-      insertError = fallback.error;
-    }
+    let linked = 0;
+    if (hasSupplierColumns && toLinkExisting.length > 0) {
+      for (const item of toLinkExisting) {
+        const updatePayload = {
+          supplier: item.product.supplier,
+          supplier_plan_id: item.product.supplier_plan_id,
+          supplier_plan_name: item.product.supplier_plan_name,
+          supplier_cost_twd: item.product.supplier_cost_twd,
+          supplier_cost_currency: item.product.supplier_cost_currency,
+          supplier_cost_original: item.product.supplier_cost_original,
+          supplier_raw: item.product.supplier_raw
+        };
+        const { error: updateError } = await supabase
+          .from('products')
+          .update(updatePayload)
+          .eq('id', item.id);
 
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+        if (updateError) {
+          skipped.push({ name: item.product.name, reason: `補上供應商連結失敗：${updateError.message}` });
+          continue;
+        }
+        linked++;
+      }
     }
 
     return NextResponse.json({
       success: true,
       inserted: toInsert.length,
+      linked,
       skipped: skipped.length,
       skippedItems: skipped,
       usedBasicFallback
