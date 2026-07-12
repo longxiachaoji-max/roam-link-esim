@@ -10,22 +10,31 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function fetchProductsWithOptionalColumns() {
   const baseColumns = 'id, name, description, price, country, data_amount, validity_days, is_active, created_at';
+  const supplierFallback = {
+    supplier: null,
+    supplier_plan_id: null,
+    supplier_plan_name: null
+  };
   const attempts = [
     {
-      select: `id, name, description, internal_note, price, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at`,
+      select: `id, name, description, internal_note, price, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at`,
       map: (products: any[]) => products
     },
     {
-      select: `${baseColumns}, supplier_cost_twd`,
-      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null }))
-    },
-    {
-      select: `${baseColumns}, internal_note`,
+      select: `id, name, description, internal_note, price, supplier, supplier_plan_id, supplier_plan_name, country, data_amount, validity_days, is_active, created_at`,
       map: (products: any[]) => products.map(product => ({ ...product, supplier_cost_twd: null }))
     },
     {
+      select: `${baseColumns}, supplier_cost_twd`,
+      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, ...supplierFallback }))
+    },
+    {
+      select: `${baseColumns}, internal_note`,
+      map: (products: any[]) => products.map(product => ({ ...product, supplier_cost_twd: null, ...supplierFallback }))
+    },
+    {
       select: baseColumns,
-      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, supplier_cost_twd: null }))
+      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, supplier_cost_twd: null, ...supplierFallback }))
     }
   ];
 
@@ -42,7 +51,7 @@ async function fetchProductsWithOptionalColumns() {
     }
 
     lastError = result.error;
-    if (!/column|internal_note|supplier_cost_twd/i.test(result.error.message || '')) break;
+    if (!/column|internal_note|supplier_|supplier_cost_twd/i.test(result.error.message || '')) break;
   }
 
   return { data: null, error: lastError };

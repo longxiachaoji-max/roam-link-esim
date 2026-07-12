@@ -12,6 +12,9 @@ interface Product {
   data_amount: string | null;
   validity_days: number;
   price: number;
+  supplier: string | null;
+  supplier_plan_id: string | null;
+  supplier_plan_name: string | null;
   supplier_cost_twd: number | null;
   is_active: boolean;
   created_at: string;
@@ -1104,7 +1107,7 @@ export default function ProductsPage() {
                           const margin = getMargin(Number(draft?.price || product.price), product.supplier_cost_twd);
                           return (
                         <div key={product.id} className={`px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : isChanged ? 'bg-emerald-400/10' : 'hover:bg-white/5'}`}>
-                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.4fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_112px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
+                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_112px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
                             <div className={`${isSelectionMode ? 'contents' : 'flex items-center gap-6 flex-1 min-w-0'}`}>
                             {isSelectionMode && (
                               <button
@@ -1134,6 +1137,18 @@ export default function ProductsPage() {
                                   className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white"
                                   aria-label="商品名稱"
                                 />
+                                <div className="rounded-md border border-cyan-300/15 bg-cyan-300/[0.04] px-2 py-1.5 text-[11px] leading-4 text-cyan-100/70">
+                                  {product.supplier_plan_id ? (
+                                    <>
+                                      <div className="font-mono text-cyan-100">{product.supplier_plan_id}</div>
+                                      <div className="truncate text-white/35" title={product.supplier_plan_name || undefined}>
+                                        {product.supplier_plan_name || 'MicroEsim'}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <span className="text-white/25">手動商品</span>
+                                  )}
+                                </div>
                                 <input
                                   value={draft?.data_amount ?? product.data_amount ?? ''}
                                   onChange={(event) => updateProductDraft(product.id, 'data_amount', event.target.value)}
@@ -1180,7 +1195,21 @@ export default function ProductsPage() {
                             ) : (
                               <>
                                 <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
-                                <span className="text-sm text-white/90 font-medium truncate">{product.name}</span>
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-white/90">{product.name}</div>
+                                  {product.supplier_plan_id && (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] leading-4">
+                                      <span className="rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 font-mono text-cyan-100/80">
+                                        Micro ID {product.supplier_plan_id}
+                                      </span>
+                                      {product.supplier_plan_name && (
+                                        <span className="max-w-[520px] truncate text-white/35" title={product.supplier_plan_name}>
+                                          {product.supplier_plan_name}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </>
                             )}
                             {duplicateNameCounts[product.name] > 1 && (
