@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { CheckSquare, ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, Replace, RotateCcw, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
+import { CheckSquare, ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, RefreshCw, Replace, RotateCcw, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -61,6 +61,16 @@ type BulkDeleteResult = {
   error?: string;
   deleted?: number;
   warning?: string;
+};
+
+type SyncCostResult = {
+  error?: string;
+  linkedProducts?: number;
+  updated?: number;
+  unchanged?: number;
+  missing?: number;
+  failed?: number;
+  message?: string;
 };
 
 type ProductEditDraft = {
@@ -150,6 +160,8 @@ export default function ProductsPage() {
   const [productDrafts, setProductDrafts] = useState<Record<string, ProductEditDraft>>({});
   const [isInlineSaving, setIsInlineSaving] = useState(false);
   const [inlineEditResult, setInlineEditResult] = useState<InlineEditResult | null>(null);
+  const [isSyncingCosts, setIsSyncingCosts] = useState(false);
+  const [syncCostResult, setSyncCostResult] = useState<SyncCostResult | null>(null);
 
   const splitList = (value: string) => value
     .split(/[,，\n]/)
@@ -351,6 +363,27 @@ export default function ProductsPage() {
       setSortResult({ error: err instanceof Error ? err.message : '儲存排序設定失敗' });
     } finally {
       setIsSortSubmitting(false);
+    }
+  };
+
+  const handleSyncMicroCosts = async () => {
+    if (isSyncingCosts) return;
+    setIsSyncingCosts(true);
+    setSyncCostResult(null);
+    try {
+      const res = await fetch('/api/admin/microesim/sync-costs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '同步成本失敗');
+      setSyncCostResult(json);
+      await fetchProducts();
+    } catch (err) {
+      setSyncCostResult({ error: err instanceof Error ? err.message : '同步成本失敗' });
+    } finally {
+      setIsSyncingCosts(false);
     }
   };
 
@@ -925,6 +958,14 @@ export default function ProductsPage() {
             前台排序
           </button>
           <button
+            onClick={handleSyncMicroCosts}
+            disabled={isSyncingCosts}
+            className="bg-cyan-500/15 text-cyan-100 border border-cyan-300/25 px-4 py-2 rounded-lg text-sm font-bold hover:bg-cyan-500/25 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isSyncingCosts ? 'animate-spin' : ''}`} />
+            {isSyncingCosts ? '同步成本中' : '同步 Micro 成本'}
+          </button>
+          <button
             onClick={() => { setIsBatchOpen(true); setBatchText(''); setBatchPreview([]); setBatchResult(null); }}
             className="bg-white/10 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-white/20 transition-colors flex items-center gap-2"
           >
@@ -940,6 +981,24 @@ export default function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {syncCostResult && (
+        <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+          syncCostResult.error
+            ? 'border-red-400/30 bg-red-500/10 text-red-100'
+            : 'border-cyan-300/25 bg-cyan-400/10 text-cyan-50'
+        }`}>
+          {syncCostResult.error ? (
+            syncCostResult.error
+          ) : (
+            <>
+              Micro 成本同步完成：已連結 {syncCostResult.linkedProducts || 0} 筆，成本變動 {syncCostResult.updated || 0} 筆，成本相同 {syncCostResult.unchanged || 0} 筆，找不到方案 {syncCostResult.missing || 0} 筆
+              {(syncCostResult.failed || 0) > 0 && `，失敗 ${syncCostResult.failed} 筆`}
+              {syncCostResult.message ? `。${syncCostResult.message}` : ''}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
