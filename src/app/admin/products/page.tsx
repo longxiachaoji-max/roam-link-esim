@@ -126,6 +126,18 @@ function getMargin(price: number, cost: number | null | undefined) {
   return Number(price) - Number(cost);
 }
 
+function getMarginRate(price: number, cost: number | null | undefined) {
+  if (!Number.isFinite(Number(price)) || Number(price) <= 0) return null;
+  const margin = getMargin(price, cost);
+  if (margin === null) return null;
+  return (margin / Number(price)) * 100;
+}
+
+function percent(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '未算';
+  return `${Number(value).toFixed(1)}%`;
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const hasInitializedCollapse = useRef(false);
@@ -1226,6 +1238,8 @@ export default function ProductsPage() {
                           const draft = productDrafts[product.id];
                           const isChanged = Boolean(inlineEditChanges.find(item => item.id === product.id));
                           const margin = getMargin(Number(draft?.price || product.price), product.supplier_cost_twd);
+                          const marginRate = getMarginRate(Number(draft?.price || product.price), product.supplier_cost_twd);
+                          const marginTone = margin === null ? 'text-white/30' : margin >= 0 ? 'text-emerald-300/80' : 'text-red-300/80';
                           return (
                         <div key={product.id} className={`px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : isChanged ? 'bg-emerald-400/10' : 'hover:bg-white/5'}`}>
                           <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_112px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
@@ -1308,8 +1322,11 @@ export default function ProductsPage() {
                                 />
                                 <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] leading-4 text-white/55">
                                   <div>成本 {money(product.supplier_cost_twd)}</div>
-                                  <div className={margin === null ? 'text-white/30' : margin >= 0 ? 'text-emerald-300/80' : 'text-red-300/80'}>
+                                  <div className={marginTone}>
                                     毛利 {margin === null ? '未算' : money(margin)}
+                                  </div>
+                                  <div className={marginTone}>
+                                    毛利率 {percent(marginRate)}
                                   </div>
                                 </div>
                               </>
@@ -1346,6 +1363,9 @@ export default function ProductsPage() {
                                 <div className="text-[11px] text-white/40">
                                   成本 {money(product.supplier_cost_twd)}
                                   {margin !== null && <span className={margin >= 0 ? 'text-emerald-300/70' : 'text-red-300/70'}> / 利 {money(margin)}</span>}
+                                </div>
+                                <div className={`text-[11px] ${margin === null ? 'text-white/30' : margin >= 0 ? 'text-emerald-300/70' : 'text-red-300/70'}`}>
+                                  毛利率 {percent(marginRate)}
                                 </div>
                               </div>
                             )}
