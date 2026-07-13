@@ -602,6 +602,19 @@ export default function ProductsPage() {
     });
   };
 
+  const toggleProductsSelected = (ids: string[]) => {
+    setBulkDeleteResult(null);
+    setSelectedProductIds(prev => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every(id => next.has(id));
+      for (const id of ids) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  };
+
   const selectAllProducts = () => {
     setBulkDeleteResult(null);
     setSelectedProductIds(new Set(products.map(product => product.id)));
@@ -1126,36 +1139,85 @@ export default function ProductsPage() {
 
           const countryActive = countryProducts.filter(p => p.is_active).length;
           const countryTotal = countryProducts.length;
+          const countryIds = countryProducts.map(product => product.id);
+          const selectedInCountry = countryIds.filter(id => selectedProductIds.has(id)).length;
 
           return (
             <div key={country} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm mb-4">
               {/* Country Header */}
-              <button
-                onClick={() => toggleGroup(country)}
-                className="w-full flex items-center justify-between px-6 py-4 bg-white/5 hover:bg-white/10 transition-colors"
-              >
+              <div className="w-full flex items-center justify-between gap-3 px-6 py-4 bg-white/5 hover:bg-white/10 transition-colors">
                 <div className="flex items-center gap-3">
+                  {isSelectionMode && (
+                    <button
+                      type="button"
+                      onClick={() => toggleProductsSelected(countryIds)}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                        selectedInCountry === countryIds.length && countryIds.length > 0
+                          ? 'border-red-300 bg-red-500 text-white'
+                          : selectedInCountry > 0
+                            ? 'border-red-300/60 bg-red-500/25 text-red-100'
+                            : 'border-white/20 text-transparent hover:border-red-300'
+                      }`}
+                      aria-label={`勾選 ${country} 全部商品`}
+                      title={selectedInCountry === countryIds.length ? `取消勾選 ${country}` : `勾選 ${country} 全部商品`}
+                    >
+                      <CheckSquare className="h-4 w-4" />
+                    </button>
+                  )}
                   <span className="text-2xl">
                     {({'日本':'🇯🇵','韓國':'🇰🇷','台灣':'🇹🇼','泰國':'🇹🇭','美國':'🇺🇸','法國':'🇫🇷','英國':'🇬🇧','德國':'🇩🇪','澳洲':'🇦🇺','越南':'🇻🇳','新加坡':'🇸🇬','香港':'🇭🇰','加拿大':'🇨🇦','義大利':'🇮🇹'} as Record<string,string>)[country] || '🌍'}
                   </span>
                   <div className="text-left">
                     <h3 className="text-lg font-bold text-white">{country}</h3>
-                    <p className="text-xs text-white/40">{Object.keys(byData).length} 種方案 · {countryActive}/{countryTotal} 上架</p>
+                    <p className="text-xs text-white/40">
+                      {Object.keys(byData).length} 種方案 · {countryActive}/{countryTotal} 上架
+                      {isSelectionMode && selectedInCountry > 0 ? ` · 已選 ${selectedInCountry}` : ''}
+                    </p>
                   </div>
                 </div>
-                <span className={`text-white/40 transition-transform ${collapsedGroups.has(country) ? '' : 'rotate-180'}`}>▼</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(country)}
+                  className="rounded-md p-2 text-white/45 hover:bg-white/10 hover:text-white/75"
+                  aria-label={collapsedGroups.has(country) ? `展開 ${country}` : `收合 ${country}`}
+                >
+                  <span className={`block transition-transform ${collapsedGroups.has(country) ? '' : 'rotate-180'}`}>▼</span>
+                </button>
+              </div>
 
               {/* Country Content */}
               {!collapsedGroups.has(country) && (
                 <div className="divide-y divide-white/5">
-                  {Object.entries(byData).map(([dataAmount, dataProducts]) => (
+                  {Object.entries(byData).map(([dataAmount, dataProducts]) => {
+                    const dataIds = dataProducts.map(product => product.id);
+                    const selectedInData = dataIds.filter(id => selectedProductIds.has(id)).length;
+                    return (
                     <div key={dataAmount}>
                       {/* Data Amount Header */}
                       <div className="px-6 py-2 bg-white/[0.02] flex items-center gap-2">
+                        {isSelectionMode && (
+                          <button
+                            type="button"
+                            onClick={() => toggleProductsSelected(dataIds)}
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                              selectedInData === dataIds.length && dataIds.length > 0
+                                ? 'border-red-300 bg-red-500 text-white'
+                                : selectedInData > 0
+                                  ? 'border-red-300/60 bg-red-500/25 text-red-100'
+                                  : 'border-white/20 text-transparent hover:border-red-300'
+                            }`}
+                            aria-label={`勾選 ${country} ${dataAmount}`}
+                            title={selectedInData === dataIds.length ? `取消勾選 ${dataAmount}` : `勾選 ${dataAmount} 全部天數`}
+                          >
+                            <CheckSquare className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <span className="text-xs font-bold text-cyan-400/80">⚡</span>
                         <span className="text-sm font-bold text-white/70">{dataAmount}</span>
-                        <span className="text-xs text-white/30">· {dataProducts.length} 個天數方案</span>
+                        <span className="text-xs text-white/30">
+                          · {dataProducts.length} 個天數方案
+                          {isSelectionMode && selectedInData > 0 ? ` · 已選 ${selectedInData}` : ''}
+                        </span>
                       </div>
                       {/* Products in this group */}
                       {dataProducts
@@ -1305,7 +1367,7 @@ export default function ProductsPage() {
                       );
                     })}
                     </div>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>

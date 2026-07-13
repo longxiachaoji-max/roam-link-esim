@@ -71,6 +71,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '沒有選擇要上架的方案' }, { status: 400 });
     }
 
+    let usedBasicFallback = false;
     let hasSupplierColumns = true;
     let existingProducts: ExistingProduct[] | null = null;
     let existingError: { message?: string } | null = null;
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
 
     if (existingError && /supplier_plan_id|column/i.test(existingError.message || '')) {
       hasSupplierColumns = false;
+      usedBasicFallback = true;
       const fallback = await supabase
         .from('products')
         .select('id, name, country, validity_days');
@@ -140,7 +142,6 @@ export async function POST(request: Request) {
     }
 
     let insertError: { message?: string } | null = null;
-    let usedBasicFallback = false;
     if (toInsert.length > 0) {
       const insertPayload = hasSupplierColumns ? toInsert : toInsert.map(stripSupplierColumns);
       const { error } = await supabase.from('products').insert(insertPayload);

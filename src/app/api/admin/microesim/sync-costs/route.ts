@@ -29,6 +29,11 @@ export async function POST(request: Request) {
       .not('supplier_plan_id', 'is', null);
 
     if (productError) {
+      if (/supplier_plan_id|column/i.test(productError.message || '')) {
+        return NextResponse.json({
+          error: '正式資料庫尚未建立 MicroEsim 商品欄位，請先在 Supabase SQL Editor 執行 supplier 欄位 migration'
+        }, { status: 400 });
+      }
       return NextResponse.json({ error: productError.message }, { status: 500 });
     }
 
