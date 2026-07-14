@@ -133,6 +133,12 @@ export interface MicroesimInventoryPayload {
   cost: number;
 }
 
+export interface MicroesimProductLink {
+  name?: string | null;
+  supplier?: string | null;
+  supplier_plan_id?: string | null;
+}
+
 function getMicroesimConfig() {
   return {
     baseUrl: process.env.MICROESIM_BASE_URL || 'https://test.microesim.com',
@@ -583,9 +589,22 @@ export function isMicroesimTestProduct(productName?: string | null) {
   return Boolean(productName?.includes(MICROESIM_PRODUCT_MARKER));
 }
 
-export async function createMicroesimTestInventory(): Promise<MicroesimInventoryPayload> {
+export function getMicroesimProductPlanId(product?: MicroesimProductLink | null) {
+  const supplierPlanId = String(product?.supplier_plan_id || '').trim();
+  if (supplierPlanId) return supplierPlanId;
+  if (isMicroesimTestProduct(product?.name)) return MICROESIM_TEST_PLAN_ID;
+  return '';
+}
+
+export async function createMicroesimInventoryForPlan(
+  channelDataplanId: string,
+  cost = 0
+): Promise<MicroesimInventoryPayload> {
+  const planId = channelDataplanId.trim();
+  if (!planId) throw new Error('MicroEsim 方案 ID 不可為空');
+
   const subscribe = await microesimPost<MicroesimSubscribeResult>('/allesim/v1/esimSubscribe', {
-    channel_dataplan_id: MICROESIM_TEST_PLAN_ID,
+    channel_dataplan_id: planId,
     number: '1'
   });
   const topupId = subscribe.topup_id;
@@ -602,11 +621,12 @@ export async function createMicroesimTestInventory(): Promise<MicroesimInventory
     ...parsed,
     raw_lpa: rawLpa,
     topup_id: topupId,
-    // MicroEsim sandbox returns the same test ICCID repeatedly, while our
-    // inventory table keeps ICCID unique. Store the LPA data for test orders
-    // and leave ICCID empty until production credentials return real values.
-    iccid: null,
+    iccid: detail.device_ids?.[0] || null,
     qr_code_url: detail.qrcode?.[0] || null,
-    cost: 0
+    cost
   };
+}
+
+export async function createMicroesimTestInventory(): Promise<MicroesimInventoryPayload> {
+  return createMicroesimInventoryForPlan(MICROESIM_TEST_PLAN_ID, 0);
 }

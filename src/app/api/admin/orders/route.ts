@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,11 @@ export async function GET() {
             name,
             country,
             data_amount,
-            validity_days
+            validity_days,
+            supplier,
+            supplier_plan_id,
+            supplier_plan_name,
+            supplier_cost_twd
           ),
           e_sim_inventory (
             iccid,
@@ -81,6 +86,67 @@ export async function PUT(request: Request) {
       }
 
       return NextResponse.json({ success: true, message: '已恢復客戶 eSIM 顯示' });
+    }
+
+    if (action === 'fulfill_microesim') {
+      const { data: orderItem, error: itemError } = await supabase
+        .from('order_items')
+        .select(`
+          id,
+          order_id,
+          product_id,
+          inventory_id,
+          orders ( payment_status ),
+          products (
+            id,
+            name,
+            supplier,
+            supplier_plan_id,
+            supplier_plan_name,
+            supplier_cost_twd
+          )
+        `)
+        .eq('id', order_item_id)
+        .single();
+
+      if (itemError || !orderItem) {
+        return NextResponse.json({ error: itemError?.message || '找不到訂單明細' }, { status: 404 });
+      }
+
+      if (orderItem.inventory_id) {
+        return NextResponse.json({ error: '此訂單明細已經綁定 eSIM' }, { status: 400 });
+      }
+
+      const orderRecord = (orderItem as any).orders;
+      const orderStatus = Array.isArray(orderRecord) ? orderRecord[0]?.payment_status : orderRecord?.payment_status;
+      if (orderStatus !== 'PAID') {
+        return NextResponse.json({ error: '訂單尚未付款，不能自動配發 MicroEsim' }, { status: 400 });
+      }
+
+      const productRecord = (orderItem as any).products;
+      const product = Array.isArray(productRecord) ? productRecord[0] : productRecord;
+      if (!orderItem.product_id || !product?.supplier_plan_id) {
+        return NextResponse.json({ error: '這筆商品沒有連結 MicroEsim 方案 ID' }, { status: 400 });
+      }
+
+      const inventory = await fulfillMicroesimOrderItem(supabase, orderItem.id, orderItem.product_id, product);
+      if (!inventory) {
+        return NextResponse.json({ error: 'MicroEsim 沒有完成配發，可能已被其他操作處理' }, { status: 409 });
+      }
+
+      const { data: remainingItems, error: remainingError } = await supabase
+        .from('order_items')
+        .select('id, inventory_id')
+        .eq('order_id', orderItem.order_id);
+
+      if (!remainingError && remainingItems?.every(item => item.inventory_id)) {
+        await supabase
+          .from('orders')
+          .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
+          .eq('id', orderItem.order_id);
+      }
+
+      return NextResponse.json({ success: true, inventory });
     }
 
     if (!inventory_id) {

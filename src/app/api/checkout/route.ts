@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
-import { createMicroesimTestInventory, isMicroesimTestProduct } from '@/lib/microesim';
+import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -247,42 +247,23 @@ export async function POST(request: Request) {
     if (orderItemError) throw orderItemError;
 
     let fulfilledInventory = assignedInventory;
-    if (!fulfilledInventory && totalAmount === 0 && orderItem && isMicroesimTestProduct(product.name)) {
+    if (!fulfilledInventory && totalAmount === 0 && orderItem) {
       try {
-        const esim = await createMicroesimTestInventory();
-        const expiresAt = new Date();
-        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+        const createdInventory = await fulfillMicroesimOrderItem(supabase, orderItem.id, product.id, product);
 
-        const { data: createdInventory, error: microInventoryError } = await supabase
-          .from('e_sim_inventory')
-          .insert({
-            product_id: product.id,
-            iccid: esim.iccid,
-            smdp_address: esim.smdp_address,
-            activation_code: esim.activation_code,
-            status: 'SOLD',
-            sold_at: new Date().toISOString(),
-            expiry_date: expiresAt.toISOString(),
-            cost: esim.cost
-          })
-          .select('*')
-          .single();
-        if (microInventoryError || !createdInventory) throw microInventoryError || new Error('新增 MicroEsim 測試庫存失敗');
-
-        const { error: microItemError } = await supabase
-          .from('order_items')
-          .update({ inventory_id: createdInventory.id })
-          .eq('id', orderItem.id)
-          .is('inventory_id', null);
-        if (microItemError) throw microItemError;
-
-        await supabase
-          .from('orders')
-          .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
-          .eq('id', order.id);
-        fulfilledInventory = createdInventory;
+        if (createdInventory) {
+          await supabase
+            .from('orders')
+            .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
+            .eq('id', order.id);
+          fulfilledInventory = createdInventory;
+        }
       } catch (microError) {
-        console.error('MicroEsim token checkout fulfillment failed:', microError);
+        console.error('MicroEsim token checkout fulfillment failed:', {
+          productId: product.id,
+          supplierPlanId: product.supplier_plan_id,
+          error: microError
+        });
       }
     }
 

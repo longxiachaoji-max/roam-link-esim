@@ -16,6 +16,10 @@ interface Product {
   country: string;
   data_amount: string | null;
   validity_days: number;
+  supplier: string | null;
+  supplier_plan_id: string | null;
+  supplier_plan_name: string | null;
+  supplier_cost_twd: number | null;
 }
 
 interface OrderItem {
@@ -125,6 +129,7 @@ export default function OrdersPage() {
   const [inventoryOptions, setInventoryOptions] = useState<InventoryOption[]>([]);
   const [assignSelections, setAssignSelections] = useState<Record<string, string>>({});
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
+  const [fulfillingMicroItemId, setFulfillingMicroItemId] = useState<string | null>(null);
   const [restoringItemId, setRestoringItemId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -258,6 +263,30 @@ export default function OrdersPage() {
     }
   };
 
+  const handleFulfillMicroesim = async (item: OrderItem) => {
+    const ok = window.confirm(`要透過 MicroEsim 自動配發這筆 eSIM 嗎？\n\n商品：${item.products?.name || '未知商品'}`);
+    if (!ok) return;
+
+    setFulfillingMicroItemId(item.id);
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: item.id,
+          action: 'fulfill_microesim'
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'MicroEsim 自動配發失敗');
+      await fetchOrders();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'MicroEsim 自動配發失敗');
+    } finally {
+      setFulfillingMicroItemId(null);
+    }
+  };
+
   const handleDeleteOrder = async (order: Order) => {
     const customer = order.customers?.email || '未知客戶';
     const ok = window.confirm(
@@ -313,8 +342,22 @@ export default function OrdersPage() {
     }
 
     const availableInventory = getAvailableInventoryForItem(item);
+    const canAutoFulfillMicro = Boolean(item.products?.supplier_plan_id);
     if (availableInventory.length === 0) {
-      return <span className="text-yellow-300/80 text-xs">待補庫存</span>;
+      return (
+        <div className="flex flex-col items-start gap-2">
+          <span className="text-yellow-300/80 text-xs">待補庫存</span>
+          {canAutoFulfillMicro && (
+            <button
+              onClick={() => handleFulfillMicroesim(item)}
+              disabled={fulfillingMicroItemId === item.id}
+              className={`${compact ? 'px-3 py-1.5' : 'px-4 py-2'} rounded-lg border border-sky-500/30 bg-sky-500/10 text-xs font-bold text-sky-200 hover:bg-sky-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30`}
+            >
+              {fulfillingMicroItemId === item.id ? '配發中...' : '自動配發 Micro'}
+            </button>
+          )}
+        </div>
+      );
     }
 
     return (
@@ -338,6 +381,15 @@ export default function OrdersPage() {
         >
           {assigningItemId === item.id ? '補上中...' : '補上 eSIM'}
         </button>
+        {canAutoFulfillMicro && (
+          <button
+            onClick={() => handleFulfillMicroesim(item)}
+            disabled={fulfillingMicroItemId === item.id}
+            className={`${compact ? 'px-3 py-1.5' : 'px-4 py-2'} rounded-lg border border-sky-500/30 bg-sky-500/10 text-xs font-bold text-sky-200 hover:bg-sky-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30 whitespace-nowrap`}
+          >
+            {fulfillingMicroItemId === item.id ? '配發中...' : '自動配發 Micro'}
+          </button>
+        )}
       </div>
     );
   };
