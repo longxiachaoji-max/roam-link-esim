@@ -40,7 +40,17 @@ export async function GET(request: Request) {
           note,
           user_deleted_at,
           products ( id, name, country, data_amount, validity_days ),
-          e_sim_inventory ( id, iccid, smdp_address, activation_code, status )
+          e_sim_inventory (
+            id,
+            iccid,
+            smdp_address,
+            activation_code,
+            status,
+            expiry_date,
+            microesim_topup_id,
+            microesim_usage_cache,
+            microesim_usage_checked_at
+          )
         )
       `)
       .eq('customer_id', customer.id)

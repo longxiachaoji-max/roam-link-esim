@@ -15,6 +15,7 @@ interface MicroesimTopupDetail {
   ios_esim_install_link?: string[];
   android_esim_install_link?: string[];
   channel_dataplan_name?: string;
+  [key: string]: unknown;
 }
 
 interface MicroesimResponse<T> {
@@ -573,6 +574,15 @@ export async function fetchKoreaMicroesimPlans(options: { hkdRate?: number; usdR
   return fetchMicroesimPlansByCountry('KR', options);
 }
 
+export async function fetchMicroesimTopupDetail(topupId: string) {
+  const normalizedTopupId = topupId.trim();
+  if (!normalizedTopupId) throw new Error('MicroEsim topup_id 不可為空');
+
+  return microesimPost<MicroesimTopupDetail>('/allesim/v1/topupDetail', {
+    topup_id: normalizedTopupId
+  });
+}
+
 function parseLpa(rawLpa: string) {
   const parts = rawLpa.split('$');
   if (parts.length < 3 || !parts[1] || !parts[2]) {
@@ -610,9 +620,7 @@ export async function createMicroesimInventoryForPlan(
   const topupId = subscribe.topup_id;
   if (!topupId) throw new Error('MicroEsim 沒有回傳 topup_id');
 
-  const detail = await microesimPost<MicroesimTopupDetail>('/allesim/v1/topupDetail', {
-    topup_id: topupId
-  });
+  const detail = await fetchMicroesimTopupDetail(topupId);
   const rawLpa = detail.lpa_str?.[0];
   if (!rawLpa) throw new Error('MicroEsim 尚未回傳 eSIM LPA 資料');
 

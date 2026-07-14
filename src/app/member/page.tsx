@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -25,6 +25,8 @@ export default function MemberCenter() {
 
   // Delete confirm
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [usageByItemId, setUsageByItemId] = useState<Record<string, any>>({});
+  const [usageLoadingId, setUsageLoadingId] = useState<string | null>(null);
 
   // Credit card topup
   const [isTopupOpen, setIsTopupOpen] = useState(false);
@@ -49,6 +51,19 @@ export default function MemberCenter() {
     if (res.ok) {
       const data = await res.json();
       setOrders(data.orders || []);
+      const cachedUsage: Record<string, any> = {};
+      for (const order of data.orders || []) {
+        for (const item of order.order_items || []) {
+          if (item.e_sim_inventory?.microesim_usage_cache) {
+            cachedUsage[item.id] = {
+              usage: item.e_sim_inventory.microesim_usage_cache,
+              checkedAt: item.e_sim_inventory.microesim_usage_checked_at,
+              stale: true
+            };
+          }
+        }
+      }
+      setUsageByItemId(cachedUsage);
     }
   };
 
@@ -226,6 +241,55 @@ export default function MemberCenter() {
     const deleteAt = new Date(deletedAt + 24 * 60 * 60 * 1000);
     return deleteAt.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   };
+
+  const formatUsageDate = (value: string | null | undefined) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getUsageValue = (value: any) => {
+    if (value === null || value === undefined || value === '') return '尚未回傳';
+    return String(value);
+  };
+
+  const handleUsageQuery = async (item: any) => {
+    if (!user?.email) return;
+    setUsageLoadingId(item.id);
+    try {
+      const res = await fetch('/api/member/esim-usage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: item.id,
+          email: user.email
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '查詢用量失敗');
+      setUsageByItemId(prev => ({
+        ...prev,
+        [item.id]: {
+          usage: json.usage,
+          checkedAt: json.checkedAt,
+          stale: Boolean(json.stale),
+          warning: json.warning
+        }
+      }));
+    } catch (err: any) {
+      showToast('❌ ' + (err?.message || '查詢用量失敗'));
+    } finally {
+      setUsageLoadingId(null);
+    }
+  };
+
   const visibleEsimCount = orders.reduce((sum, order) => (
     sum + order.order_items.filter((item: any) => !isDeleteWindowExpired(item)).length
   ), 0);
@@ -631,20 +695,66 @@ export default function MemberCenter() {
 
                 {/* Action Buttons */}
                 {item.e_sim_inventory && !deleted && (
-                  <div className="flex gap-3 mb-3">
-                     <a 
-                       href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
-                       className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
-                     >
-                       <Smartphone size={16} /> iOS 17.4+ 一鍵安裝
-                     </a>
-                     <button 
-                       className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
-                       onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
-                     >
-                       <QrCode size={16} /> 顯示 QRCODE
-                     </button>
-                  </div>
+                  <>
+                    <div className="flex gap-3 mb-3">
+                       <a 
+                         href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
+                         className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
+                       >
+                         <Smartphone size={16} /> iOS 17.4+ 一鍵安裝
+                       </a>
+                       <button 
+                         className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
+                         onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
+                       >
+                         <QrCode size={16} /> 顯示 QRCODE
+                       </button>
+                    </div>
+
+                    <div className="mb-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-white/90">用量與到期日</p>
+                          <p className="text-xs text-white/40 mt-0.5">
+                            {item.e_sim_inventory.microesim_topup_id ? '由 MicroEsim 即時查詢' : '此 eSIM 不支援即時用量查詢'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleUsageQuery(item)}
+                          disabled={!item.e_sim_inventory.microesim_topup_id || usageLoadingId === item.id}
+                          className="shrink-0 rounded-xl border border-cyan/20 bg-cyan/10 px-3 py-2 text-xs font-bold text-cyan hover:bg-cyan/20 disabled:border-white/5 disabled:bg-white/5 disabled:text-white/30 flex items-center gap-1.5"
+                        >
+                          <Activity size={14} />
+                          {usageLoadingId === item.id ? '查詢中...' : '查詢用量'}
+                        </button>
+                      </div>
+
+                      {usageByItemId[item.id] && (
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-xl bg-black/20 p-2">
+                            <div className="text-white/35 mb-1">剩餘流量</div>
+                            <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.remainingData)}</div>
+                          </div>
+                          <div className="rounded-xl bg-black/20 p-2">
+                            <div className="text-white/35 mb-1">已用流量</div>
+                            <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.usedData)}</div>
+                          </div>
+                          <div className="rounded-xl bg-black/20 p-2">
+                            <div className="text-white/35 mb-1">安裝狀態</div>
+                            <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.status)}</div>
+                          </div>
+                          <div className="rounded-xl bg-black/20 p-2">
+                            <div className="text-white/35 mb-1">到期日</div>
+                            <div className="font-bold text-white/90">{formatUsageDate(usageByItemId[item.id].usage?.expiresAt || item.e_sim_inventory.expiry_date)}</div>
+                          </div>
+                          <div className="col-span-2 text-white/35 px-1">
+                            最後查詢：{formatUsageDate(usageByItemId[item.id].checkedAt)}
+                            {usageByItemId[item.id].stale && <span className="ml-2 text-yellow-300/80">快取資料</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
 
                 {!item.e_sim_inventory && !deleted && (

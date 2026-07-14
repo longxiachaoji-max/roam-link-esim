@@ -31,7 +31,8 @@ export async function fulfillMicroesimOrderItem(
     status: 'SOLD',
     sold_at: new Date().toISOString(),
     expiry_date: expiresAt.toISOString(),
-    cost: esim.cost
+    cost: esim.cost,
+    microesim_topup_id: esim.topup_id
   };
 
   let { data: inventory, error: inventoryError } = await supabase
