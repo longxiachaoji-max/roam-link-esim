@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Check, DownloadCloud, Filter, Loader2, Search, Star, UploadCloud } from 'lucide-react';
 
 type SupplierPlan = {
@@ -261,6 +261,9 @@ export default function MicroesimPlansPage() {
   const [planTypeFilters, setPlanTypeFilters] = useState<Set<PlanTypeFilter>>(new Set());
   const [favoritePlanIds, setFavoritePlanIds] = useState<Set<string>>(loadFavoritePlanIds);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [favoritesSaving, setFavoritesSaving] = useState(false);
+  const [favoritesError, setFavoritesError] = useState('');
 
   const plans = useMemo(() => data?.plans || [], [data]);
   const selectedCountryName = countryOptions.find(country => country.code === selectedCountry)?.name || '韓國';
@@ -304,6 +307,60 @@ export default function MicroesimPlansPage() {
   const favoriteFilteredCount = filteredPlans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
   const favoriteTotalCount = favoritePlanIds.size;
 
+  const persistFavoritePlanIds = async (ids: Set<string>) => {
+    saveFavoritePlanIds(ids);
+    setFavoritesSaving(true);
+    setFavoritesError('');
+    try {
+      const response = await fetch('/api/admin/microesim/favorites', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planIds: Array.from(ids) })
+      });
+      const json = await response.json();
+      if (!response.ok || json.error) throw new Error(json.error || '儲存我的最愛失敗');
+    } catch (err) {
+      setFavoritesError(err instanceof Error ? err.message : '儲存我的最愛失敗');
+    } finally {
+      setFavoritesSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchFavorites = async () => {
+      setFavoritesError('');
+      try {
+        const response = await fetch('/api/admin/microesim/favorites', { cache: 'no-store' });
+        const json = await response.json();
+        if (!response.ok || json.error) throw new Error(json.error || '讀取我的最愛失敗');
+        if (cancelled) return;
+
+        const remoteIds = Array.isArray(json.planIds)
+          ? json.planIds.filter((id: unknown) => typeof id === 'string' && id.trim())
+          : [];
+        const localIds = loadFavoritePlanIds();
+        const next = new Set([...Array.from(localIds), ...remoteIds]);
+        setFavoritePlanIds(next);
+        saveFavoritePlanIds(next);
+        const remoteSet = new Set(remoteIds);
+        const shouldBackfillRemote = next.size !== remoteSet.size || Array.from(next).some(id => !remoteSet.has(id));
+        if (shouldBackfillRemote) void persistFavoritePlanIds(next);
+      } catch (err) {
+        if (!cancelled) setFavoritesError(err instanceof Error ? err.message : '讀取我的最愛失敗');
+      } finally {
+        if (!cancelled) setFavoritesLoaded(true);
+      }
+    };
+
+    void fetchFavorites();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const toggleSelected = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -343,13 +400,11 @@ export default function MicroesimPlansPage() {
   };
 
   const toggleFavorite = (id: string) => {
-    setFavoritePlanIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      saveFavoritePlanIds(next);
-      return next;
-    });
+    const next = new Set(favoritePlanIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setFavoritePlanIds(next);
+    void persistFavoritePlanIds(next);
   };
 
   const toggleSort = (field: Exclude<SortField, 'default'>) => {
@@ -392,7 +447,7 @@ export default function MicroesimPlansPage() {
     setImporting(true);
     setError('');
     setMessage('');
-    saveFavoritePlanIds(favoritePlanIds);
+    await persistFavoritePlanIds(favoritePlanIds);
     try {
       const response = await fetch('/api/admin/microesim/import-products', {
         method: 'POST',
@@ -457,7 +512,10 @@ export default function MicroesimPlansPage() {
         <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
           <p className="text-xs text-white/40">我的最愛 / 含限制</p>
           <p className="mt-1 text-2xl font-bold text-white">{favoriteVisibleCount}<span className="text-base text-white/35"> / {riskyCount}</span></p>
-          <p className="mt-1 text-[11px] text-white/35">全部收藏 {favoriteTotalCount} 筆</p>
+          <p className="mt-1 text-[11px] text-white/35">
+            全部收藏 {favoriteTotalCount} 筆
+            {favoritesSaving ? ' · 儲存中' : favoritesLoaded ? ' · 已同步' : ' · 載入中'}
+          </p>
         </div>
       </div>
 
@@ -563,6 +621,7 @@ export default function MicroesimPlansPage() {
 
       {message && <div className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{message}</div>}
       {error && <div className="rounded-lg border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+      {favoritesError && <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">我的最愛資料庫同步失敗，已先保留在本機備份：{favoritesError}</div>}
 
       <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
