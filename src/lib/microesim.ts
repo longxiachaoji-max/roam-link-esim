@@ -478,6 +478,8 @@ export function transformMicroesimPlan(
     terminateAfterUse: normalizeText(plan.rule_desc).toLowerCase().includes('terminate')
   };
   const hotspot = getHotspotSharing(plan, flags.noHotspot);
+  const isLocalCarrierPlan = /\blocal\b/i.test(plan.channel_dataplan_name || '');
+  const localCarrierLabel = isLocalCarrierPlan ? ' 本地網路電信業者方案' : '';
   const costOriginal = Number(plan.price || 0);
   const costTwd = Math.ceil(convertCostToTwd(costOriginal, plan.currency || 'HKD', {
     hkd: options.hkdRate || 4.15,
@@ -501,7 +503,7 @@ export function transformMicroesimPlan(
     supplier: 'microesim',
     supplier_plan_id: plan.channel_dataplan_id,
     supplier_plan_name: plan.channel_dataplan_name,
-    name: `${country} 高速上網 ${plan.day}天/${data.nameData}`,
+    name: `${country}${localCarrierLabel} 高速上網 ${plan.day}天/${data.nameData}`,
     country,
     data_amount: data.dataAmount,
     hotspot_sharing: hotspot,

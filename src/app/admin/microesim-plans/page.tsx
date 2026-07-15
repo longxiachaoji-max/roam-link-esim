@@ -202,6 +202,19 @@ function getPlanTypeKeys(plan: SupplierPlan): PlanTypeFilter[] {
   return keys;
 }
 
+function getPlanGbValues(plan: SupplierPlan) {
+  const text = rawPlanText(plan);
+  const values = new Set<number>();
+  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*(?:gb|g\b)/gi)) {
+    values.add(Number(match[1]));
+  }
+  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*(?:mb|m\b)/gi)) {
+    const mb = Number(match[1]);
+    if (Number.isFinite(mb) && mb >= 1024) values.add(Math.round((mb / 1024) * 100) / 100);
+  }
+  return Array.from(values);
+}
+
 function flagSortValue(plan: SupplierPlan) {
   return [
     plan.flags.kyc,
@@ -249,6 +262,7 @@ export default function MicroesimPlansPage() {
   const [selectedCountry, setSelectedCountry] = useState('KR');
   const [search, setSearch] = useState('');
   const [day, setDay] = useState('');
+  const [gbAmount, setGbAmount] = useState('');
   const [hideKyc, setHideKyc] = useState(false);
   const [hideNoHotspot, setHideNoHotspot] = useState(false);
   const [hideNoGpt, setHideNoGpt] = useState(false);
@@ -275,6 +289,8 @@ export default function MicroesimPlansPage() {
       if (favoritesOnly && !favoritePlanIds.has(plan.supplier_plan_id)) return false;
       const dayKeyword = day.trim();
       if (dayKeyword && String(plan.validity_days) !== dayKeyword) return false;
+      const gbKeyword = Number(gbAmount.trim());
+      if (gbAmount.trim() && (!Number.isFinite(gbKeyword) || !getPlanGbValues(plan).some(value => Math.abs(value - gbKeyword) < 0.01))) return false;
       if (hideKyc && plan.flags.kyc) return false;
       if (hideNoHotspot && plan.flags.noHotspot) return false;
       if (hideNoGpt && plan.flags.noGpt) return false;
@@ -300,7 +316,7 @@ export default function MicroesimPlansPage() {
       const result = compareSortValues(getSortValue(a, sortField), getSortValue(b, sortField));
       return sortDirection === 'asc' ? result : -result;
     });
-  }, [plans, search, day, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
+  }, [plans, search, day, gbAmount, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
 
   const selectedPlans = plans.filter(plan => selected.has(plan.supplier_plan_id));
   const favoriteVisibleCount = plans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
@@ -524,7 +540,7 @@ export default function MicroesimPlansPage() {
           <Filter className="h-4 w-4 text-cyan-300" />
           同步與篩選
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
           <label className="text-xs text-white/50">
             國家
             <select
@@ -565,6 +581,19 @@ export default function MicroesimPlansPage() {
               value={day}
               onChange={(event) => setDay(event.target.value)}
               placeholder="空白為全部"
+              className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30"
+            />
+          </label>
+          <label className="text-xs text-white/50">
+            G 數
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              inputMode="decimal"
+              value={gbAmount}
+              onChange={(event) => setGbAmount(event.target.value)}
+              placeholder="例如 5"
               className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30"
             />
           </label>
