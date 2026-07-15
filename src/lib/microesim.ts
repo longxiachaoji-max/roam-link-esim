@@ -479,7 +479,7 @@ export function transformMicroesimPlan(
   };
   const hotspot = getHotspotSharing(plan, flags.noHotspot);
   const isLocalCarrierPlan = /\blocal\b/i.test(plan.channel_dataplan_name || '');
-  const localCarrierLabel = isLocalCarrierPlan ? ' 本地網路電信業者方案' : '';
+  const localCarrierLabel = isLocalCarrierPlan ? ` 本地網路${carrier || ''}` : '';
   const costOriginal = Number(plan.price || 0);
   const costTwd = Math.ceil(convertCostToTwd(costOriginal, plan.currency || 'HKD', {
     hkd: options.hkdRate || 4.15,
