@@ -261,6 +261,7 @@ export default function MicroesimPlansPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedCountry, setSelectedCountry] = useState('KR');
   const [search, setSearch] = useState('');
+  const [search2, setSearch2] = useState('');
   const [day, setDay] = useState('');
   const [gbAmount, setGbAmount] = useState('');
   const [hideKyc, setHideKyc] = useState(false);
@@ -284,7 +285,9 @@ export default function MicroesimPlansPage() {
   const syncedCountryName = data?.country?.name || selectedCountryName;
 
   const filteredPlans = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keywords = [search, search2]
+      .map(value => value.trim().toLowerCase())
+      .filter(Boolean);
     const filtered = plans.filter(plan => {
       if (favoritesOnly && !favoritePlanIds.has(plan.supplier_plan_id)) return false;
       const dayKeyword = day.trim();
@@ -299,7 +302,7 @@ export default function MicroesimPlansPage() {
         const planTypes = getPlanTypeKeys(plan);
         if (!planTypes.some(type => planTypeFilters.has(type))) return false;
       }
-      if (!keyword) return true;
+      if (keywords.length === 0) return true;
       const text = [
         plan.name,
         plan.supplier_plan_name,
@@ -309,14 +312,14 @@ export default function MicroesimPlansPage() {
         plan.customer_note,
         plan.internal_warning
       ].join(' ').toLowerCase();
-      return text.includes(keyword);
+      return keywords.every(keyword => text.includes(keyword));
     });
     if (sortField === 'default') return filtered;
     return [...filtered].sort((a, b) => {
       const result = compareSortValues(getSortValue(a, sortField), getSortValue(b, sortField));
       return sortDirection === 'asc' ? result : -result;
     });
-  }, [plans, search, day, gbAmount, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
+  }, [plans, search, search2, day, gbAmount, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
 
   const selectedPlans = plans.filter(plan => selected.has(plan.supplier_plan_id));
   const favoriteVisibleCount = plans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
@@ -597,13 +600,23 @@ export default function MicroesimPlansPage() {
               className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30"
             />
           </label>
-          <label className="relative text-xs text-white/50 xl:col-span-2">
-            搜尋
+          <label className="relative text-xs text-white/50">
+            關鍵字 1
             <Search className="pointer-events-none absolute bottom-2.5 left-3 h-4 w-4 text-white/35" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="名稱、電信商、備註"
+              className="mt-1 w-full rounded-md border border-white/15 bg-black/30 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30"
+            />
+          </label>
+          <label className="relative text-xs text-white/50">
+            關鍵字 2
+            <Search className="pointer-events-none absolute bottom-2.5 left-3 h-4 w-4 text-white/35" />
+            <input
+              value={search2}
+              onChange={(event) => setSearch2(event.target.value)}
+              placeholder="需同時符合"
               className="mt-1 w-full rounded-md border border-white/15 bg-black/30 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30"
             />
           </label>
