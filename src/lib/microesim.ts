@@ -549,7 +549,10 @@ export async function fetchMicroesimPlansByCountry(
   }
 
   const plans = allPlans
-    .filter(plan => isRegionMode ? isMultiCountryPlan(plan) : isCountryPlan(plan, country))
+    .filter(plan => {
+      const multiCountry = isMultiCountryPlan(plan);
+      return isRegionMode ? multiCountry : !multiCountry && isCountryPlan(plan, country);
+    })
     .map(plan => transformMicroesimPlan(plan, {
       ...options,
       countryCode: isRegionMode ? undefined : country.code,
