@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
+import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -261,6 +262,17 @@ export async function POST(request: Request) {
       } catch (microError) {
         console.error('MicroEsim token checkout fulfillment failed:', {
           productId: product.id,
+          supplierPlanId: product.supplier_plan_id,
+          error: microError
+        });
+        await sendMicroesimFulfillmentFailureAlert(supabase, {
+          source: '儲值金結帳自動配發',
+          orderId: order.id,
+          orderItemId: orderItem.id,
+          customerEmail: email,
+          productName: product.name,
+          country: product.country,
+          validityDays: product.validity_days,
           supplierPlanId: product.supplier_plan_id,
           error: microError
         });

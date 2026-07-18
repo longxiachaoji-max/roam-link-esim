@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { awardReferralRewards } from '@/lib/referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
+import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
@@ -225,6 +226,17 @@ export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount:
           orderId,
           orderItemId: item.id,
           productId: item.product_id,
+          supplierPlanId: item.products?.supplier_plan_id,
+          error
+        });
+        await sendMicroesimFulfillmentFailureAlert(supabase, {
+          source: '綠界付款成功自動配發',
+          orderId,
+          orderItemId: item.id,
+          customerEmail: order.customers?.email,
+          productName: item.products?.name,
+          country: item.products?.country,
+          validityDays: item.products?.validity_days,
           supplierPlanId: item.products?.supplier_plan_id,
           error
         });

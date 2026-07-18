@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
+import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,10 +97,12 @@ export async function PUT(request: Request) {
           order_id,
           product_id,
           inventory_id,
-          orders ( payment_status ),
+          orders ( id, payment_status, customers ( email ) ),
           products (
             id,
             name,
+            country,
+            validity_days,
             supplier,
             supplier_plan_id,
             supplier_plan_name,
@@ -118,7 +121,8 @@ export async function PUT(request: Request) {
       }
 
       const orderRecord = (orderItem as any).orders;
-      const orderStatus = Array.isArray(orderRecord) ? orderRecord[0]?.payment_status : orderRecord?.payment_status;
+      const order = Array.isArray(orderRecord) ? orderRecord[0] : orderRecord;
+      const orderStatus = order?.payment_status;
       if (orderStatus !== 'PAID') {
         return NextResponse.json({ error: '訂單尚未付款，不能自動配發 MicroEsim' }, { status: 400 });
       }
@@ -129,7 +133,24 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: '這筆商品沒有連結 MicroEsim 方案 ID' }, { status: 400 });
       }
 
-      const inventory = await fulfillMicroesimOrderItem(supabase, orderItem.id, orderItem.product_id, product);
+      let inventory;
+      try {
+        inventory = await fulfillMicroesimOrderItem(supabase, orderItem.id, orderItem.product_id, product);
+      } catch (error) {
+        const customerRecord = Array.isArray(order?.customers) ? order.customers[0] : order?.customers;
+        await sendMicroesimFulfillmentFailureAlert(supabase, {
+          source: '後台手動自動配發',
+          orderId: orderItem.order_id,
+          orderItemId: orderItem.id,
+          customerEmail: customerRecord?.email,
+          productName: product.name,
+          country: product.country,
+          validityDays: product.validity_days,
+          supplierPlanId: product.supplier_plan_id,
+          error
+        });
+        throw error;
+      }
       if (!inventory) {
         return NextResponse.json({ error: 'MicroEsim 沒有完成配發，可能已被其他操作處理' }, { status: 409 });
       }
