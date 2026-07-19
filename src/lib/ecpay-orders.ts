@@ -26,6 +26,7 @@ interface FulfillmentItem {
 
 interface PaidOrder {
   id: string;
+  order_number: string;
   total_amount: number;
   payment_method: string;
   payment_status: string;
@@ -116,7 +117,7 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
         from: `Roam Link eSIM <${fromEmail}>`,
         to: [settings.order_notify_email],
         subject: `待補 eSIM 訂單：${pendingNames}`,
-        html: `<h1>綠界付款成功，訂單需要補 eSIM</h1><p>訂單：${order.id}</p><p>客戶：${customerEmail}</p><p>商品：${pendingNames}</p><p><a href="${adminUrl}">前往訂單管理</a></p>`
+        html: `<h1>綠界付款成功，訂單需要補 eSIM</h1><p>訂單：${order.order_number || order.id}</p><p>客戶：${customerEmail}</p><p>商品：${pendingNames}</p><p><a href="${adminUrl}">前往訂單管理</a></p>`
       });
     } catch (error) {
       console.error('Failed to send ECPay admin email:', error);
@@ -134,7 +135,7 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
           disable_web_page_preview: true,
           text: [
             '<b>綠界付款成功，訂單需要補 eSIM</b>',
-            `訂單：<code>${escapeTelegramHtml(order.id)}</code>`,
+            `訂單：<code>${escapeTelegramHtml(order.order_number || order.id)}</code>`,
             `客戶：${escapeTelegramHtml(customerEmail)}`,
             `商品：${escapeTelegramHtml(pendingNames)}`,
             `後台：${adminUrl}`
@@ -153,7 +154,7 @@ export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount:
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .select(`
-      id, total_amount, payment_method, payment_status, order_status,
+      id, order_number, total_amount, payment_method, payment_status, order_status,
       customers ( email, name ),
       order_items (
         id, product_id, inventory_id,

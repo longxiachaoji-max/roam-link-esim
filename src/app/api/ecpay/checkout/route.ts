@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         payment_status: 'PENDING',
         order_status: 'CREATED'
       }])
-      .select('id')
+      .select('id, order_number')
       .single();
     if (orderError || !order) throw orderError || new Error('建立訂單失敗');
     orderId = order.id;
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     }
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 
-    return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id });
+    return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id, orderNumber: order.order_number });
   } catch (error) {
     console.error('Create ECPay checkout error:', error);
     if (orderId) {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
+import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 
 export const dynamic = 'force-dynamic';
@@ -13,10 +13,17 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // GET - 取得所有訂單
 export async function GET() {
   try {
+    try {
+      await reconcilePendingMicroesimItems(supabase, { limit: 10, minAgeSeconds: 10 });
+    } catch (reconcileError) {
+      console.error('Admin MicroEsim reconciliation failed:', reconcileError);
+    }
+
     const { data, error } = await supabase
       .from('orders')
       .select(`
         id,
+        order_number,
         created_at,
         total_amount,
         tokens_used,
@@ -34,6 +41,11 @@ export async function GET() {
           user_deleted_at,
           product_id,
           inventory_id,
+          supplier_order_ref,
+          supplier_order_id,
+          supplier_status,
+          supplier_last_checked_at,
+          supplier_error,
           products (
             id,
             name,
@@ -97,7 +109,7 @@ export async function PUT(request: Request) {
           order_id,
           product_id,
           inventory_id,
-          orders ( id, payment_status, customers ( email ) ),
+          orders ( id, order_number, payment_status, customers ( email ) ),
           products (
             id,
             name,
@@ -152,7 +164,11 @@ export async function PUT(request: Request) {
         throw error;
       }
       if (!inventory) {
-        return NextResponse.json({ error: 'MicroEsim 沒有完成配發，可能已被其他操作處理' }, { status: 409 });
+        return NextResponse.json({
+          success: true,
+          pending: true,
+          message: 'MicroEsim 訂單已送出，正在等待 QR Code 生成'
+        });
       }
 
       const { data: remainingItems, error: remainingError } = await supabase

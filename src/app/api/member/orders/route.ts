@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -25,11 +26,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ orders: [] }); // User might not have any orders yet
     }
 
+    try {
+      await reconcilePendingMicroesimItems(supabase, { customerId: customer.id, limit: 5, minAgeSeconds: 10 });
+    } catch (reconcileError) {
+      console.error('Member MicroEsim reconciliation failed:', reconcileError);
+    }
+
     // 2. Get orders and join items, products, inventory
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
       .select(`
-        id, 
+        id,
+        order_number,
         created_at, 
         total_amount, 
         payment_status,
@@ -39,6 +47,11 @@ export async function GET(request: Request) {
           price,
           note,
           user_deleted_at,
+          supplier_order_ref,
+          supplier_order_id,
+          supplier_status,
+          supplier_last_checked_at,
+          supplier_error,
           products ( id, name, country, data_amount, validity_days ),
           e_sim_inventory (
             id,

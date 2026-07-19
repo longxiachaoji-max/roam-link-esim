@@ -29,6 +29,11 @@ interface OrderItem {
   user_deleted_at: string | null;
   product_id: string;
   inventory_id: string | null;
+  supplier_order_ref: string | null;
+  supplier_order_id: string | null;
+  supplier_status: string | null;
+  supplier_last_checked_at: string | null;
+  supplier_error: string | null;
   products: Product | null;
   e_sim_inventory: ESimInventory | null;
 }
@@ -40,6 +45,7 @@ interface Customer {
 
 interface Order {
   id: string;
+  order_number: string;
   created_at: string;
   total_amount: number;
   tokens_used: number | null;
@@ -290,7 +296,7 @@ export default function OrdersPage() {
   const handleDeleteOrder = async (order: Order) => {
     const customer = order.customers?.email || '未知客戶';
     const ok = window.confirm(
-      `確定要刪除這筆訂單嗎？\n\n客戶：${customer}\n訂單：${order.id}\n\n已配發的 eSIM 會退回可用庫存。`
+      `確定要刪除這筆訂單嗎？\n\n客戶：${customer}\n訂單：${order.order_number || order.id}\n\n已配發的 eSIM 會退回可用庫存。`
     );
     if (!ok) return;
 
@@ -346,14 +352,35 @@ export default function OrdersPage() {
     if (availableInventory.length === 0) {
       return (
         <div className="flex flex-col items-start gap-2">
-          <span className="text-yellow-300/80 text-xs">待補庫存</span>
+          <span className="text-yellow-300/80 text-xs">
+            {item.supplier_status === 'PROCESSING' || item.supplier_status === 'SUBMITTING'
+              ? 'Micro 配發中，開啟本頁會自動補查'
+              : item.supplier_status === 'FAILED'
+                ? 'Micro 下單失敗'
+                : '待補庫存'}
+          </span>
+          {item.supplier_order_ref && (
+            <span className="font-mono text-[11px] text-white/40">對帳 {item.supplier_order_ref}</span>
+          )}
+          {item.supplier_order_id && (
+            <span className="font-mono text-[11px] text-white/35">Micro {item.supplier_order_id}</span>
+          )}
+          {item.supplier_error && (
+            <span className="max-w-[280px] text-[11px] text-red-300/70">{item.supplier_error}</span>
+          )}
           {canAutoFulfillMicro && (
             <button
               onClick={() => handleFulfillMicroesim(item)}
               disabled={fulfillingMicroItemId === item.id}
               className={`${compact ? 'px-3 py-1.5' : 'px-4 py-2'} rounded-lg border border-sky-500/30 bg-sky-500/10 text-xs font-bold text-sky-200 hover:bg-sky-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30`}
             >
-              {fulfillingMicroItemId === item.id ? '配發中...' : '自動配發 Micro'}
+              {fulfillingMicroItemId === item.id
+                ? '查詢中...'
+                : item.supplier_order_id
+                  ? '立即查詢 Micro'
+                  : item.supplier_status === 'FAILED'
+                    ? '重新送出 Micro'
+                    : '自動配發 Micro'}
             </button>
           )}
         </div>
@@ -581,7 +608,8 @@ export default function OrdersPage() {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
                                 <span className="text-white/40">訂單編號</span>
-                                <p className="text-white/80 font-mono text-xs mt-1">{order.id}</p>
+                                <p className="text-white/80 font-mono text-xs mt-1">{order.order_number || order.id}</p>
+                                <p className="text-white/30 font-mono text-[10px] mt-1" title="系統內部識別碼">{order.id}</p>
                               </div>
                               <div>
                                 <span className="text-white/40">客戶名稱</span>

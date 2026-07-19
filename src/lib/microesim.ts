@@ -3,11 +3,11 @@ import crypto from 'crypto';
 const MICROESIM_TEST_PLAN_ID = 'b1a926e1-d770-4e03-804e-c527b9397eb9';
 const MICROESIM_PRODUCT_MARKER = 'MicroEsim 測試';
 
-interface MicroesimSubscribeResult {
+export interface MicroesimSubscribeResult {
   topup_id?: string;
 }
 
-interface MicroesimTopupDetail {
+export interface MicroesimTopupDetail {
   topup_id?: string;
   device_ids?: string[];
   lpa_str?: string[];
@@ -132,6 +132,12 @@ export interface MicroesimInventoryPayload {
   qr_code_url: string | null;
   topup_id: string;
   cost: number;
+}
+
+export interface MicroesimSubscribeOptions {
+  customOrderNo?: string;
+  notifyUrl?: string;
+  remark?: string;
 }
 
 export interface MicroesimProductLink {
@@ -588,6 +594,26 @@ export async function fetchMicroesimTopupDetail(topupId: string) {
   });
 }
 
+export async function subscribeMicroesimPlan(
+  channelDataplanId: string,
+  options: MicroesimSubscribeOptions = {}
+) {
+  const planId = channelDataplanId.trim();
+  if (!planId) throw new Error('MicroEsim 方案 ID 不可為空');
+
+  const body: Record<string, string> = {
+    channel_dataplan_id: planId,
+    number: '1'
+  };
+  if (options.customOrderNo?.trim()) body.custom_order_no = options.customOrderNo.trim().slice(0, 22);
+  if (options.notifyUrl?.trim()) body.notify_url = options.notifyUrl.trim().slice(0, 255);
+  if (options.remark?.trim()) body.remark = options.remark.trim().slice(0, 200);
+
+  const result = await microesimPost<MicroesimSubscribeResult>('/allesim/v1/esimSubscribe', body);
+  if (!result.topup_id) throw new Error('MicroEsim 沒有回傳 topup_id');
+  return result;
+}
+
 function parseLpa(rawLpa: string) {
   const parts = rawLpa.split('$');
   if (parts.length < 3 || !parts[1] || !parts[2]) {
@@ -597,6 +623,27 @@ function parseLpa(rawLpa: string) {
   return {
     smdp_address: parts[1],
     activation_code: parts.slice(2).join('$')
+  };
+}
+
+export function createMicroesimInventoryFromDetail(
+  detail: MicroesimTopupDetail,
+  cost = 0
+): MicroesimInventoryPayload | null {
+  const topupId = String(detail.topup_id || '').trim();
+  if (!topupId) throw new Error('MicroEsim 明細沒有 topup_id');
+
+  const rawLpa = detail.lpa_str?.[0];
+  if (!rawLpa) return null;
+
+  const parsed = parseLpa(rawLpa);
+  return {
+    ...parsed,
+    raw_lpa: rawLpa,
+    topup_id: topupId,
+    iccid: detail.device_ids?.[0] || null,
+    qr_code_url: detail.qrcode?.[0] || null,
+    cost
   };
 }
 
@@ -613,31 +660,17 @@ export function getMicroesimProductPlanId(product?: MicroesimProductLink | null)
 
 export async function createMicroesimInventoryForPlan(
   channelDataplanId: string,
-  cost = 0
+  cost = 0,
+  options: MicroesimSubscribeOptions = {}
 ): Promise<MicroesimInventoryPayload> {
-  const planId = channelDataplanId.trim();
-  if (!planId) throw new Error('MicroEsim 方案 ID 不可為空');
-
-  const subscribe = await microesimPost<MicroesimSubscribeResult>('/allesim/v1/esimSubscribe', {
-    channel_dataplan_id: planId,
-    number: '1'
-  });
+  const subscribe = await subscribeMicroesimPlan(channelDataplanId, options);
   const topupId = subscribe.topup_id;
   if (!topupId) throw new Error('MicroEsim 沒有回傳 topup_id');
 
   const detail = await fetchMicroesimTopupDetail(topupId);
-  const rawLpa = detail.lpa_str?.[0];
-  if (!rawLpa) throw new Error('MicroEsim 尚未回傳 eSIM LPA 資料');
-
-  const parsed = parseLpa(rawLpa);
-  return {
-    ...parsed,
-    raw_lpa: rawLpa,
-    topup_id: topupId,
-    iccid: detail.device_ids?.[0] || null,
-    qr_code_url: detail.qrcode?.[0] || null,
-    cost
-  };
+  const inventory = createMicroesimInventoryFromDetail(detail, cost);
+  if (!inventory) throw new Error('MicroEsim 尚未回傳 eSIM LPA 資料');
+  return inventory;
 }
 
 export async function createMicroesimTestInventory(): Promise<MicroesimInventoryPayload> {

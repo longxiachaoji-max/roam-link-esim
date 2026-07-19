@@ -297,7 +297,7 @@ export async function POST(request: Request) {
           amount: -tokensUsed,
           transaction_type: 'purchase',
           balance_after: newBalance,
-          reason: `購買 eSIM (訂單 #${order.id.split('-')[0]})`
+          reason: `購買 eSIM (訂單 ${order.order_number || order.id.split('-')[0]})`
         }]);
       if (txError) console.error("Failed to insert token_transaction:", txError);
     }
@@ -333,7 +333,7 @@ export async function POST(request: Request) {
           subject: `待補 eSIM 訂單：${product.name}`,
           html: `
             <h1>有一筆訂單需要補 eSIM</h1>
-            <p><strong>訂單：</strong>${order.id}</p>
+            <p><strong>訂單：</strong>${order.order_number || order.id}</p>
             <p><strong>客戶：</strong>${email}</p>
             <p><strong>商品：</strong>${product.name}</p>
             <p><strong>金額：</strong>NT$${Number(product.price)}</p>
@@ -359,7 +359,7 @@ export async function POST(request: Request) {
 
       await sendTelegramNotification([
         '<b>有一筆訂單需要補 eSIM</b>',
-        `訂單：<code>${escapeTelegramHtml(order.id)}</code>`,
+        `訂單：<code>${escapeTelegramHtml(order.order_number || order.id)}</code>`,
         `客戶：${escapeTelegramHtml(email)}`,
         `商品：${escapeTelegramHtml(product.name)}`,
         `國家：${escapeTelegramHtml(product.country || '-')}`,
@@ -372,6 +372,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       orderId: order.id,
+      orderNumber: order.order_number,
       inventoryStatus: fulfilledInventory ? 'ASSIGNED' : 'PENDING',
       message: fulfilledInventory ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
     });

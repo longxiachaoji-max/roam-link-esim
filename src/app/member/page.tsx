@@ -617,7 +617,7 @@ export default function MemberCenter() {
                     </div>
                     <div>
                       <div className="font-bold text-lg">{item.products?.name || '已下架商品'}</div>
-                      <div className="text-xs text-white/40 mb-0.5">#{order.id.split('-')[0].toUpperCase()}</div>
+                      <div className="text-xs text-white/40 mb-0.5">#{order.order_number || order.id.split('-')[0].toUpperCase()}</div>
                       <div className="text-xs text-white/40">訂購：{new Date(order.created_at).toLocaleString()}</div>
                     </div>
                   </div>
