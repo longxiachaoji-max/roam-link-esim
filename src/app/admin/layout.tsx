@@ -21,6 +21,8 @@ export default function AdminLayout({
     { name: '資源監控', href: '/admin/resource-monitor' },
     { name: '訂單管理', href: '/admin/orders' },
     { name: '商品管理', href: '/admin/products' },
+    { name: '實體商品管理', href: '/admin/physical-products' },
+    { name: '實體商品訂單', href: '/admin/physical-orders' },
     { name: 'MicroEsim 方案庫', href: '/admin/microesim-plans' },
     { name: 'eSIM 庫存', href: '/admin/esim-inventory' },
     { name: '優惠代碼', href: '/admin/promo-codes' },

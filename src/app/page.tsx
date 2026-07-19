@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { trackPageView } from "@/lib/analytics";
@@ -496,6 +497,7 @@ export default function Home() {
         <ul className="hidden md:flex gap-8">
           <li><a href="#" className="text-muted hover:text-text-main transition-colors text-sm font-medium">首頁</a></li>
           <li><a href="#products" className="text-muted hover:text-text-main transition-colors text-sm font-medium">eSIM 方案</a></li>
+          <li><Link href="/shop" className="text-muted hover:text-text-main transition-colors text-sm font-medium">實體商城</Link></li>
         </ul>
         <div className="flex items-center gap-4">
             {user ? (

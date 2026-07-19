@@ -1,0 +1,270 @@
+"use client";
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { ExternalLink, ImageIcon, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { adminFetch } from '@/lib/admin-fetch';
+
+type Category = 'rental' | 'travel_card' | 'other';
+
+interface Product {
+  id: string;
+  name: string;
+  category: Category;
+  summary: string | null;
+  description: string | null;
+  rental_terms: string | null;
+  price: number;
+  stock_quantity: number;
+  images: string[];
+  is_active: boolean;
+  sort_order: number;
+}
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  rental: '商品租借',
+  travel_card: '實體漫遊卡',
+  other: '其他旅遊商品'
+};
+
+const EMPTY_FORM = {
+  name: '',
+  category: 'travel_card' as Category,
+  summary: '',
+  description: '',
+  rental_terms: '',
+  price: 0,
+  stock_quantity: 0,
+  images: [] as string[],
+  is_active: false,
+  sort_order: 0
+};
+
+export default function PhysicalProductsAdminPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await adminFetch('/api/admin/physical-products', { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '讀取商品失敗');
+      setProducts(result.products || []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '讀取商品失敗');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadProducts(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadProducts]);
+
+  const openNew = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setIsEditorOpen(true);
+  };
+
+  const openEdit = (product: Product) => {
+    setEditingId(product.id);
+    setForm({
+      name: product.name,
+      category: product.category,
+      summary: product.summary || '',
+      description: product.description || '',
+      rental_terms: product.rental_terms || '',
+      price: product.price,
+      stock_quantity: product.stock_quantity,
+      images: product.images || [],
+      is_active: product.is_active,
+      sort_order: product.sort_order
+    });
+    setIsEditorOpen(true);
+  };
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    setMessage('');
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const response = await adminFetch('/api/admin/physical-products/upload', { method: 'POST', body });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '圖片上傳失敗');
+      setForm(current => ({ ...current, images: [...current.images, result.url].slice(0, 8) }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '圖片上傳失敗');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const saveProduct = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await adminFetch('/api/admin/physical-products', {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, id: editingId })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '儲存商品失敗');
+      setIsEditorOpen(false);
+      setMessage(editingId ? '商品已更新' : '商品已新增');
+      await loadProducts();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '儲存商品失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteProduct = async (product: Product) => {
+    if (!window.confirm(`確定刪除「${product.name}」嗎？歷史訂單仍會保留商品名稱。`)) return;
+    const response = await adminFetch(`/api/admin/physical-products?id=${product.id}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!response.ok) return setMessage(result.error || '刪除失敗');
+    setMessage('商品已刪除');
+    await loadProducts();
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl pb-20">
+      <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">實體商品管理</h1>
+          <p className="mt-1 text-sm text-white/45">管理商品租借、實體漫遊卡與商品詳細頁</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/shop" target="_blank" className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 px-4 text-sm text-white/75 hover:bg-white/5">
+            <ExternalLink size={16} /> 查看商城
+          </Link>
+          <button onClick={openNew} className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-500 px-4 text-sm font-bold text-[#07141a] hover:bg-cyan-400">
+            <Plus size={17} /> 新增商品
+          </button>
+        </div>
+      </div>
+
+      {message && <div className="mb-5 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">{message}</div>}
+
+      <div className="overflow-hidden rounded-md border border-white/10 bg-[#141426]">
+        <div className="grid grid-cols-[72px_minmax(220px,1fr)_140px_110px_90px_110px] gap-4 border-b border-white/10 px-5 py-3 text-xs font-medium text-white/40 max-lg:hidden">
+          <span>圖片</span><span>商品</span><span>分類</span><span>售價</span><span>庫存</span><span className="text-right">操作</span>
+        </div>
+        {loading ? (
+          <div className="px-5 py-16 text-center text-white/40">載入商品中...</div>
+        ) : products.length === 0 ? (
+          <div className="px-5 py-16 text-center">
+            <ImageIcon className="mx-auto mb-3 text-white/20" size={36} />
+            <p className="text-white/55">尚未新增實體商品</p>
+          </div>
+        ) : products.map(product => (
+          <div key={product.id} className="grid grid-cols-1 gap-4 border-b border-white/8 px-5 py-4 last:border-b-0 lg:grid-cols-[72px_minmax(220px,1fr)_140px_110px_90px_110px] lg:items-center">
+            <div className="relative h-16 w-16 overflow-hidden rounded-md bg-white/5">
+              {product.images[0] ? <Image src={product.images[0]} alt="" fill sizes="64px" className="object-cover" /> : <ImageIcon className="m-5 text-white/20" size={24} />}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="truncate font-semibold text-white">{product.name}</p>
+                <span className={`rounded px-2 py-0.5 text-[11px] ${product.is_active ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/8 text-white/40'}`}>{product.is_active ? '已上架' : '未上架'}</span>
+              </div>
+              <p className="mt-1 truncate text-sm text-white/40">{product.summary || '尚未填寫商品摘要'}</p>
+            </div>
+            <span className="text-sm text-white/65">{CATEGORY_LABELS[product.category]}</span>
+            <span className="font-mono text-sm font-semibold text-amber-300">NT${product.price.toLocaleString()}</span>
+            <span className={`font-mono text-sm ${product.stock_quantity > 0 ? 'text-white/70' : 'text-rose-300'}`}>{product.stock_quantity}</span>
+            <div className="flex justify-end gap-2">
+              <button title="編輯商品" onClick={() => openEdit(product)} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-white/65 hover:bg-white/8 hover:text-white"><Pencil size={16} /></button>
+              <button title="刪除商品" onClick={() => deleteProduct(product)} className="grid h-9 w-9 place-items-center rounded-md border border-rose-400/20 text-rose-300 hover:bg-rose-400/10"><Trash2 size={16} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isEditorOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70" onMouseDown={event => event.target === event.currentTarget && setIsEditorOpen(false)}>
+          <div className="h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-[#121223] p-5 shadow-2xl md:p-8">
+            <div className="mb-7 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">{editingId ? '編輯實體商品' : '新增實體商品'}</h2>
+              <button title="關閉" onClick={() => setIsEditorOpen(false)} className="grid h-9 w-9 place-items-center rounded-md text-white/55 hover:bg-white/8 hover:text-white"><X size={20} /></button>
+            </div>
+
+            <div className="space-y-5">
+              <label className="block text-sm text-white/65">商品名稱
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" placeholder="例如：日本實體漫遊卡 7天" />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm text-white/65">分類
+                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value as Category })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-[#0d0d1a] px-3 text-white outline-none focus:border-cyan-400">
+                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm text-white/65">排序
+                  <input type="number" value={form.sort_order} onChange={e => setForm({ ...form, sort_order: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" />
+                </label>
+              </div>
+              <label className="block text-sm text-white/65">列表摘要
+                <input value={form.summary} onChange={e => setForm({ ...form, summary: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" placeholder="列表上快速說明商品特色" />
+              </label>
+              <label className="block text-sm text-white/65">商品詳細內容
+                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={7} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="規格、適用地區、使用方法、注意事項..." />
+              </label>
+              {form.category === 'rental' && <label className="block text-sm text-white/65">租借說明
+                <textarea value={form.rental_terms} onChange={e => setForm({ ...form, rental_terms: e.target.value })} rows={4} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="租期、押金、歸還方式與逾期規則" />
+              </label>}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm text-white/65">售價／租金 (NT$)
+                  <input type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" />
+                </label>
+                <label className="block text-sm text-white/65">庫存
+                  <input type="number" min="0" value={form.stock_quantity} onChange={e => setForm({ ...form, stock_quantity: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" />
+                </label>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm text-white/65">商品圖片（第一張為封面，最多 8 張）</span>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/75 hover:bg-white/5">
+                    <Upload size={15} /> {uploading ? '上傳中...' : '上傳圖片'}
+                    <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading || form.images.length >= 8} className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) uploadImage(file); e.target.value = ''; }} />
+                  </label>
+                </div>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                  {form.images.map((url, index) => (
+                    <div key={url} className="relative aspect-square overflow-hidden rounded-md border border-white/10 bg-white/5">
+                      <Image src={url} alt="" fill sizes="160px" className="object-cover" />
+                      {index === 0 && <span className="absolute bottom-1 left-1 rounded bg-black/75 px-1.5 py-0.5 text-[10px]">封面</span>}
+                      <button title="移除圖片" onClick={() => setForm(current => ({ ...current, images: current.images.filter(item => item !== url) }))} className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded bg-black/75 text-white"><X size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex items-center gap-3 border-t border-white/10 pt-5 text-sm text-white/75">
+                <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} className="h-4 w-4 accent-cyan-400" />
+                儲存後立即在實體商城上架
+              </label>
+            </div>
+
+            <div className="sticky bottom-0 mt-8 flex justify-end gap-3 border-t border-white/10 bg-[#121223] py-5">
+              <button onClick={() => setIsEditorOpen(false)} className="h-11 rounded-md border border-white/15 px-5 text-sm text-white/65 hover:bg-white/5">取消</button>
+              <button onClick={saveProduct} disabled={saving || uploading} className="h-11 rounded-md bg-cyan-500 px-6 text-sm font-bold text-[#07141a] hover:bg-cyan-400 disabled:opacity-40">{saving ? '儲存中...' : '儲存商品'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

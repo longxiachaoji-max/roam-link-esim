@@ -7,6 +7,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 1
+    },
+    {
+      url: 'https://firstesim.space/shop',
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.8
     }
   ];
 }
