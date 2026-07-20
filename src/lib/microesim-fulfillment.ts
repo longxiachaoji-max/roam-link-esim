@@ -1,5 +1,6 @@
 import {
   createMicroesimInventoryFromDetail,
+  createMicroesimCallbackToken,
   fetchMicroesimTopupDetail,
   getMicroesimProductPlanId,
   subscribeMicroesimPlan,
@@ -210,9 +211,10 @@ export async function fulfillMicroesimOrderItem(
 
     try {
       const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://firstesim.space').replace(/\/$/, '');
+      const callbackToken = createMicroesimCallbackToken(supplierOrderRef);
       const subscribe = await subscribeMicroesimPlan(planId, {
         customOrderNo: supplierOrderRef,
-        notifyUrl: `${siteUrl}/api/microesim/callback`,
+        notifyUrl: `${siteUrl}/api/microesim/callback?token=${callbackToken}`,
         remark: `FirstRoamLink ${orderNumber}`
       });
       topupId = String(subscribe.topup_id || '').trim();

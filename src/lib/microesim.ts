@@ -155,6 +155,21 @@ function getMicroesimConfig() {
   };
 }
 
+export function createMicroesimCallbackToken(orderReference: string) {
+  const { secret } = getMicroesimConfig();
+  if (!secret) throw new Error('MicroEsim API 尚未設定');
+  return crypto
+    .createHmac('sha256', secret)
+    .update(`firstroamlink-callback:${orderReference}`)
+    .digest('hex');
+}
+
+export function verifyMicroesimCallbackToken(orderReference: string, receivedToken: string) {
+  if (!orderReference || !/^[a-f0-9]{64}$/i.test(receivedToken)) return false;
+  const expectedToken = createMicroesimCallbackToken(orderReference);
+  return crypto.timingSafeEqual(Buffer.from(expectedToken, 'hex'), Buffer.from(receivedToken, 'hex'));
+}
+
 function buildHeaders(contentType: string) {
   const { account, secret, salt } = getMicroesimConfig();
   if (!account || !secret || !salt) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
+import { verifyMicroesimCallbackToken } from '@/lib/microesim';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     const body = await readCallbackBody(request) as Record<string, unknown>;
     const nestedData = body.data && typeof body.data === 'object' ? body.data as Record<string, unknown> : null;
     const topupId = String(body.topup_id || nestedData?.topup_id || '').trim();
+    const callbackToken = new URL(request.url).searchParams.get('token') || '';
     if (!/^[A-Za-z0-9_-]{8,64}$/.test(topupId)) {
       return NextResponse.json({ success: false, error: 'topup_id 格式不正確' }, { status: 400 });
     }
@@ -34,12 +36,16 @@ export async function POST(request: Request) {
         id,
         product_id,
         inventory_id,
+        supplier_order_ref,
         products ( id, name, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd )
       `)
       .eq('supplier_order_id', topupId)
       .maybeSingle();
 
     if (error) throw error;
+    if (!orderItem?.supplier_order_ref || !verifyMicroesimCallbackToken(orderItem.supplier_order_ref, callbackToken)) {
+      return NextResponse.json({ success: false, error: '回呼驗證失敗' }, { status: 401 });
+    }
     if (!orderItem || orderItem.inventory_id) {
       return NextResponse.json({ success: true, matched: Boolean(orderItem), completed: Boolean(orderItem?.inventory_id) });
     }
