@@ -6,6 +6,7 @@ import {
   requirePhysicalStoreAdmin,
   type PhysicalProductCategory
 } from '@/lib/physical-store';
+import { normalizeRentalPriceTiers } from '@/lib/rental-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ function cleanPayload(body: Record<string, unknown>) {
     summary: String(body.summary || '').trim().slice(0, 300) || null,
     description: String(body.description || '').trim() || null,
     rental_terms: String(body.rental_terms || '').trim() || null,
+    rental_price_tiers: category === 'rental' ? normalizeRentalPriceTiers(body.rental_price_tiers) : [],
     price,
     stock_quantity: stockQuantity,
     images: Array.isArray(body.images)

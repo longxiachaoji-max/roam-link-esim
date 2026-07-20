@@ -5,9 +5,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, Minus, Package, Plus, ShoppingBag, Trash2, User, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { calculateRentalPrice, type RentalPriceTier } from '@/lib/rental-pricing';
 
 type Category = 'all' | 'rental' | 'travel_card' | 'other';
-interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; }
+interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; rental_price_tiers: RentalPriceTier[]; }
 interface CartItem extends Product {
   quantity: number;
   rentalStartDate?: string;
@@ -23,7 +24,9 @@ function cartItemKey(item: CartItem) {
 }
 
 function lineTotal(item: CartItem) {
-  return item.price * item.quantity * (item.category === 'rental' ? item.rentalDays || 0 : 1);
+  return item.quantity * (item.category === 'rental'
+    ? calculateRentalPrice(item.price, item.rentalDays || 0, item.rental_price_tiers || [])
+    : item.price);
 }
 
 function formatRentalDate(value?: string) {

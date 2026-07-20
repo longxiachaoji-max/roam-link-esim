@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ExternalLink, ImageIcon, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { adminFetch } from '@/lib/admin-fetch';
+import type { RentalPriceTier } from '@/lib/rental-pricing';
 
 type Category = 'rental' | 'travel_card' | 'other';
 
@@ -15,6 +16,7 @@ interface Product {
   summary: string | null;
   description: string | null;
   rental_terms: string | null;
+  rental_price_tiers: RentalPriceTier[];
   price: number;
   stock_quantity: number;
   images: string[];
@@ -34,6 +36,7 @@ const EMPTY_FORM = {
   summary: '',
   description: '',
   rental_terms: '',
+  rental_price_tiers: [] as RentalPriceTier[],
   price: 0,
   stock_quantity: 0,
   images: [] as string[],
@@ -84,6 +87,7 @@ export default function PhysicalProductsAdminPage() {
       summary: product.summary || '',
       description: product.description || '',
       rental_terms: product.rental_terms || '',
+      rental_price_tiers: product.rental_price_tiers || [],
       price: product.price,
       stock_quantity: product.stock_quantity,
       images: product.images || [],
@@ -221,11 +225,17 @@ export default function PhysicalProductsAdminPage() {
               <label className="block text-sm text-white/65">商品詳細內容
                 <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={7} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="規格、適用地區、使用方法、注意事項..." />
               </label>
-              {form.category === 'rental' && <label className="block text-sm text-white/65">租借說明
-                <textarea value={form.rental_terms} onChange={e => setForm({ ...form, rental_terms: e.target.value })} rows={4} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="租期、押金、歸還方式與逾期規則" />
-              </label>}
+              {form.category === 'rental' && <>
+                <label className="block text-sm text-white/65">租借說明
+                  <textarea value={form.rental_terms} onChange={e => setForm({ ...form, rental_terms: e.target.value })} rows={4} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="押金、交付、歸還方式與逾期規則" />
+                </label>
+                <div className="rounded-md border border-white/10 bg-black/15 p-4">
+                  <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-white/75">租期優惠總價</p><p className="mt-1 text-xs text-white/35">未設定的天數會自動使用每日租金乘以天數。</p></div><button type="button" onClick={() => setForm(current => ({ ...current, rental_price_tiers: [...current.rental_price_tiers, { days: Math.max(2, (current.rental_price_tiers.at(-1)?.days || 1) + 1), total: 0 }] }))} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-cyan-400/25 text-cyan-300 hover:bg-cyan-400/10" title="新增租期優惠"><Plus size={16} /></button></div>
+                  <div className="mt-4 space-y-3">{form.rental_price_tiers.length === 0 ? <p className="py-3 text-center text-xs text-white/30">尚未設定租期優惠</p> : form.rental_price_tiers.map((tier, index) => <div key={`${tier.days}-${index}`} className="grid grid-cols-[1fr_1.2fr_36px] items-end gap-2"><label className="text-xs text-white/45">租借天數<input type="number" min="2" max="365" value={tier.days} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? { ...item, days: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><label className="text-xs text-white/45">優惠總價 (NT$)<input type="number" min="0" value={tier.total} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? { ...item, total: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><button type="button" title="刪除租期優惠" onClick={() => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.filter((_, itemIndex) => itemIndex !== index) }))} className="grid h-10 w-9 place-items-center rounded-md text-rose-300 hover:bg-rose-400/10"><Trash2 size={15} /></button></div>)}</div>
+                </div>
+              </>}
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm text-white/65">售價／租金 (NT$)
+                <label className="block text-sm text-white/65">{form.category === 'rental' ? '每日租金 (NT$)' : '售價 (NT$)'}
                   <input type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" />
                 </label>
                 <label className="block text-sm text-white/65">庫存

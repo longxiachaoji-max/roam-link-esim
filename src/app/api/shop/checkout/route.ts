@@ -8,6 +8,7 @@ import {
 } from '@/lib/ecpay';
 import { getPhysicalStoreAdmin } from '@/lib/physical-store';
 import { parsePaymentLimits } from '@/lib/payment-limits';
+import { calculateRentalPrice, normalizeRentalPriceTiers } from '@/lib/rental-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
     const productIds = [...new Set(rawItems.map(item => String(item.productId || '')))];
     const { data: products, error: productError } = await supabase
       .from('physical_products')
-      .select('id, name, category, price, stock_quantity, images, is_active')
+      .select('id, name, category, price, rental_price_tiers, stock_quantity, images, is_active')
       .in('id', productIds)
       .eq('is_active', true);
     if (productError) throw productError;
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
         if (!start || !end || rentalStartDate < today || end < start) throw new Error(`${product.name} 的租借日期不正確`);
         rentalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
         if (rentalDays < 1 || rentalDays > 365) throw new Error('單次租期需介於 1 至 365 天');
-        unitPrice *= rentalDays;
+        unitPrice = calculateRentalPrice(unitPrice, rentalDays, normalizeRentalPriceTiers(product.rental_price_tiers));
       } else {
         nonRentalQuantities.set(product.id, (nonRentalQuantities.get(product.id) || 0) + quantity);
       }
