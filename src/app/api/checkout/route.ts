@@ -187,21 +187,52 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Create Order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert([{
-        customer_id: customer.id,
-        total_amount: totalAmount,
-        tokens_used: tokensUsed,
-        payment_method: paymentMethod || 'CREDIT_CARD',
-        payment_status: totalAmount === 0 ? 'PAID' : 'PENDING',
-        order_status: assignedInventory && totalAmount === 0 ? 'COMPLETED' : 'PENDING'
-      }])
-      .select()
-      .single();
+    // 5. Token checkout uses a database transaction so concurrent requests cannot
+    // read and overwrite the same balance.
+    let order: Record<string, any>;
+    let orderItem: { id: string } | null = null;
+    const isAtomicTokenCheckout = paymentMethod === 'TOKENS';
 
-    if (orderError) throw orderError;
+    if (isAtomicTokenCheckout) {
+      const { data: checkoutRows, error: checkoutError } = await supabase.rpc('create_atomic_token_checkout', {
+        p_customer_id: customer.id,
+        p_product_id: product.id,
+        p_payable_tokens: tokensUsed
+      });
+      if (checkoutError || !checkoutRows?.[0]) {
+        if (checkoutError?.message.includes('INSUFFICIENT_BALANCE')) {
+          return NextResponse.json({ error: '儲值金餘額不足，請重新整理後再試' }, { status: 400 });
+        }
+        throw checkoutError || new Error('建立儲值金訂單失敗');
+      }
+      const checkout = checkoutRows[0];
+      order = {
+        id: checkout.order_id,
+        order_number: checkout.order_number,
+        total_amount: 0,
+        tokens_used: tokensUsed,
+        payment_status: 'PAID',
+        order_status: 'PENDING'
+      };
+      orderItem = { id: checkout.order_item_id };
+      customer.token_balance = checkout.new_balance;
+    } else {
+      const { data: createdOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          customer_id: customer.id,
+          total_amount: totalAmount,
+          tokens_used: tokensUsed,
+          payment_method: paymentMethod || 'CREDIT_CARD',
+          payment_status: totalAmount === 0 ? 'PAID' : 'PENDING',
+          order_status: 'PENDING'
+        }])
+        .select()
+        .single();
+
+      if (orderError || !createdOrder) throw orderError || new Error('建立訂單失敗');
+      order = createdOrder;
+    }
 
     if (referralQuote && paymentMethod !== 'TOKENS') {
       const { usageGuide, config } = await readReferralConfig(supabase);
@@ -222,35 +253,45 @@ export async function POST(request: Request) {
       await saveReferralConfig(supabase, usageGuide, config);
     }
 
-    // 6. Bind inventory when available. Otherwise the member page will show 處理中.
-    if (assignedInventory) {
-      const { error: updateInventoryError } = await supabase
-        .from('e_sim_inventory')
-        .update({
-          status: 'SOLD',
-          sold_at: new Date().toISOString()
-        })
-        .eq('id', assignedInventory.id)
-        .eq('status', 'AVAILABLE'); // Optimistic locking
-
-      if (updateInventoryError) throw updateInventoryError;
+    // Create the item for non-token legacy checkout. The atomic RPC already did this.
+    if (!orderItem) {
+      const { data: createdItem, error: orderItemError } = await supabase
+        .from('order_items')
+        .insert([{
+          order_id: order.id,
+          product_id: product.id,
+          inventory_id: null,
+          price: product.price
+        }])
+        .select('id')
+        .single();
+      if (orderItemError || !createdItem) throw orderItemError || new Error('建立訂單明細失敗');
+      orderItem = createdItem;
     }
 
-    // Create order item
-    const { data: orderItem, error: orderItemError } = await supabase
-      .from('order_items')
-      .insert([{
-        order_id: order.id,
-        product_id: product.id,
-        inventory_id: assignedInventory ? assignedInventory.id : null,
-        price: product.price
-      }])
-      .select('id')
-      .single();
+    // 6. Claim inventory only after the paid order item exists.
+    let fulfilledInventory = null;
+    if (assignedInventory && totalAmount === 0) {
+      const { data: claimedInventory, error: updateInventoryError } = await supabase
+        .from('e_sim_inventory')
+        .update({ status: 'SOLD', sold_at: new Date().toISOString() })
+        .eq('id', assignedInventory.id)
+        .eq('status', 'AVAILABLE')
+        .select('*')
+        .maybeSingle();
+      if (updateInventoryError) throw updateInventoryError;
 
-    if (orderItemError) throw orderItemError;
+      if (claimedInventory) {
+        const { error: bindError } = await supabase
+          .from('order_items')
+          .update({ inventory_id: claimedInventory.id })
+          .eq('id', orderItem.id)
+          .is('inventory_id', null);
+        if (bindError) throw bindError;
+        fulfilledInventory = claimedInventory;
+      }
+    }
 
-    let fulfilledInventory = assignedInventory;
     if (!fulfilledInventory && totalAmount === 0 && orderItem) {
       try {
         const createdInventory = await fulfillMicroesimOrderItem(supabase, orderItem.id, product.id, product);
@@ -283,7 +324,7 @@ export async function POST(request: Request) {
     }
 
     // Deduct tokens from customer if used
-    if (tokensUsed > 0) {
+    if (tokensUsed > 0 && !isAtomicTokenCheckout) {
       const newBalance = customer.token_balance - tokensUsed;
       const { error: tokenError } = await supabase
         .from('customers')

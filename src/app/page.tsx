@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +24,8 @@ export default function Home() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<EcpayPaymentMethod | null>(null);
+  const [isTokenCheckoutSubmitting, setIsTokenCheckoutSubmitting] = useState(false);
+  const tokenCheckoutLock = useRef(false);
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -323,6 +325,7 @@ export default function Home() {
   };
 
   const completeOrder = async () => {
+    if (tokenCheckoutLock.current) return;
     if (!user) {
       showToast("⚠️ 請先登入");
       setIsCheckoutOpen(false);
@@ -330,6 +333,8 @@ export default function Home() {
       return;
     }
 
+    tokenCheckoutLock.current = true;
+    setIsTokenCheckoutSubmitting(true);
     showToast("⏳ 正在處理訂單...");
     
     try {
@@ -361,6 +366,9 @@ export default function Home() {
       await fetchCustomerProfile(user.email);
     } catch (err: any) {
       showToast("❌ " + err.message);
+    } finally {
+      tokenCheckoutLock.current = false;
+      setIsTokenCheckoutSubmitting(false);
     }
   };
 
@@ -1001,9 +1009,9 @@ export default function Home() {
             </div>
 
             {user && user.token_balance >= payableTotal ? (
-                <button onClick={completeOrder} className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                <button onClick={completeOrder} disabled={isTokenCheckoutSubmitting} className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 disabled:opacity-60 disabled:cursor-wait disabled:translate-y-0 transition-all flex items-center justify-center gap-2">
                     <Zap size={20} />
-                    使用儲值金扣款 (NT${payableTotal})
+                    {isTokenCheckoutSubmitting ? '儲值金扣款處理中...' : `使用儲值金扣款 (NT${payableTotal})`}
                 </button>
             ) : (
                 <button disabled className="w-full bg-white/10 text-white/50 font-black py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-2 mb-3">
