@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
+import PhysicalOrdersPanel from './physical-orders-panel';
 
 export default function MemberCenter() {
   const [user, setUser] = useState<any>(null);
@@ -41,6 +42,7 @@ export default function MemberCenter() {
   const [referralCode, setReferralCode] = useState('');
   const [referralRule, setReferralRule] = useState<any>(null);
   const [isSavingReferral, setIsSavingReferral] = useState(false);
+  const [orderView, setOrderView] = useState<'esim' | 'physical'>('esim');
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -601,13 +603,33 @@ export default function MemberCenter() {
           </div>
         </div>
 
-        {/* eSIM List */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">我的 eSIM</h2>
-          <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
+        <div className="mb-6 grid grid-cols-2 gap-1 rounded-md border border-white/10 bg-white/[0.03] p-1">
+          <button
+            type="button"
+            onClick={() => setOrderView('esim')}
+            className={`flex min-h-11 items-center justify-center gap-2 rounded px-3 text-sm font-bold transition-colors ${orderView === 'esim' ? 'bg-[#F05A28] text-white shadow' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}
+          >
+            <Smartphone size={17} />
+            我的 eSIM
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderView('physical')}
+            className={`flex min-h-11 items-center justify-center gap-2 rounded px-3 text-sm font-bold transition-colors ${orderView === 'physical' ? 'bg-[#F05A28] text-white shadow' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}
+          >
+            <PackageSearch size={17} />
+            實體商品訂單
+          </button>
         </div>
 
-        <div className="space-y-4">
+        {orderView === 'esim' ? <>
+          {/* eSIM List */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold">我的 eSIM</h2>
+            <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
+          </div>
+
+          <div className="space-y-4">
           {orders.map(order => order.order_items.filter((item: any) => !isDeleteWindowExpired(item)).map((item: any) => {
             const deleted = isSoftDeleted(item);
             
@@ -783,7 +805,8 @@ export default function MemberCenter() {
               目前沒有 eSIM 訂單紀錄
             </div>
           )}
-        </div>
+          </div>
+        </> : <PhysicalOrdersPanel />}
       </div>
 
       {/* Delete Confirm Modal */}
