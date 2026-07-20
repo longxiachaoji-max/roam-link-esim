@@ -12,7 +12,7 @@ import { calculateRentalPrice, normalizeRentalPriceTiers } from '@/lib/rental-pr
 
 export const dynamic = 'force-dynamic';
 
-type PaymentMethod = 'Credit' | 'BARCODE';
+type PaymentMethod = 'Credit' | 'BARCODE' | 'TOKENS';
 
 interface CheckoutItem {
   productId: string;
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const paymentMethod = String(body.paymentMethod || 'Credit') as PaymentMethod;
-    if (paymentMethod !== 'Credit' && paymentMethod !== 'BARCODE') {
+    if (paymentMethod !== 'Credit' && paymentMethod !== 'BARCODE' && paymentMethod !== 'TOKENS') {
       return NextResponse.json({ error: '不支援的付款方式' }, { status: 400 });
     }
 
@@ -122,17 +122,23 @@ export async function POST(request: Request) {
       if (!product || Number(product.stock_quantity) < quantity) throw new Error(`${product?.name || '商品'} 庫存不足`);
     }
     const subtotal = orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    const hasRental = orderItems.some(item => item.rental_days !== null);
+    if (hasRental && paymentMethod === 'BARCODE') {
+      throw new Error('租借商品不開放超商條碼直接結帳，請先儲值後使用儲值金付款');
+    }
     const shippingFee = 0;
     const totalAmount = subtotal + shippingFee;
     if (!Number.isInteger(totalAmount) || totalAmount <= 0) throw new Error('訂單金額不正確');
 
-    const { data: settings } = await supabase.from('site_settings').select('usage_guide').eq('id', 'main').single();
-    const limits = parsePaymentLimits(settings?.usage_guide);
-    const limit = paymentMethod === 'BARCODE'
-      ? { min: limits.barcode_min, max: limits.barcode_max, label: '超商條碼付款' }
-      : { min: limits.credit_min, max: limits.credit_max, label: '信用卡付款' };
-    if (totalAmount < limit.min || totalAmount > limit.max) {
-      throw new Error(`${limit.label}金額需介於 NT$${limit.min.toLocaleString()} 至 NT$${limit.max.toLocaleString()}`);
+    if (paymentMethod !== 'TOKENS') {
+      const { data: settings } = await supabase.from('site_settings').select('usage_guide').eq('id', 'main').single();
+      const limits = parsePaymentLimits(settings?.usage_guide);
+      const limit = paymentMethod === 'BARCODE'
+        ? { min: limits.barcode_min, max: limits.barcode_max, label: '超商條碼付款' }
+        : { min: limits.credit_min, max: limits.credit_max, label: '信用卡付款' };
+      if (totalAmount < limit.min || totalAmount > limit.max) {
+        throw new Error(`${limit.label}金額需介於 NT$${limit.min.toLocaleString()} 至 NT$${limit.max.toLocaleString()}`);
+      }
     }
 
     let { data: customer } = await supabase.from('customers').select('id').eq('email', authUser.email).maybeSingle();
@@ -146,8 +152,8 @@ export async function POST(request: Request) {
       customer = data;
     }
 
-    const merchantTradeNo = createMerchantTradeNo();
-    const reservationExpiresAt = new Date(Date.now() + (paymentMethod === 'BARCODE' ? 3 * 24 * 60 : 30) * 60_000).toISOString();
+    const merchantTradeNo = paymentMethod === 'TOKENS' ? '' : createMerchantTradeNo();
+    const reservationExpiresAt = paymentMethod === 'TOKENS' ? null : new Date(Date.now() + (paymentMethod === 'BARCODE' ? 3 * 24 * 60 : 30) * 60_000).toISOString();
     const { data: createdOrderId, error: orderError } = await supabase.rpc('create_physical_order_with_items', {
       p_order: {
         customer_id: customer.id,
@@ -159,7 +165,7 @@ export async function POST(request: Request) {
         shipping_note: String(body.shippingNote || '').trim().slice(0, 500),
         subtotal,
         shipping_fee: shippingFee,
-        payment_method: paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',
+        payment_method: paymentMethod === 'TOKENS' ? 'TOKENS' : paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',
         ecpay_trade_no: merchantTradeNo,
         reservation_expires_at: reservationExpiresAt
       },
@@ -172,6 +178,11 @@ export async function POST(request: Request) {
     });
     if (orderError || !createdOrderId) throw orderError || new Error('建立訂單失敗');
     orderId = String(createdOrderId);
+
+    if (paymentMethod === 'TOKENS') {
+      const { data: updatedCustomer } = await supabase.from('customers').select('token_balance').eq('id', customer.id).maybeSingle();
+      return NextResponse.json({ success: true, orderId, newBalance: Number(updatedCustomer?.token_balance ?? 0) });
+    }
 
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;

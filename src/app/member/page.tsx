@@ -102,7 +102,12 @@ export default function MemberCenter() {
   }, []);
 
   useEffect(() => {
-    const payment = new URLSearchParams(window.location.search).get('payment');
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    if (params.get('topup') === '1') {
+      window.setTimeout(() => setIsTopupOpen(true), 0);
+      window.history.replaceState({}, '', '/member');
+    }
     if (payment === 'success') {
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');

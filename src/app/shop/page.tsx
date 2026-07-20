@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, Minus, Package, Plus, ShoppingBag, Trash2, User, X } from 'lucide-react';
+import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, Minus, Package, Plus, ShoppingBag, Trash2, User, WalletCards, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateRentalPrice, type RentalPriceTier } from '@/lib/rental-pricing';
 
@@ -48,7 +48,8 @@ export default function PhysicalShopPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
-  const [paying, setPaying] = useState<'Credit' | 'BARCODE' | null>(null);
+  const [paying, setPaying] = useState<'Credit' | 'BARCODE' | 'TOKENS' | null>(null);
+  const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const [shipping, setShipping] = useState({ recipientName: '', recipientPhone: '', postalCode: '', shippingAddress: '', shippingNote: '' });
 
   useEffect(() => {
@@ -77,8 +78,20 @@ export default function PhysicalShopPage() {
       if (payment) window.history.replaceState({}, '', '/shop');
     });
 
-    supabase.auth.getSession().then(({ data }) => setSessionEmail(data.session?.user.email || ''));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setSessionEmail(session?.user.email || ''));
+    const loadBalance = async (accessToken?: string) => {
+      if (!accessToken) { setTokenBalance(null); return; }
+      const response = await fetch('/api/topup/profile', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+      const result = await response.json();
+      if (response.ok) setTokenBalance(Number(result.customer?.token_balance || 0));
+    };
+    supabase.auth.getSession().then(({ data }) => {
+      setSessionEmail(data.session?.user.email || '');
+      void loadBalance(data.session?.access_token);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessionEmail(session?.user.email || '');
+      void loadBalance(session?.access_token);
+    });
 
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -99,6 +112,7 @@ export default function PhysicalShopPage() {
   const filtered = category === 'all' ? products : products.filter(product => product.category === category);
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
   const total = cart.reduce((sum, item) => sum + lineTotal(item), 0);
+  const hasRental = cart.some(item => item.category === 'rental');
 
   const addToCart = (product: Product) => {
     if (product.category === 'rental') return;
@@ -114,8 +128,14 @@ export default function PhysicalShopPage() {
     .map(item => cartItemKey(item) === key ? { ...item, quantity: item.category === 'rental' ? 1 : Math.min(Math.max(quantity, 0), item.stock_quantity) } : item)
     .filter(item => item.quantity > 0));
 
-  const openCheckout = () => {
+  const openCheckout = async () => {
     if (!sessionEmail) { setCartOpen(false); setLoginOpen(true); setMessage('請先登入會員再結帳'); return; }
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) {
+      const response = await fetch('/api/topup/profile', { headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: 'no-store' });
+      const result = await response.json();
+      if (response.ok) setTokenBalance(Number(result.customer?.token_balance || 0));
+    }
     setCartOpen(false); setCheckoutOpen(true);
   };
 
@@ -126,7 +146,7 @@ export default function PhysicalShopPage() {
     setLoginOpen(false); setCheckoutOpen(true); setMessage('登入成功');
   };
 
-  const checkout = async (paymentMethod: 'Credit' | 'BARCODE') => {
+  const checkout = async (paymentMethod: 'Credit' | 'BARCODE' | 'TOKENS') => {
     if (paying || !cart.length) return;
     setPaying(paymentMethod);
     try {
@@ -147,7 +167,18 @@ export default function PhysicalShopPage() {
         })
       });
       const result = await response.json();
-      if (!response.ok || !result.action || !result.fields) throw new Error(result.error || '無法建立付款');
+      if (!response.ok) throw new Error(result.error || '無法建立付款');
+      if (paymentMethod === 'TOKENS') {
+        if (!result.success) throw new Error(result.error || '儲值金付款失敗');
+        localStorage.removeItem(CART_KEY);
+        setCart([]);
+        setTokenBalance(Number(result.newBalance || 0));
+        setCheckoutOpen(false);
+        setMessage('儲值金付款完成，訂單已立即成立。');
+        setPaying(null);
+        return;
+      }
+      if (!result.action || !result.fields) throw new Error(result.error || '無法建立付款');
       const form = document.createElement('form');
       form.method = 'POST'; form.action = result.action; form.style.display = 'none';
       Object.entries(result.fields as Record<string, string>).forEach(([name, value]) => {
@@ -216,7 +247,7 @@ export default function PhysicalShopPage() {
 
       {loginOpen && <div className="fixed inset-0 z-[60] grid place-items-center bg-black/55 p-4"><form onSubmit={login} className="w-full max-w-sm rounded-md bg-white p-6 text-[#172028] shadow-2xl"><div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-bold">會員登入</h2><button type="button" title="關閉" onClick={() => setLoginOpen(false)}><X size={20} /></button></div><label className="block text-sm text-black/55">Email<input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="mt-4 block text-sm text-black/55">密碼<input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><button className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white"><LogIn size={17} /> 登入並繼續結帳</button><p className="mt-4 text-center text-xs text-black/40">尚未註冊可先回 eSIM 首頁建立會員帳號</p></form></div>}
 
-      {checkoutOpen && <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"><div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-md bg-white p-5 text-[#172028] shadow-2xl sm:rounded-md sm:p-7"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-xl font-bold">收件與付款</h2><p className="mt-1 text-xs text-black/40">登入會員：{sessionEmail}</p></div><button title="關閉" onClick={() => setCheckoutOpen(false)}><X size={20} /></button></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm text-black/55">收件人姓名<input required value={shipping.recipientName} onChange={e => setShipping({ ...shipping, recipientName: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55">聯絡電話<input required inputMode="tel" value={shipping.recipientPhone} onChange={e => setShipping({ ...shipping, recipientPhone: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55">郵遞區號<input inputMode="numeric" value={shipping.postalCode} onChange={e => setShipping({ ...shipping, postalCode: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">收件地址<input required value={shipping.shippingAddress} onChange={e => setShipping({ ...shipping, shippingAddress: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">訂單備註<textarea rows={3} value={shipping.shippingNote} onChange={e => setShipping({ ...shipping, shippingNote: e.target.value })} className="mt-2 w-full rounded-md border border-black/12 p-3 outline-none focus:border-[#247253]" /></label></div><div className="my-6 flex items-center justify-between border-y border-black/8 py-4"><div><p className="text-sm text-black/45">本次付款</p><p className="text-xs text-[#247253]">目前免運費</p></div><p className="text-2xl font-bold text-[#df4d5f]">NT${total.toLocaleString()}</p></div><div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('Credit')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button><button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button></div></div></div>}
+      {checkoutOpen && <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"><div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-md bg-white p-5 text-[#172028] shadow-2xl sm:rounded-md sm:p-7"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-xl font-bold">收件與付款</h2><p className="mt-1 text-xs text-black/40">登入會員：{sessionEmail}</p></div><button title="關閉" onClick={() => setCheckoutOpen(false)}><X size={20} /></button></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm text-black/55">收件人姓名<input required value={shipping.recipientName} onChange={e => setShipping({ ...shipping, recipientName: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55">聯絡電話<input required inputMode="tel" value={shipping.recipientPhone} onChange={e => setShipping({ ...shipping, recipientPhone: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55">郵遞區號<input inputMode="numeric" value={shipping.postalCode} onChange={e => setShipping({ ...shipping, postalCode: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">收件地址<input required value={shipping.shippingAddress} onChange={e => setShipping({ ...shipping, shippingAddress: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">訂單備註<textarea rows={3} value={shipping.shippingNote} onChange={e => setShipping({ ...shipping, shippingNote: e.target.value })} className="mt-2 w-full rounded-md border border-black/12 p-3 outline-none focus:border-[#247253]" /></label></div><div className="my-6 flex items-center justify-between border-y border-black/8 py-4"><div><p className="text-sm text-black/45">本次付款</p><p className="text-xs text-[#247253]">儲值金餘額 NT${Number(tokenBalance || 0).toLocaleString()}</p></div><p className="text-2xl font-bold text-[#df4d5f]">NT${total.toLocaleString()}</p></div>{hasRental && <div className="mb-4 rounded-md border border-[#247253]/20 bg-[#dceee7] px-4 py-3 text-sm leading-6 text-[#174d38]">租借商品不開放超商條碼直接結帳。如需現金付款，請先完成超商儲值，入帳後再使用儲值金付款。</div>}<div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('TOKENS')} disabled={paying !== null || tokenBalance === null || tokenBalance < total} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#df4d5f] font-bold text-white disabled:bg-black/10 disabled:text-black/30"><WalletCards size={18} /> {paying === 'TOKENS' ? '立即扣款中...' : '儲值金立即付款'}</button><button onClick={() => checkout('Credit')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button>{!hasRental && <button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button>}</div>{tokenBalance !== null && tokenBalance < total && <Link href="/member?topup=1" className="mt-4 flex h-11 items-center justify-center rounded-md border border-[#df4d5f]/30 text-sm font-bold text-[#c43b4e] hover:bg-[#df4d5f]/5">餘額不足，先前往會員中心儲值</Link>}<p className="mt-3 text-center text-xs text-black/40">儲值金付款會立即扣款並成立訂單。</p></div></div>}
     </main>
   );
 }
