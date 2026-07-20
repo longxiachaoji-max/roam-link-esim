@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import Image from 'next/image';
-import { ArrowLeft, Package } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { getPhysicalStoreAdmin, normalizePhysicalProduct, PHYSICAL_PRODUCT_CATEGORIES } from '@/lib/physical-store';
 import ProductPurchase from './product-purchase';
+import ProductGallery from './product-gallery';
 
 async function getProduct(id: string) {
   const { data } = await getPhysicalStoreAdmin().from('physical_products').select('*').eq('id', id).eq('is_active', true).maybeSingle();
@@ -39,7 +39,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <header className="border-b border-black/8 bg-white"><div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6"><Link href="/shop" className="font-bold leading-tight"><span className="block text-xs text-black/55">一飛通全球漫遊</span><span className="block text-base text-[#df4d5f]">FirstRoamLink</span></Link><Link href="/" className="text-sm text-black/50 hover:text-black">eSIM 方案</Link></div></header>
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-10"><Link href="/shop" className="mb-6 inline-flex items-center gap-2 text-sm text-black/50 hover:text-black"><ArrowLeft size={16} /> 返回一飛通商城</Link>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,.9fr)]">
-        <div className="overflow-hidden rounded-md border border-black/8 bg-white"><div className="relative aspect-[4/3] bg-[#edf0f1]">{product.images[0] ? <Image src={product.images[0]} alt={product.name} fill priority sizes="(max-width: 1024px) 100vw, 58vw" className="object-contain" /> : <div className="grid h-full place-items-center"><Package size={48} className="text-black/15" /></div>}</div>{product.images.length > 1 && <div className="grid grid-cols-4 gap-2 border-t border-black/8 p-3">{product.images.slice(1).map(image => <div key={image} className="relative aspect-square overflow-hidden rounded bg-black/5"><Image src={image} alt="" fill sizes="140px" className="object-cover" /></div>)}</div>}</div>
+        <ProductGallery images={product.images} productName={product.name} />
         <div><p className="mb-3 text-sm font-semibold text-[#247253]">{categoryLabel}</p><h1 className="text-3xl font-bold leading-tight">{product.name}</h1>{product.summary && <p className="mt-4 leading-7 text-black/55">{product.summary}</p>}<ProductPurchase product={product} />
           <div className="mt-8 border-t border-black/10 pt-7"><h2 className="font-bold">商品詳細說明</h2><div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-black/60">{product.description || '商品規格整理中，如需確認請聯絡客服。'}</div></div>{product.category === 'rental' && product.rental_terms && <div className="mt-7 border-t border-black/10 pt-7"><h2 className="font-bold">租借與歸還</h2><div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-black/60">{product.rental_terms}</div></div>}
         </div>
