@@ -9,6 +9,7 @@ import {
 import { getPhysicalStoreAdmin } from '@/lib/physical-store';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { calculateRentalPrice, normalizeRentalPriceTiers } from '@/lib/rental-pricing';
+import { sendPhysicalRentalOrderCreatedAlert } from '@/lib/physical-rental-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
     orderId = String(createdOrderId);
 
     if (paymentMethod === 'TOKENS') {
+      await sendPhysicalRentalOrderCreatedAlert(supabase, orderId);
       const { data: updatedCustomer } = await supabase.from('customers').select('token_balance').eq('id', customer.id).maybeSingle();
       return NextResponse.json({ success: true, orderId, newBalance: Number(updatedCustomer?.token_balance ?? 0) });
     }

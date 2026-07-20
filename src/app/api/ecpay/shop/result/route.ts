@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { formDataToParams, getEcpayConfig, verifyCheckMacValue } from '@/lib/ecpay';
-import { markPhysicalOrderPaid } from '@/lib/physical-store';
+import { getPhysicalStoreAdmin, markPhysicalOrderPaid } from '@/lib/physical-store';
+import { sendPhysicalRentalOrderCreatedAlert } from '@/lib/physical-rental-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.redirect(`${origin}/shop?payment=failed`, 303);
     }
     await markPhysicalOrderPaid(params.CustomField1, amount);
+    await sendPhysicalRentalOrderCreatedAlert(getPhysicalStoreAdmin(), params.CustomField1);
     return NextResponse.redirect(`${origin}/shop?payment=success`, 303);
   } catch (error) {
     console.error('Physical order ECPay result error:', error);

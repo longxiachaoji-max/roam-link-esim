@@ -147,7 +147,7 @@ export default function NotificationsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
             <div>
               <h2 className="text-lg font-bold text-white">Telegram 提醒</h2>
-              <p className="text-sm text-white/40 mt-1">填入 Bot Token 和 Chat ID 後，待補 eSIM 訂單會傳 Telegram。</p>
+              <p className="text-sm text-white/40 mt-1">填入 Bot Token 和 Chat ID 後，待補 eSIM、手機租借新訂單與出租日前提醒都會傳送 Telegram。</p>
             </div>
             <label className="inline-flex items-center gap-3 text-sm text-white/70">
               <input

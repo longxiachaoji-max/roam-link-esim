@@ -1,14 +1,14 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
-interface NotificationSettings {
+export interface TelegramNotificationSettings {
   notify_telegram_enabled: boolean;
   telegram_bot_token: string;
   telegram_chat_id: string;
 }
 
-interface SupabaseLike {
-  from: (table: string) => any;
-}
+export type SupabaseLike = Pick<SupabaseClient, 'from' | 'rpc'>;
 
 export interface MicroesimFailureAlert {
   source: string;
@@ -22,7 +22,7 @@ export interface MicroesimFailureAlert {
   error: unknown;
 }
 
-function escapeTelegramHtml(value: string) {
+export function escapeTelegramHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
@@ -36,7 +36,7 @@ function getErrorMessage(error: unknown) {
   }
 }
 
-async function getNotificationSettings(supabase: SupabaseLike): Promise<NotificationSettings> {
+export async function getTelegramNotificationSettings(supabase: SupabaseLike): Promise<TelegramNotificationSettings> {
   const fallback = {
     notify_telegram_enabled: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
     telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '',
@@ -52,7 +52,7 @@ async function getNotificationSettings(supabase: SupabaseLike): Promise<Notifica
     const match = (data?.usage_guide || '').match(NOTIFICATION_CONFIG_PATTERN);
     if (!match?.[1]) return fallback;
 
-    const config = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8')) as Partial<NotificationSettings>;
+    const config = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8')) as Partial<TelegramNotificationSettings>;
     return {
       notify_telegram_enabled: config.notify_telegram_enabled ?? fallback.notify_telegram_enabled,
       telegram_bot_token: config.telegram_bot_token || fallback.telegram_bot_token,
@@ -63,11 +63,41 @@ async function getNotificationSettings(supabase: SupabaseLike): Promise<Notifica
   }
 }
 
+export async function sendTelegramMessage(
+  settings: TelegramNotificationSettings,
+  lines: string[],
+  logLabel: string
+) {
+  if (!settings.notify_telegram_enabled || !settings.telegram_bot_token || !settings.telegram_chat_id) return false;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${settings.telegram_bot_token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(3_000),
+      body: JSON.stringify({
+        chat_id: settings.telegram_chat_id,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        text: lines.filter(Boolean).join('\n')
+      })
+    });
+    if (!response.ok) {
+      console.error(`${logLabel}:`, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(`${logLabel}:`, error);
+    return false;
+  }
+}
+
 export async function sendMicroesimFulfillmentFailureAlert(
   supabase: SupabaseLike,
   alert: MicroesimFailureAlert
 ) {
-  const settings = await getNotificationSettings(supabase);
+  const settings = await getTelegramNotificationSettings(supabase);
   if (!settings.notify_telegram_enabled || !settings.telegram_bot_token || !settings.telegram_chat_id) return;
 
   const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://firstesim.space'}/admin/orders`;
@@ -86,21 +116,5 @@ export async function sendMicroesimFulfillmentFailureAlert(
     `後台：${adminUrl}`
   ].filter(Boolean);
 
-  try {
-    const response = await fetch(`https://api.telegram.org/bot${settings.telegram_bot_token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: settings.telegram_chat_id,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        text: lines.join('\n')
-      })
-    });
-    if (!response.ok) {
-      console.error('Failed to send MicroEsim failure Telegram alert:', await response.text());
-    }
-  } catch (error) {
-    console.error('Failed to send MicroEsim failure Telegram alert:', error);
-  }
+  await sendTelegramMessage(settings, lines, 'Failed to send MicroEsim failure Telegram alert');
 }

@@ -1,5 +1,6 @@
 import { formDataToParams, getEcpayConfig, verifyCheckMacValue } from '@/lib/ecpay';
-import { markPhysicalOrderPaid } from '@/lib/physical-store';
+import { getPhysicalStoreAdmin, markPhysicalOrderPaid } from '@/lib/physical-store';
+import { sendPhysicalRentalOrderCreatedAlert } from '@/lib/physical-rental-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
     const amount = Number(params.TradeAmt);
     if (verified && params.RtnCode === '1' && params.SimulatePaid !== '1' && params.CustomField1 && Number.isFinite(amount)) {
       await markPhysicalOrderPaid(params.CustomField1, amount);
+      await sendPhysicalRentalOrderCreatedAlert(getPhysicalStoreAdmin(), params.CustomField1);
     }
   } catch (error) {
     console.error('Physical order ECPay callback error:', error);
