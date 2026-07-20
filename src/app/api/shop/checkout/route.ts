@@ -16,6 +16,23 @@ type PaymentMethod = 'Credit' | 'BARCODE';
 interface CheckoutItem {
   productId: string;
   quantity: number;
+  rentalStartDate?: string;
+  rentalEndDate?: string;
+}
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function dateToUtc(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
+}
+
+function taipeiToday() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function requiredText(value: unknown, label: string, maxLength: number) {
@@ -44,34 +61,65 @@ export async function POST(request: Request) {
 
     const rawItems: CheckoutItem[] = Array.isArray(body.items) ? body.items : [];
     if (!rawItems.length || rawItems.length > 20) throw new Error('購物車內容不正確');
-    const quantityByProduct = new Map<string, number>();
     for (const item of rawItems) {
       const productId = String(item.productId || '');
       const quantity = Number(item.quantity);
       if (!productId || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) throw new Error('商品數量不正確');
-      quantityByProduct.set(productId, (quantityByProduct.get(productId) || 0) + quantity);
     }
 
-    const productIds = [...quantityByProduct.keys()];
+    const productIds = [...new Set(rawItems.map(item => String(item.productId || '')))];
     const { data: products, error: productError } = await supabase
       .from('physical_products')
-      .select('id, name, price, stock_quantity, images, is_active')
+      .select('id, name, category, price, stock_quantity, images, is_active')
       .in('id', productIds)
       .eq('is_active', true);
     if (productError) throw productError;
     if ((products || []).length !== productIds.length) throw new Error('部分商品已下架，請重新整理購物車');
 
-    const orderItems = (products || []).map(product => {
-      const quantity = quantityByProduct.get(product.id) || 0;
-      if (Number(product.stock_quantity) < quantity) throw new Error(`${product.name} 庫存不足`);
+    const productsById = new Map((products || []).map(product => [product.id, product]));
+    const nonRentalQuantities = new Map<string, number>();
+    const rentalProductIds = new Set<string>();
+    const today = taipeiToday();
+    const orderItems = rawItems.map(item => {
+      const product = productsById.get(String(item.productId));
+      if (!product) throw new Error('部分商品已下架，請重新整理購物車');
+      const quantity = Number(item.quantity);
+      let rentalStartDate: string | null = null;
+      let rentalEndDate: string | null = null;
+      let rentalDays: number | null = null;
+      let unitPrice = Math.round(Number(product.price));
+
+      if (product.category === 'rental') {
+        if (rentalProductIds.has(product.id)) throw new Error(`${product.name} 一次只能選擇一組租借日期`);
+        rentalProductIds.add(product.id);
+        rentalStartDate = String(item.rentalStartDate || '');
+        rentalEndDate = String(item.rentalEndDate || '');
+        if (!DATE_PATTERN.test(rentalStartDate) || !DATE_PATTERN.test(rentalEndDate)) throw new Error(`${product.name} 請先選擇租借日期`);
+        const start = dateToUtc(rentalStartDate);
+        const end = dateToUtc(rentalEndDate);
+        if (!start || !end || rentalStartDate < today || end < start) throw new Error(`${product.name} 的租借日期不正確`);
+        rentalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+        if (rentalDays < 1 || rentalDays > 365) throw new Error('單次租期需介於 1 至 365 天');
+        unitPrice *= rentalDays;
+      } else {
+        nonRentalQuantities.set(product.id, (nonRentalQuantities.get(product.id) || 0) + quantity);
+      }
+
       return {
         product_id: product.id,
         product_name: product.name,
         product_image: Array.isArray(product.images) ? product.images[0] || null : null,
         quantity,
-        unit_price: Math.round(Number(product.price))
+        unit_price: unitPrice,
+        rental_start_date: rentalStartDate,
+        rental_end_date: rentalEndDate,
+        rental_days: rentalDays
       };
     });
+    for (const [productId, quantity] of nonRentalQuantities) {
+      const product = productsById.get(productId);
+      if (!product || Number(product.stock_quantity) < quantity) throw new Error(`${product?.name || '商品'} 庫存不足`);
+    }
     const subtotal = orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
     const shippingFee = 0;
     const totalAmount = subtotal + shippingFee;
@@ -98,29 +146,31 @@ export async function POST(request: Request) {
     }
 
     const merchantTradeNo = createMerchantTradeNo();
-    const { data: order, error: orderError } = await supabase.from('physical_orders').insert({
-      customer_id: customer.id,
-      customer_email: authUser.email,
-      recipient_name: requiredText(body.recipientName, '收件人姓名', 80),
-      recipient_phone: requiredText(body.recipientPhone, '聯絡電話', 30),
-      postal_code: String(body.postalCode || '').trim().slice(0, 10) || null,
-      shipping_address: requiredText(body.shippingAddress, '收件地址', 300),
-      shipping_note: String(body.shippingNote || '').trim().slice(0, 500) || null,
-      subtotal,
-      shipping_fee: shippingFee,
-      total_amount: totalAmount,
-      payment_method: paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',
-      payment_status: 'PENDING',
-      order_status: 'PENDING_PAYMENT',
-      ecpay_trade_no: merchantTradeNo
-    }).select('id').single();
-    if (orderError || !order) throw orderError || new Error('建立訂單失敗');
-    orderId = order.id;
-
-    const { error: itemError } = await supabase.from('physical_order_items').insert(
-      orderItems.map(item => ({ ...item, order_id: order.id }))
-    );
-    if (itemError) throw itemError;
+    const reservationExpiresAt = new Date(Date.now() + (paymentMethod === 'BARCODE' ? 3 * 24 * 60 : 30) * 60_000).toISOString();
+    const { data: createdOrderId, error: orderError } = await supabase.rpc('create_physical_order_with_items', {
+      p_order: {
+        customer_id: customer.id,
+        customer_email: authUser.email,
+        recipient_name: requiredText(body.recipientName, '收件人姓名', 80),
+        recipient_phone: requiredText(body.recipientPhone, '聯絡電話', 30),
+        postal_code: String(body.postalCode || '').trim().slice(0, 10),
+        shipping_address: requiredText(body.shippingAddress, '收件地址', 300),
+        shipping_note: String(body.shippingNote || '').trim().slice(0, 500),
+        subtotal,
+        shipping_fee: shippingFee,
+        payment_method: paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',
+        ecpay_trade_no: merchantTradeNo,
+        reservation_expires_at: reservationExpiresAt
+      },
+      p_items: orderItems.map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        rental_start_date: item.rental_start_date,
+        rental_end_date: item.rental_end_date
+      }))
+    });
+    if (orderError || !createdOrderId) throw orderError || new Error('建立訂單失敗');
+    orderId = String(createdOrderId);
 
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
@@ -137,14 +187,14 @@ export async function POST(request: Request) {
       ChoosePayment: paymentMethod,
       EncryptType: '1',
       Language: 'CHT',
-      CustomField1: order.id,
+      CustomField1: orderId,
       CustomField2: 'PHYSICAL'
     };
     if (paymentMethod === 'BARCODE') fields.StoreExpireDate = '3';
     else fields.OrderResultURL = `${origin}/api/ecpay/shop/result`;
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 
-    return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id });
+    return NextResponse.json({ action: checkoutUrl, fields, orderId });
   } catch (error) {
     if (orderId) {
       try {

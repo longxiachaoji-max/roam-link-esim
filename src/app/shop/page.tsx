@@ -3,15 +3,34 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Barcode, CreditCard, LogIn, Minus, Package, Plus, ShoppingBag, Trash2, User, X } from 'lucide-react';
+import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, Minus, Package, Plus, ShoppingBag, Trash2, User, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 type Category = 'all' | 'rental' | 'travel_card' | 'other';
 interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; }
-interface CartItem extends Product { quantity: number; }
+interface CartItem extends Product {
+  quantity: number;
+  rentalStartDate?: string;
+  rentalEndDate?: string;
+  rentalDays?: number;
+}
 
 const CART_KEY = 'firstroamlink-physical-cart-v1';
 const CATEGORY_LABELS: Record<Category, string> = { all: '全部商品', rental: '商品租借', travel_card: '實體漫遊卡', other: '其他旅遊商品' };
+
+function cartItemKey(item: CartItem) {
+  return item.category === 'rental' ? `${item.id}:${item.rentalStartDate}:${item.rentalEndDate}` : item.id;
+}
+
+function lineTotal(item: CartItem) {
+  return item.price * item.quantity * (item.category === 'rental' ? item.rentalDays || 0 : 1);
+}
+
+function formatRentalDate(value?: string) {
+  if (!value) return '';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' }).format(new Date(year, month - 1, day));
+}
 
 export default function PhysicalShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -39,7 +58,8 @@ export default function PhysicalShopPage() {
     queueMicrotask(() => {
       try {
         const saved = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
-        if (Array.isArray(saved)) setCart(saved);
+        if (Array.isArray(saved)) setCart(saved.filter((item: CartItem) => item.category !== 'rental'
+          || (item.rentalStartDate && item.rentalEndDate && Number(item.rentalDays) > 0)));
       } catch { localStorage.removeItem(CART_KEY); }
       setCartReady(true);
 
@@ -75,9 +95,10 @@ export default function PhysicalShopPage() {
 
   const filtered = category === 'all' ? products : products.filter(product => product.category === category);
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = cart.reduce((sum, item) => sum + lineTotal(item), 0);
 
   const addToCart = (product: Product) => {
+    if (product.category === 'rental') return;
     setCart(current => {
       const existing = current.find(item => item.id === product.id);
       if (existing) return current.map(item => item.id === product.id ? { ...item, quantity: Math.min(item.quantity + 1, product.stock_quantity) } : item);
@@ -86,8 +107,8 @@ export default function PhysicalShopPage() {
     setMessage(`已加入：${product.name}`);
   };
 
-  const setQuantity = (id: string, quantity: number) => setCart(current => current
-    .map(item => item.id === id ? { ...item, quantity: Math.min(Math.max(quantity, 0), item.stock_quantity) } : item)
+  const setQuantity = (key: string, quantity: number) => setCart(current => current
+    .map(item => cartItemKey(item) === key ? { ...item, quantity: item.category === 'rental' ? 1 : Math.min(Math.max(quantity, 0), item.stock_quantity) } : item)
     .filter(item => item.quantity > 0));
 
   const openCheckout = () => {
@@ -112,7 +133,12 @@ export default function PhysicalShopPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
         body: JSON.stringify({
-          items: cart.map(item => ({ productId: item.id, quantity: item.quantity })),
+          items: cart.map(item => ({
+            productId: item.id,
+            quantity: item.quantity,
+            rentalStartDate: item.rentalStartDate,
+            rentalEndDate: item.rentalEndDate
+          })),
           paymentMethod,
           ...shipping
         })
@@ -169,8 +195,8 @@ export default function PhysicalShopPage() {
                 {product.images[0] ? <Image src={product.images[0]} alt={product.name} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" className="object-cover transition-transform duration-300 hover:scale-[1.03]" /> : <div className="grid h-full place-items-center"><Package size={38} className="text-black/15" /></div>}
               </Link>
               <div className="p-4"><p className="mb-2 text-xs font-semibold text-[#247253]">{CATEGORY_LABELS[product.category]}</p><Link href={`/shop/${product.id}`} className="line-clamp-2 min-h-12 font-semibold leading-6 hover:text-[#df4d5f]">{product.name}</Link><p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-black/45">{product.summary || '查看完整商品規格與使用說明'}</p>
-                <div className="mt-5 flex items-center justify-between"><div><span className="text-xs text-black/35">NT$</span><span className="ml-1 text-xl font-bold text-[#df4d5f]">{product.price.toLocaleString()}</span></div><button title="加入購物車" onClick={() => addToCart(product)} disabled={product.stock_quantity <= 0} className="grid h-11 w-11 place-items-center rounded-md bg-[#df4d5f] text-white hover:bg-[#c93e51] disabled:bg-black/10 disabled:text-black/30"><Plus size={21} /></button></div>
-                <p className={`mt-3 text-xs ${product.stock_quantity > 0 ? 'text-black/35' : 'text-[#df4d5f]'}`}>{product.stock_quantity > 0 ? `現貨 ${product.stock_quantity} 件` : '目前無庫存'}</p>
+                <div className="mt-5 flex items-center justify-between"><div><span className="text-xs text-black/35">NT$</span><span className="ml-1 text-xl font-bold text-[#df4d5f]">{product.price.toLocaleString()}</span>{product.category === 'rental' && <span className="ml-1 text-xs text-black/35">／天</span>}</div>{product.category === 'rental' ? <Link title="選擇租借日期" href={`/shop/${product.id}`} className="grid h-11 w-11 place-items-center rounded-md bg-[#247253] text-white hover:bg-[#185e42]"><CalendarDays size={20} /></Link> : <button title="加入購物車" onClick={() => addToCart(product)} disabled={product.stock_quantity <= 0} className="grid h-11 w-11 place-items-center rounded-md bg-[#df4d5f] text-white hover:bg-[#c93e51] disabled:bg-black/10 disabled:text-black/30"><Plus size={21} /></button>}</div>
+                <p className={`mt-3 text-xs ${product.stock_quantity > 0 ? 'text-black/35' : 'text-[#df4d5f]'}`}>{product.stock_quantity > 0 ? product.category === 'rental' ? `可租借 ${product.stock_quantity} 組 · 選日期` : `現貨 ${product.stock_quantity} 件` : product.category === 'rental' ? '目前無可租借庫存' : '目前無庫存'}</p>
               </div>
             </article>)}
           </div>
@@ -181,7 +207,7 @@ export default function PhysicalShopPage() {
 
       {cartOpen && <div className="fixed inset-0 z-50 flex justify-end bg-black/45" onMouseDown={e => e.target === e.currentTarget && setCartOpen(false)}><aside className="flex h-full w-full max-w-md flex-col bg-white text-[#172028] shadow-2xl">
         <div className="flex h-16 items-center justify-between border-b border-black/8 px-5"><h2 className="font-bold">購物車 ({count})</h2><button title="關閉" onClick={() => setCartOpen(false)} className="grid h-9 w-9 place-items-center rounded-md hover:bg-black/5"><X size={20} /></button></div>
-        <div className="flex-1 overflow-y-auto p-5">{cart.length === 0 ? <div className="pt-24 text-center text-black/40"><ShoppingBag className="mx-auto mb-3" size={36} />購物車目前是空的</div> : <div className="space-y-5">{cart.map(item => <div key={item.id} className="flex gap-3 border-b border-black/8 pb-5"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-black/5">{item.images[0] && <Image src={item.images[0]} alt="" fill sizes="80px" className="object-cover" />}</div><div className="min-w-0 flex-1"><p className="line-clamp-2 text-sm font-semibold">{item.name}</p><p className="mt-1 font-mono text-sm text-[#df4d5f]">NT${item.price.toLocaleString()}</p><div className="mt-3 flex items-center gap-2"><button title="減少數量" onClick={() => setQuantity(item.id, item.quantity - 1)} className="grid h-7 w-7 place-items-center rounded border border-black/10"><Minus size={13} /></button><span className="w-6 text-center text-sm">{item.quantity}</span><button title="增加數量" onClick={() => setQuantity(item.id, item.quantity + 1)} className="grid h-7 w-7 place-items-center rounded border border-black/10"><Plus size={13} /></button><button title="移除商品" onClick={() => setQuantity(item.id, 0)} className="ml-auto text-black/35 hover:text-[#df4d5f]"><Trash2 size={16} /></button></div></div></div>)}</div>}</div>
+        <div className="flex-1 overflow-y-auto p-5">{cart.length === 0 ? <div className="pt-24 text-center text-black/40"><ShoppingBag className="mx-auto mb-3" size={36} />購物車目前是空的</div> : <div className="space-y-5">{cart.map(item => { const key = cartItemKey(item); return <div key={key} className="flex gap-3 border-b border-black/8 pb-5"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-black/5">{item.images[0] && <Image src={item.images[0]} alt="" fill sizes="80px" className="object-cover" />}</div><div className="min-w-0 flex-1"><p className="line-clamp-2 text-sm font-semibold">{item.name}</p>{item.category === 'rental' && <p className="mt-1 text-xs font-semibold text-[#247253]"><CalendarDays className="mr-1 inline" size={13} />{formatRentalDate(item.rentalStartDate)} 至 {formatRentalDate(item.rentalEndDate)} · {item.rentalDays} 天</p>}<p className="mt-1 font-mono text-sm text-[#df4d5f]">NT${lineTotal(item).toLocaleString()}</p><div className="mt-3 flex items-center gap-2">{item.category === 'rental' ? <span className="text-xs text-black/40">租借數量 1</span> : <><button title="減少數量" onClick={() => setQuantity(key, item.quantity - 1)} className="grid h-7 w-7 place-items-center rounded border border-black/10"><Minus size={13} /></button><span className="w-6 text-center text-sm">{item.quantity}</span><button title="增加數量" onClick={() => setQuantity(key, item.quantity + 1)} className="grid h-7 w-7 place-items-center rounded border border-black/10"><Plus size={13} /></button></>}<button title="移除商品" onClick={() => setQuantity(key, 0)} className="ml-auto text-black/35 hover:text-[#df4d5f]"><Trash2 size={16} /></button></div></div></div>; })}</div>}</div>
         {cart.length > 0 && <div className="border-t border-black/8 p-5"><div className="mb-4 flex justify-between"><span className="text-black/50">商品合計</span><span className="text-xl font-bold">NT${total.toLocaleString()}</span></div><button onClick={openCheckout} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white hover:bg-[#283541]">填寫收件資料 <ArrowRight size={17} /></button></div>}
       </aside></div>}
 
