@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Check, DownloadCloud, Filter, Loader2, Search, Star, UploadCloud } from 'lucide-react';
 
@@ -331,7 +333,7 @@ export default function MicroesimPlansPage() {
     setFavoritesSaving(true);
     setFavoritesError('');
     try {
-      const response = await fetch('/api/admin/microesim/favorites', {
+      const response = await adminFetch('/api/admin/microesim/favorites', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planIds: Array.from(ids) })
@@ -351,7 +353,7 @@ export default function MicroesimPlansPage() {
     const fetchFavorites = async () => {
       setFavoritesError('');
       try {
-        const response = await fetch('/api/admin/microesim/favorites', { cache: 'no-store' });
+        const response = await adminFetch('/api/admin/microesim/favorites', { cache: 'no-store' });
         const json = await response.json();
         if (!response.ok || json.error) throw new Error(json.error || '讀取我的最愛失敗');
         if (cancelled) return;
@@ -447,7 +449,7 @@ export default function MicroesimPlansPage() {
         usdRate,
         markup
       });
-      const response = await fetch(`/api/admin/microesim/plans?${params.toString()}`, { cache: 'no-store' });
+      const response = await adminFetch(`/api/admin/microesim/plans?${params.toString()}`, { cache: 'no-store' });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || '同步失敗');
       setData(json);
@@ -468,7 +470,7 @@ export default function MicroesimPlansPage() {
     setMessage('');
     await persistFavoritePlanIds(favoritePlanIds);
     try {
-      const response = await fetch('/api/admin/microesim/import-products', {
+      const response = await adminFetch('/api/admin/microesim/import-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plans: selectedPlans })

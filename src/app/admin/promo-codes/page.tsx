@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useState, useEffect } from 'react';
 
 interface PromoCode {
@@ -38,7 +40,7 @@ export default function PromoCodesPage() {
 
   const fetchPromoCodes = async () => {
     try {
-      const res = await fetch('/api/admin/promo-codes');
+      const res = await adminFetch('/api/admin/promo-codes');
       const json = await res.json();
       if (json.promoCodes) setPromoCodes(json.promoCodes);
     } catch (err) {
@@ -79,7 +81,7 @@ export default function PromoCodesPage() {
     if (isSubmitting || !formCode || !formRewardTokens) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/admin/promo-codes', {
+      const res = await adminFetch('/api/admin/promo-codes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -116,7 +118,7 @@ export default function PromoCodesPage() {
     if (isSubmitting || !editingCode) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/admin/promo-codes', {
+      const res = await adminFetch('/api/admin/promo-codes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -143,7 +145,7 @@ export default function PromoCodesPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/promo-codes?id=${id}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/promo-codes?id=${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || '刪除失敗');
       showToast('✅ 已刪除');

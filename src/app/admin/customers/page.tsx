@@ -1,5 +1,7 @@
 "use client";
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Search, Zap, User, PlusCircle, TicketPercent } from "lucide-react";
@@ -21,7 +23,7 @@ export default function AdminCustomersPage() {
     }
   };
   const fetchReferralConfig = async () => {
-    const res = await fetch('/api/admin/referrals');
+    const res = await adminFetch('/api/admin/referrals');
     const json = await res.json();
     if (res.ok) setReferralConfig(json.config);
   };
@@ -83,7 +85,7 @@ export default function AdminCustomersPage() {
     if (isSavingReferral) return;
     setIsSavingReferral(true);
     try {
-      const res = await fetch('/api/admin/referrals', {
+      const res = await adminFetch('/api/admin/referrals', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaults: defaultReferralForm })
@@ -103,7 +105,7 @@ export default function AdminCustomersPage() {
     if (!selectedReferralCustomer || isSavingReferral) return;
     setIsSavingReferral(true);
     try {
-      const res = await fetch('/api/admin/referrals', {
+      const res = await adminFetch('/api/admin/referrals', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,7 +155,7 @@ export default function AdminCustomersPage() {
         return;
       }
 
-      const res = await fetch('/api/admin/customers', {
+      const res = await adminFetch('/api/admin/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

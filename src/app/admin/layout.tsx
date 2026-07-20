@@ -1,9 +1,10 @@
 "use client";
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { LockKeyhole, Menu, X } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { adminFetch } from '@/lib/admin-fetch';
 
 export default function AdminLayout({
   children,
@@ -11,7 +12,33 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [authState, setAuthState] = useState<'checking' | 'allowed' | 'denied'>('checking');
+  const [authMessage, setAuthMessage] = useState('正在驗證管理員登入狀態');
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (pathname === '/admin/login') return;
+    let active = true;
+    adminFetch('/api/admin/session', { cache: 'no-store' })
+      .then(async response => {
+        const result = await response.json().catch(() => ({}));
+        if (!active) return;
+        if (response.ok) {
+          setAuthState('allowed');
+          return;
+        }
+        setAuthMessage(result.error || '請先登入管理員帳號');
+        setAuthState('denied');
+        router.replace('/admin/login');
+      })
+      .catch(() => {
+        if (!active) return;
+        setAuthMessage('無法驗證管理員登入狀態，請稍後再試');
+        setAuthState('denied');
+      });
+    return () => { active = false; };
+  }, [pathname, router]);
 
   const navigation = [
     { name: '儀表板', href: '/admin' },
@@ -29,8 +56,30 @@ export default function AdminLayout({
     { name: '付款限制', href: '/admin/payment-limits' },
     { name: '訂單提醒設定', href: '/admin/notifications' },
     { name: '聯絡資訊設定', href: '/admin/contact' },
+    { name: '後台人員', href: '/admin/admin-users' },
     { name: '系統設定', href: '/admin/settings' },
   ];
+
+  if (pathname === '/admin/login') return <>{children}</>;
+
+  if (authState !== 'allowed') {
+    return (
+      <main className="min-h-screen bg-[#0B0B1A] text-white grid place-items-center px-6">
+        <div className="w-full max-w-sm text-center">
+          <LockKeyhole className="mx-auto mb-5 text-cyan" size={42} />
+          <h1 className="text-xl font-bold mb-2">管理後台登入保護</h1>
+          <p className="text-gray-400 mb-6">
+            {authState === 'checking' ? '正在驗證管理員登入狀態' : authMessage}
+          </p>
+          {authState === 'denied' && (
+            <Link href="/" className="inline-flex px-5 py-2.5 bg-cyan text-[#0B0B1A] font-bold rounded-md">
+              返回首頁登入
+            </Link>
+          )}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#0B0B1A] text-white overflow-hidden font-sans">

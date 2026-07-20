@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useState, useEffect } from 'react';
 
 interface SiteSettings {
@@ -32,7 +34,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/admin/settings');
+        const res = await adminFetch('/api/admin/settings');
         const json = await res.json();
         if (json.settings) {
           setSettings(json.settings);
@@ -49,7 +51,7 @@ export default function SettingsPage() {
     if (isSaving) return;
     setIsSaving(true);
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await adminFetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)

@@ -1,9 +1,5 @@
-import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/authenticated-fetch';
 
 export async function adminFetch(input: RequestInfo | URL, init: RequestInit = {}) {
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
-  const headers = new Headers(init.headers);
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-  return fetch(input, { ...init, headers });
+  return authenticatedFetch(input, init);
 }

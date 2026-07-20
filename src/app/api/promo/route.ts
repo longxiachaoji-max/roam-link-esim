@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co';
@@ -9,11 +10,13 @@ function getSupabase() {
 
 export async function POST(request: Request) {
   try {
+    const user = await requireAuthenticatedUser(request);
     const body = await request.json();
-    const { email, code } = body;
+    const { code } = body;
+    const email = user.email.toLowerCase();
 
-    if (!email || !code) {
-      return NextResponse.json({ error: '請輸入 Email 和兌換碼' }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: '請輸入兌換碼' }, { status: 400 });
     }
 
     const supabase = getSupabase();
@@ -102,6 +105,8 @@ export async function POST(request: Request) {
     });
 
   } catch (error: any) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     console.error('Promo redemption error:', error);
     return NextResponse.json({ error: error.message || '系統錯誤' }, { status: 500 });
   }

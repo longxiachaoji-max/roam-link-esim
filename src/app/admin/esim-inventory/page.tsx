@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -51,7 +53,7 @@ export default function EsimInventoryPage() {
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const res = await fetch('/api/admin/esim-inventory/parse-pdf', {
+        const res = await adminFetch('/api/admin/esim-inventory/parse-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ base64 })
@@ -100,7 +102,7 @@ export default function EsimInventoryPage() {
     setIsBatchSubmitting(true);
     setBatchResult(null);
     try {
-      const res = await fetch('/api/admin/esim-inventory/batch', {
+      const res = await adminFetch('/api/admin/esim-inventory/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: batchPreview })
@@ -133,7 +135,7 @@ export default function EsimInventoryPage() {
     setLoading(true);
     try {
       // 1. Fetch inventory via API route (uses service_role key)
-      const invRes = await fetch('/api/admin/esim-inventory');
+      const invRes = await adminFetch('/api/admin/esim-inventory');
       const invJson = await invRes.json();
 
       if (invJson.error) {
@@ -239,7 +241,7 @@ export default function EsimInventoryPage() {
     if (!confirm('確定要刪除這筆 eSIM 庫存嗎？')) return;
     
     try {
-      const res = await fetch(`/api/admin/esim-inventory?id=${id}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/esim-inventory?id=${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || '刪除失敗');
       fetchData(); // Refresh list after successful deletion
@@ -310,7 +312,7 @@ export default function EsimInventoryPage() {
     });
     
     // Fetch the specific item to get the real ICCID and cost via API
-    fetch('/api/admin/esim-inventory')
+    adminFetch('/api/admin/esim-inventory')
       .then(res => res.json())
       .then(json => {
         const match = json.inventory?.find((inv: any) => inv.id === esim.id);
@@ -327,7 +329,7 @@ export default function EsimInventoryPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/admin/esim-inventory', {
+      const res = await adminFetch('/api/admin/esim-inventory', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,7 +361,7 @@ export default function EsimInventoryPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/admin/esim-inventory', {
+      const res = await adminFetch('/api/admin/esim-inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

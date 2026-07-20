@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +11,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // PUT - 更新會員名稱
 export async function PUT(request: Request) {
   try {
-    const { email, name } = await request.json();
+    const user = await requireAuthenticatedUser(request);
+    const { name } = await request.json();
+    const email = user.email.toLowerCase();
 
-    if (!email || !name || !name.trim()) {
+    if (!name || !name.trim()) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
     }
 
@@ -29,6 +32,8 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true, customer: data });
   } catch (error: any) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

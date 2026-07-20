@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -56,7 +58,7 @@ export default function ContactSettingsPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/admin/contact');
+        const res = await adminFetch('/api/admin/contact');
         const json = await res.json();
         if (json.settings) setSettings(json.settings);
       } catch (err) {
@@ -94,7 +96,7 @@ export default function ContactSettingsPage() {
     if (saving) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/contact', {
+      const res = await adminFetch('/api/admin/contact', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)

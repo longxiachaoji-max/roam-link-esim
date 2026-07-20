@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAdminUser } from '@/lib/server-auth';
 
 export const PHYSICAL_PRODUCT_CATEGORIES = {
   rental: '商品租借',
@@ -32,21 +33,7 @@ export function getPhysicalStoreAdmin() {
 }
 
 export async function requirePhysicalStoreAdmin(request: Request) {
-  const authorization = request.headers.get('authorization') || '';
-  const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-  if (!accessToken) throw new Error('請先登入管理員帳號');
-
-  const supabase = getPhysicalStoreAdmin();
-  const { data, error } = await supabase.auth.getUser(accessToken);
-  const email = data.user?.email?.toLowerCase();
-  if (error || !email) throw new Error('管理員登入狀態已過期');
-
-  const allowedEmails = (process.env.ADMIN_EMAILS || 'roamlinktw@gmail.com')
-    .split(',')
-    .map(value => value.trim().toLowerCase())
-    .filter(Boolean);
-  if (!allowedEmails.includes(email)) throw new Error('此會員沒有後台管理權限');
-  return data.user;
+  return requireAdminUser(request);
 }
 
 export function normalizePhysicalProduct(row: Record<string, unknown>): PhysicalProduct {

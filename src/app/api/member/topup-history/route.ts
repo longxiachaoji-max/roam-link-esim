@@ -1,6 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,14 +11,9 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const email = searchParams.get('email');
-  
-  if (!email) {
-    return NextResponse.json({ error: 'Email parameter is required' }, { status: 400 });
-  }
-
   try {
+    const user = await requireAuthenticatedUser(request);
+    const email = user.email.toLowerCase();
     // First, find the customer_id from the email
     const { data: customer, error: customerError } = await supabase
       .from('customers')
@@ -44,6 +40,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json(transactions || []);
   } catch (e: any) {
+    const authError = authenticationErrorResponse(e);
+    if (authError) return authError;
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

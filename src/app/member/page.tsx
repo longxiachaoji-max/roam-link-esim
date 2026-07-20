@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
+import { authenticatedFetch } from '@/lib/authenticated-fetch';
 
 export default function MemberCenter() {
   const [user, setUser] = useState<any>(null);
@@ -46,8 +47,8 @@ export default function MemberCenter() {
     setTimeout(() => setToastMsg(""), 2500);
   };
 
-  const fetchOrders = async (email: string) => {
-    const res = await fetch(`/api/member/orders?email=${email}`);
+  const fetchOrders = async (_email: string) => {
+    const res = await authenticatedFetch('/api/member/orders');
     if (res.ok) {
       const data = await res.json();
       setOrders(data.orders || []);
@@ -130,12 +131,11 @@ export default function MemberCenter() {
   // Soft delete handler
   const handleSoftDelete = async (orderItemId: string) => {
     try {
-      const res = await fetch('/api/member/esim', {
+      const res = await authenticatedFetch('/api/member/esim', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_item_id: orderItemId,
-          email: user.email,
           action: 'soft_delete'
         })
       });
@@ -206,12 +206,11 @@ export default function MemberCenter() {
   // Note update handler
   const handleNoteUpdate = async (orderItemId: string, note: string) => {
     try {
-      const res = await fetch('/api/member/esim', {
+      const res = await authenticatedFetch('/api/member/esim', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_item_id: orderItemId,
-          email: user.email,
           action: 'update_note',
           note
         })
@@ -264,12 +263,11 @@ export default function MemberCenter() {
     if (!user?.email) return;
     setUsageLoadingId(item.id);
     try {
-      const res = await fetch('/api/member/esim-usage', {
+      const res = await authenticatedFetch('/api/member/esim-usage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          order_item_id: item.id,
-          email: user.email
+          order_item_id: item.id
         })
       });
       const json = await res.json();
@@ -335,10 +333,10 @@ export default function MemberCenter() {
                     onClick={async () => {
                       if (!nameText.trim()) return;
                       try {
-                        const res = await fetch('/api/member/profile', {
+                        const res = await authenticatedFetch('/api/member/profile', {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ email: user.email, name: nameText })
+                          body: JSON.stringify({ name: nameText })
                         });
                         const json = await res.json();
                         if (!res.ok || json.error) throw new Error(json.error);
@@ -559,10 +557,10 @@ export default function MemberCenter() {
                 if (isRedeeming || !promoCode.trim()) return;
                 setIsRedeeming(true);
                 try {
-                  const res = await fetch('/api/promo', {
+                  const res = await authenticatedFetch('/api/promo', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: user.email, code: promoCode })
+                    body: JSON.stringify({ code: promoCode })
                   });
                   const json = await res.json();
                   if (!res.ok || json.error) throw new Error(json.error);

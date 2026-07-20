@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { Fragment, useState, useEffect } from 'react';
 
 interface ESimInventory {
@@ -144,19 +146,19 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/orders');
+      const res = await adminFetch('/api/admin/orders');
       const json = await res.json();
       if (json.orders) {
         setOrders(json.orders);
       }
 
-      const txRes = await fetch('/api/admin/topup-history');
+      const txRes = await adminFetch('/api/admin/topup-history');
       const txJson = await txRes.json();
       if (Array.isArray(txJson)) {
         setTransactions(txJson);
       }
 
-      const invRes = await fetch('/api/admin/esim-inventory');
+      const invRes = await adminFetch('/api/admin/esim-inventory');
       const invJson = await invRes.json();
       if (invJson.inventory) {
         setInventoryOptions(invJson.inventory.filter((item: InventoryOption) => item.status === 'AVAILABLE'));
@@ -246,7 +248,7 @@ export default function OrdersPage() {
 
     setAssigningItemId(item.id);
     try {
-      const res = await fetch('/api/admin/orders', {
+      const res = await adminFetch('/api/admin/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -275,7 +277,7 @@ export default function OrdersPage() {
 
     setFulfillingMicroItemId(item.id);
     try {
-      const res = await fetch('/api/admin/orders', {
+      const res = await adminFetch('/api/admin/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -302,7 +304,7 @@ export default function OrdersPage() {
 
     setDeletingOrderId(order.id);
     try {
-      const res = await fetch('/api/admin/orders', {
+      const res = await adminFetch('/api/admin/orders', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_id: order.id })
@@ -324,7 +326,7 @@ export default function OrdersPage() {
 
     setRestoringItemId(item.id);
     try {
-      const res = await fetch('/api/admin/orders', {
+      const res = await adminFetch('/api/admin/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

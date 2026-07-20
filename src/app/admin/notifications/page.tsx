@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useEffect, useState } from 'react';
 
 interface NotificationSettings {
@@ -33,7 +35,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/admin/notifications');
+        const res = await adminFetch('/api/admin/notifications');
         const json = await res.json();
         if (json.settings) setSettings(json.settings);
       } catch (err) {
@@ -49,7 +51,7 @@ export default function NotificationsPage() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/notifications', {
+      const res = await adminFetch('/api/admin/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -77,7 +79,7 @@ export default function NotificationsPage() {
     try {
       const saved = await saveSettings();
       if (!saved) return;
-      const res = await fetch('/api/admin/notifications', {
+      const res = await adminFetch('/api/admin/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type })

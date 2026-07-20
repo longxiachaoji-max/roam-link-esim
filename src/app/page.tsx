@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { trackPageView } from "@/lib/analytics";
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
@@ -300,10 +301,10 @@ export default function Home() {
       // 如果有填推薦碼，嘗試兑換
       if (authPromoCode.trim()) {
         try {
-          const promoRes = await fetch('/api/promo', {
+          const promoRes = await authenticatedFetch('/api/promo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: authEmail, code: authPromoCode.trim() }),
+            body: JSON.stringify({ code: authPromoCode.trim() }),
           });
           const promoJson = await promoRes.json();
           if (promoRes.ok && promoJson.success) {
@@ -334,11 +335,10 @@ export default function Home() {
     try {
       // 由於購物車可能有多個商品，我們逐一呼叫 API
       for (const item of cart) {
-        const res = await fetch('/api/checkout', {
+        const res = await authenticatedFetch('/api/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: user.email,
             name: user.name || user.email.split('@')[0],
             productId: item.id,
             useTokens: true,

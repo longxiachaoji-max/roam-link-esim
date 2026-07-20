@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Database, HardDrive, RefreshCw, Server, Table2 } from 'lucide-react';
 
@@ -79,7 +81,7 @@ export default function ResourceMonitorPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/admin/resource-monitor', { cache: 'no-store' });
+      const response = await adminFetch('/api/admin/resource-monitor', { cache: 'no-store' });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '無法載入資源監控');
       setData(result);

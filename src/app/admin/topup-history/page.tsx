@@ -1,6 +1,7 @@
 
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 
@@ -61,7 +62,7 @@ export default function TopupHistoryPage() {
 
   const fetchTransactions = async () => {
     try {
-      const response = await fetch('/api/admin/topup-history');
+      const response = await adminFetch('/api/admin/topup-history');
       if (!response.ok) {
         throw new Error('Failed to fetch data');
       }
@@ -99,7 +100,7 @@ export default function TopupHistoryPage() {
 
     setSaving(true);
     try {
-      const response = await fetch('/api/admin/topup-history', {
+      const response = await adminFetch('/api/admin/topup-history', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

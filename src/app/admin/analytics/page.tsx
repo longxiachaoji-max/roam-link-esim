@@ -1,5 +1,7 @@
 "use client";
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useCallback, useEffect, useState } from 'react';
 import { Globe2, MonitorUp, MousePointerClick, RefreshCw } from 'lucide-react';
 
@@ -30,7 +32,7 @@ export default function AdminAnalyticsPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/admin/analytics', { cache: 'no-store' });
+      const response = await adminFetch('/api/admin/analytics', { cache: 'no-store' });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '無法載入流量統計');
       setMetrics(result.metrics);

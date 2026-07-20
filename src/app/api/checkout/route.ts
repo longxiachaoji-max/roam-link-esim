@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -101,11 +102,13 @@ function escapeTelegramHtml(value: string) {
 
 export async function POST(request: Request) {
   try {
+    const authUser = await requireAuthenticatedUser(request);
     const body = await request.json();
-    const { email, name, productId, useTokens, paymentMethod, discountCode } = body;
+    const { name, productId, useTokens, paymentMethod, discountCode } = body;
+    const email = authUser.email.toLowerCase();
 
-    if (!email || !productId) {
-      return NextResponse.json({ error: 'Email and productId are required' }, { status: 400 });
+    if (!productId) {
+      return NextResponse.json({ error: 'ProductId is required' }, { status: 400 });
     }
 
     // 1. Get or create customer
@@ -378,6 +381,8 @@ export async function POST(request: Request) {
     });
 
   } catch (error: any) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     console.error('Checkout error:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }

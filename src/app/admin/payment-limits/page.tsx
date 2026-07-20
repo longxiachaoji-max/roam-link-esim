@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useEffect, useState } from 'react';
 
 interface PaymentLimits {
@@ -30,7 +32,7 @@ export default function PaymentLimitsPage() {
   useEffect(() => {
     const fetchLimits = async () => {
       try {
-        const res = await fetch('/api/admin/payment-limits');
+        const res = await adminFetch('/api/admin/payment-limits');
         const json = await res.json();
         if (json.limits) setLimits(json.limits);
       } catch (error) {
@@ -60,7 +62,7 @@ export default function PaymentLimitsPage() {
 
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/payment-limits', {
+      const res = await adminFetch('/api/admin/payment-limits', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(limits)

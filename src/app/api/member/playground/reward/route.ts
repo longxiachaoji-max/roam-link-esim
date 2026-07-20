@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,9 +10,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {
-    const { email, game, difficulty } = await request.json();
+    const user = await requireAuthenticatedUser(request);
+    const { game, difficulty } = await request.json();
+    const email = user.email.toLowerCase();
 
-    if (!email || !game) {
+    if (!game) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
     }
 
@@ -89,6 +92,8 @@ export async function POST(request: Request) {
       message: `恭喜過關！\n成功獲得 ${rewardAmount} 元儲值金！`
     });
   } catch (error: any) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

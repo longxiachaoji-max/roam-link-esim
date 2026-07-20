@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { X, Trophy } from "lucide-react";
 import Link from "next/link";
+import { authenticatedFetch } from '@/lib/authenticated-fetch';
 
 // ─────────────────── Sudoku Generator ───────────────────
 
@@ -175,10 +176,10 @@ export default function SudokuGame() {
     if (!userEmail || isClaiming) return;
     setIsClaiming(true);
     try {
-      const res = await fetch("/api/member/playground/reward", {
+      const res = await authenticatedFetch("/api/member/playground/reward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userEmail, game: "Sudoku", difficulty: "hard" }),
+        body: JSON.stringify({ game: "Sudoku", difficulty: "hard" }),
       });
       const data = await res.json();
       if (res.ok && data.success) {

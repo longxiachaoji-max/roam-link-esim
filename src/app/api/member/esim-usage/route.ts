@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { fetchMicroesimTopupDetail } from '@/lib/microesim';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,9 +125,11 @@ function normalizeMicroesimUsage(detail: AnyRecord, fallbackExpiryDate?: string 
 
 export async function POST(request: Request) {
   try {
-    const { order_item_id, email } = await request.json();
+    const user = await requireAuthenticatedUser(request);
+    const { order_item_id } = await request.json();
+    const email = user.email.toLowerCase();
 
-    if (!order_item_id || !email) {
+    if (!order_item_id) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
     }
 
@@ -202,6 +205,8 @@ export async function POST(request: Request) {
       throw error;
     }
   } catch (error) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     console.error('MicroEsim usage query failed:', error);
     return NextResponse.json({
       error: error instanceof Error ? error.message : '查詢 eSIM 用量失敗'

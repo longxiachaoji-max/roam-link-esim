@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,10 +11,12 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // PUT - 更新備註 或 軟刪除
 export async function PUT(request: Request) {
   try {
+    const user = await requireAuthenticatedUser(request);
     const body = await request.json();
-    const { order_item_id, email, action, note } = body;
+    const { order_item_id, action, note } = body;
+    const email = user.email.toLowerCase();
 
-    if (!order_item_id || !email) {
+    if (!order_item_id) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
     }
 
@@ -69,6 +72,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: '不支援的操作' }, { status: 400 });
     }
   } catch (error: any) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

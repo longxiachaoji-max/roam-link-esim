@@ -1,20 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
+import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const email = searchParams.get('email');
-  
-  if (!email) {
-    return NextResponse.json({ error: 'Email required' }, { status: 400 });
-  }
-
   try {
+    const user = await requireAuthenticatedUser(request);
+    const email = user.email.toLowerCase();
     // 1. Get customer
     const { data: customer, error: custError } = await supabase
       .from('customers')
@@ -77,6 +73,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ orders: orders || [] });
   } catch (error: any) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
     console.error('Fetch orders error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

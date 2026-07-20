@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase'; // Using the client-side client
+import { authenticatedFetch } from '@/lib/authenticated-fetch';
 
 interface Transaction {
   id: string;
@@ -52,7 +53,7 @@ export default function MemberHistoryPage() {
 
     async function fetchTransactions() {
       try {
-        const response = await fetch(`/api/member/topup-history?email=${encodeURIComponent(userEmail!)}`);
+        const response = await authenticatedFetch('/api/member/topup-history');
         if (!response.ok) {
           throw new Error('Failed to fetch your transaction history');
         }

@@ -1,5 +1,7 @@
 'use client';
 
+import { adminFetch } from '@/lib/admin-fetch';
+
 import { useState, useEffect, useRef } from 'react';
 import { CheckSquare, ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, RefreshCw, Replace, RotateCcw, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
@@ -262,7 +264,7 @@ export default function ProductsPage() {
     setIsBatchSubmitting(true);
     setBatchResult(null);
     try {
-      const res = await fetch('/api/admin/products/batch', {
+      const res = await adminFetch('/api/admin/products/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: batchPreview })
@@ -289,7 +291,7 @@ export default function ProductsPage() {
     setIsQuickSubmitting(true);
     setQuickResult(null);
     try {
-      const res = await fetch('/api/admin/products/batch', {
+      const res = await adminFetch('/api/admin/products/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: quickPreview })
@@ -310,7 +312,7 @@ export default function ProductsPage() {
     setIsReplaceSubmitting(true);
     setReplaceResult(null);
     try {
-      const res = await fetch('/api/admin/products/batch-update', {
+      const res = await adminFetch('/api/admin/products/batch-update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -336,7 +338,7 @@ export default function ProductsPage() {
     setSortResult(null);
     setIsSortLoading(true);
     try {
-      const res = await fetch('/api/admin/products/sort');
+      const res = await adminFetch('/api/admin/products/sort');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || '讀取排序設定失敗');
 
@@ -360,7 +362,7 @@ export default function ProductsPage() {
     setIsSortSubmitting(true);
     setSortResult(null);
     try {
-      const res = await fetch('/api/admin/products/sort', {
+      const res = await adminFetch('/api/admin/products/sort', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -383,7 +385,7 @@ export default function ProductsPage() {
     setIsSyncingCosts(true);
     setSyncCostResult(null);
     try {
-      const res = await fetch('/api/admin/microesim/sync-costs', {
+      const res = await adminFetch('/api/admin/microesim/sync-costs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -588,7 +590,7 @@ export default function ProductsPage() {
     setIsInlineSaving(true);
     setInlineEditResult(null);
     try {
-      const res = await fetch('/api/admin/products/batch-update', {
+      const res = await adminFetch('/api/admin/products/batch-update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates: inlineEditChanges })
@@ -646,7 +648,7 @@ export default function ProductsPage() {
     setIsBulkDeleting(true);
     setBulkDeleteResult(null);
     try {
-      const response = await fetch('/api/admin/products/bulk-delete', {
+      const response = await adminFetch('/api/admin/products/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: Array.from(selectedProductIds) })
@@ -692,7 +694,7 @@ export default function ProductsPage() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/products');
+      const res = await adminFetch('/api/admin/products');
       const json = await res.json();
       if (json.products) {
         const productList = json.products as Product[];
@@ -724,7 +726,7 @@ export default function ProductsPage() {
 
   const handleToggleActive = async (product: Product) => {
     try {
-      const res = await fetch('/api/admin/products', {
+      const res = await adminFetch('/api/admin/products', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: product.id, is_active: !product.is_active })
@@ -743,7 +745,7 @@ export default function ProductsPage() {
     setIsSubmitting(true);
     try {
       const country = formData.useCustomCountry ? formData.customCountry : formData.country;
-      const res = await fetch('/api/admin/products', {
+      const res = await adminFetch('/api/admin/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -791,7 +793,7 @@ export default function ProductsPage() {
     setIsSubmitting(true);
     try {
       const country = editFormData.useCustomCountry ? editFormData.customCountry : editFormData.country;
-      const res = await fetch('/api/admin/products', {
+      const res = await adminFetch('/api/admin/products', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -819,7 +821,7 @@ export default function ProductsPage() {
   // --- Delete ---
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/products?id=${id}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/products?id=${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || '刪除失敗');
       if (json.warning) {
