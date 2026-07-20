@@ -135,7 +135,10 @@ export default function PhysicalShopPage() {
     <main className="relative min-h-screen bg-[#f5f7f8] text-[#172028]">
       <header className="sticky top-0 z-40 border-b border-black/8 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
-          <Link href="/shop" className="text-lg font-bold tracking-normal">FirstRoamLink <span className="text-[#df4d5f]">Travel Shop</span></Link>
+          <Link href="/shop" className="min-w-0 font-bold leading-tight tracking-normal">
+            <span className="block text-xs text-black/55 sm:text-sm">一飛通全球漫遊</span>
+            <span className="block text-base text-[#df4d5f] sm:text-lg">FirstRoamLink</span>
+          </Link>
           <nav className="flex items-center gap-2">
             <Link href="/" className="hidden rounded-md px-3 py-2 text-sm text-black/55 hover:bg-black/5 sm:block">eSIM 方案</Link>
             <Link href="/member" title="會員中心" className="grid h-10 w-10 place-items-center rounded-md text-black/55 hover:bg-black/5"><User size={19} /></Link>
@@ -148,7 +151,7 @@ export default function PhysicalShopPage() {
 
       <section className="border-b border-black/8 bg-[#dceee7]">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 px-4 py-10 md:flex-row md:items-end md:px-6">
-          <div><p className="mb-2 text-sm font-semibold text-[#247253]">一飛通旅行選物</p><h1 className="text-3xl font-bold md:text-4xl">實體漫遊卡與旅行租借</h1><p className="mt-3 max-w-xl text-sm leading-6 text-black/55">出發前先準備好需要的連線與旅行用品，付款完成後由專人安排出貨或租借。</p></div>
+          <div><p className="mb-2 text-sm font-semibold text-[#247253]">一飛通全球漫遊 FirstRoamLink</p><h1 className="text-3xl font-bold md:text-4xl">一飛通商城</h1><p className="mt-3 max-w-xl text-sm leading-6 text-black/55">實體漫遊卡、旅行租借與出國用品，付款完成後由專人安排出貨或租借。</p></div>
           <div className="flex items-center gap-2 text-sm text-black/50"><Package size={18} /> 台灣寄送 · 訂單進度由後台處理</div>
         </div>
       </section>

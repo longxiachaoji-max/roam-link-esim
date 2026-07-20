@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
+import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { trackPageView } from "@/lib/analytics";
@@ -498,16 +498,42 @@ export default function Home() {
   return (
     <div className="min-h-screen relative z-10">
       {/* 導覽列 */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 bg-[#0D0D1A]/85 backdrop-blur-md border-b border-white/5">
-        <div className="font-display text-2xl font-extrabold bg-gradient-to-br from-coral to-yellow text-transparent bg-clip-text">
-          Roam Link.
+      <nav className="sticky top-0 z-50 bg-[#0D0D1A]/90 px-4 py-3 backdrop-blur-md border-b border-white/5 md:flex md:items-center md:justify-between md:px-6 md:py-4">
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/" aria-label="一飛通全球漫遊 FirstRoamLink 首頁" className="min-w-0 font-display font-extrabold leading-tight tracking-normal">
+            <span className="block text-[13px] text-white md:text-base">一飛通全球漫遊</span>
+            <span className="block text-sm bg-gradient-to-br from-coral to-yellow text-transparent bg-clip-text md:text-lg">FirstRoamLink</span>
+          </Link>
+          <div className="flex items-center gap-2 md:hidden">
+            {user ? (
+              <>
+                <a href="/member" className="flex h-10 items-center gap-2 rounded-md border border-yellow/30 bg-yellow/10 px-2.5" aria-label={`會員中心，餘額 NT$${user.token_balance}`}>
+                  <div className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-coral to-yellow text-[11px] font-black text-dark">
+                    {user.name?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <span className="text-xs font-black text-yellow">${user.token_balance}</span>
+                </a>
+                <button onClick={handleLogout} aria-label="登出" title="登出" className="grid h-10 w-9 place-items-center rounded-md border border-white/10 text-white/55">
+                  <LogOut size={16} />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setIsLoginOpen(true)} aria-label="登入或註冊" className="grid h-10 w-10 place-items-center rounded-md bg-white/10 text-white">
+                <User size={18} />
+              </button>
+            )}
+            <button onClick={() => setIsCartOpen(true)} aria-label={`購物車，共 ${cart.length} 件`} className="relative grid h-10 w-11 place-items-center rounded-md bg-coral text-white">
+              <ShoppingCart size={19} />
+              <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-yellow px-1 text-[11px] font-black text-dark">{cart.length}</span>
+            </button>
+          </div>
         </div>
         <ul className="hidden md:flex gap-8">
           <li><a href="#" className="text-muted hover:text-text-main transition-colors text-sm font-medium">首頁</a></li>
           <li><a href="#products" className="text-muted hover:text-text-main transition-colors text-sm font-medium">eSIM 方案</a></li>
-          <li><Link href="/shop" className="text-muted hover:text-text-main transition-colors text-sm font-medium">實體商城</Link></li>
+          <li><Link href="/shop" className="text-muted hover:text-text-main transition-colors text-sm font-medium">一飛通商城</Link></li>
         </ul>
-        <div className="flex items-center gap-4">
+        <div className="hidden items-center gap-4 md:flex">
             {user ? (
                 <div className="flex items-center gap-3">
                     <a 
@@ -544,6 +570,12 @@ export default function Home() {
                 {cart.length}
             </span>
             </button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 md:hidden">
+          <a href="#products" className="flex h-10 items-center justify-center rounded-md border border-white/10 bg-white/5 text-sm font-bold text-white/75">eSIM 方案</a>
+          <Link href="/shop" className="flex h-10 items-center justify-center gap-2 rounded-md bg-[#168b55] text-sm font-bold text-white">
+            <ShoppingBag size={17} />一飛通商城
+          </Link>
         </div>
       </nav>
 
