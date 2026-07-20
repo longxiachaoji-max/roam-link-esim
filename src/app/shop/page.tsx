@@ -3,9 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, Minus, Package, Plus, ShoppingBag, Trash2, User, WalletCards, X } from 'lucide-react';
+import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, MapPin, Minus, Package, Plus, ShoppingBag, Trash2, Truck, User, WalletCards, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateRentalPrice, type RentalPriceTier } from '@/lib/rental-pricing';
+import {
+  calculatePhysicalShippingFee,
+  DEFAULT_PHYSICAL_STORE_SETTINGS,
+  type DeliveryMethod,
+  type PhysicalStoreSettings
+} from '@/lib/physical-store-settings';
 
 type Category = 'all' | 'rental' | 'travel_card' | 'other';
 interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; rental_price_tiers: RentalPriceTier[]; }
@@ -50,6 +56,8 @@ export default function PhysicalShopPage() {
   const [message, setMessage] = useState('');
   const [paying, setPaying] = useState<'Credit' | 'BARCODE' | 'TOKENS' | null>(null);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('shipping');
+  const [storeSettings, setStoreSettings] = useState<PhysicalStoreSettings>(DEFAULT_PHYSICAL_STORE_SETTINGS);
   const [shipping, setShipping] = useState({ recipientName: '', recipientPhone: '', postalCode: '', shippingAddress: '', shippingNote: '' });
 
   useEffect(() => {
@@ -57,6 +65,7 @@ export default function PhysicalShopPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '商品載入失敗');
       setProducts(result.products || []);
+      setStoreSettings(result.shippingSettings || DEFAULT_PHYSICAL_STORE_SETTINGS);
     }).catch(error => setMessage(error.message)).finally(() => setLoading(false));
 
     queueMicrotask(() => {
@@ -111,8 +120,15 @@ export default function PhysicalShopPage() {
 
   const filtered = category === 'all' ? products : products.filter(product => product.category === category);
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const total = cart.reduce((sum, item) => sum + lineTotal(item), 0);
+  const subtotal = cart.reduce((sum, item) => sum + lineTotal(item), 0);
   const hasRental = cart.some(item => item.category === 'rental');
+  const shippingFee = calculatePhysicalShippingFee(
+    subtotal,
+    cart.filter(item => item.category === 'rental').map(item => Number(item.rentalDays || 0)),
+    deliveryMethod,
+    storeSettings
+  );
+  const total = subtotal + shippingFee;
 
   const addToCart = (product: Product) => {
     if (product.category === 'rental') return;
@@ -163,6 +179,7 @@ export default function PhysicalShopPage() {
             rentalEndDate: item.rentalEndDate
           })),
           paymentMethod,
+          deliveryMethod,
           ...shipping
         })
       });
@@ -242,12 +259,31 @@ export default function PhysicalShopPage() {
       {cartOpen && <div className="fixed inset-0 z-50 flex justify-end bg-black/45" onMouseDown={e => e.target === e.currentTarget && setCartOpen(false)}><aside className="flex h-full w-full max-w-md flex-col bg-white text-[#172028] shadow-2xl">
         <div className="flex h-16 items-center justify-between border-b border-black/8 px-5"><h2 className="font-bold">購物車 ({count})</h2><button title="關閉" onClick={() => setCartOpen(false)} className="grid h-9 w-9 place-items-center rounded-md hover:bg-black/5"><X size={20} /></button></div>
         <div className="flex-1 overflow-y-auto p-5">{cart.length === 0 ? <div className="pt-24 text-center text-black/40"><ShoppingBag className="mx-auto mb-3" size={36} />購物車目前是空的</div> : <div className="space-y-5">{cart.map(item => { const key = cartItemKey(item); return <div key={key} className="flex gap-3 border-b border-black/8 pb-5"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-black/5">{item.images[0] && <Image src={item.images[0]} alt="" fill sizes="80px" className="object-cover" />}</div><div className="min-w-0 flex-1"><p className="line-clamp-2 text-sm font-semibold">{item.name}</p>{item.category === 'rental' && <p className="mt-1 text-xs font-semibold text-[#247253]"><CalendarDays className="mr-1 inline" size={13} />{formatRentalDate(item.rentalStartDate)} 至 {formatRentalDate(item.rentalEndDate)} · {item.rentalDays} 天</p>}<p className="mt-1 font-mono text-sm text-[#df4d5f]">NT${lineTotal(item).toLocaleString()}</p><div className="mt-3 flex items-center gap-2">{item.category === 'rental' ? <span className="text-xs text-black/40">租借數量 1</span> : <><button title="減少數量" onClick={() => setQuantity(key, item.quantity - 1)} className="grid h-7 w-7 place-items-center rounded border border-black/10"><Minus size={13} /></button><span className="w-6 text-center text-sm">{item.quantity}</span><button title="增加數量" onClick={() => setQuantity(key, item.quantity + 1)} className="grid h-7 w-7 place-items-center rounded border border-black/10"><Plus size={13} /></button></>}<button title="移除商品" onClick={() => setQuantity(key, 0)} className="ml-auto text-black/35 hover:text-[#df4d5f]"><Trash2 size={16} /></button></div></div></div>; })}</div>}</div>
-        {cart.length > 0 && <div className="border-t border-black/8 p-5"><div className="mb-4 flex justify-between"><span className="text-black/50">商品合計</span><span className="text-xl font-bold">NT${total.toLocaleString()}</span></div><button onClick={openCheckout} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white hover:bg-[#283541]">填寫收件資料 <ArrowRight size={17} /></button></div>}
+        {cart.length > 0 && <div className="border-t border-black/8 p-5"><div className="mb-4 flex justify-between"><span className="text-black/50">商品合計</span><span className="text-xl font-bold">NT${subtotal.toLocaleString()}</span></div><button onClick={openCheckout} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white hover:bg-[#283541]">選擇配送與付款 <ArrowRight size={17} /></button></div>}
       </aside></div>}
 
       {loginOpen && <div className="fixed inset-0 z-[60] grid place-items-center bg-black/55 p-4"><form onSubmit={login} className="w-full max-w-sm rounded-md bg-white p-6 text-[#172028] shadow-2xl"><div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-bold">會員登入</h2><button type="button" title="關閉" onClick={() => setLoginOpen(false)}><X size={20} /></button></div><label className="block text-sm text-black/55">Email<input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="mt-4 block text-sm text-black/55">密碼<input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><button className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white"><LogIn size={17} /> 登入並繼續結帳</button><p className="mt-4 text-center text-xs text-black/40">尚未註冊可先回 eSIM 首頁建立會員帳號</p></form></div>}
 
-      {checkoutOpen && <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"><div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-md bg-white p-5 text-[#172028] shadow-2xl sm:rounded-md sm:p-7"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-xl font-bold">收件與付款</h2><p className="mt-1 text-xs text-black/40">登入會員：{sessionEmail}</p></div><button title="關閉" onClick={() => setCheckoutOpen(false)}><X size={20} /></button></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm text-black/55">收件人姓名<input required value={shipping.recipientName} onChange={e => setShipping({ ...shipping, recipientName: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55">聯絡電話<input required inputMode="tel" value={shipping.recipientPhone} onChange={e => setShipping({ ...shipping, recipientPhone: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55">郵遞區號<input inputMode="numeric" value={shipping.postalCode} onChange={e => setShipping({ ...shipping, postalCode: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">收件地址<input required value={shipping.shippingAddress} onChange={e => setShipping({ ...shipping, shippingAddress: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">訂單備註<textarea rows={3} value={shipping.shippingNote} onChange={e => setShipping({ ...shipping, shippingNote: e.target.value })} className="mt-2 w-full rounded-md border border-black/12 p-3 outline-none focus:border-[#247253]" /></label></div><div className="my-6 flex items-center justify-between border-y border-black/8 py-4"><div><p className="text-sm text-black/45">本次付款</p><p className="text-xs text-[#247253]">儲值金餘額 NT${Number(tokenBalance || 0).toLocaleString()}</p></div><p className="text-2xl font-bold text-[#df4d5f]">NT${total.toLocaleString()}</p></div>{hasRental && <div className="mb-4 rounded-md border border-[#247253]/20 bg-[#dceee7] px-4 py-3 text-sm leading-6 text-[#174d38]">租借商品不開放超商條碼直接結帳。如需現金付款，請先完成超商儲值，入帳後再使用儲值金付款。</div>}<div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('TOKENS')} disabled={paying !== null || tokenBalance === null || tokenBalance < total} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#df4d5f] font-bold text-white disabled:bg-black/10 disabled:text-black/30"><WalletCards size={18} /> {paying === 'TOKENS' ? '立即扣款中...' : '儲值金立即付款'}</button><button onClick={() => checkout('Credit')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button>{!hasRental && <button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button>}</div>{tokenBalance !== null && tokenBalance < total && <Link href="/member?topup=1" className="mt-4 flex h-11 items-center justify-center rounded-md border border-[#df4d5f]/30 text-sm font-bold text-[#c43b4e] hover:bg-[#df4d5f]/5">餘額不足，先前往會員中心儲值</Link>}<p className="mt-3 text-center text-xs text-black/40">儲值金付款會立即扣款並成立訂單。</p></div></div>}
+      {checkoutOpen && <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4">
+        <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-md bg-white p-5 text-[#172028] shadow-2xl sm:rounded-md sm:p-7">
+          <div className="mb-6 flex items-center justify-between"><div><h2 className="text-xl font-bold">配送與付款</h2><p className="mt-1 text-xs text-black/40">登入會員：{sessionEmail}</p></div><button title="關閉" onClick={() => setCheckoutOpen(false)}><X size={20} /></button></div>
+          <div className={`grid gap-3 ${storeSettings.pickup_enabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <button type="button" onClick={() => setDeliveryMethod('shipping')} className={`flex min-h-20 items-center gap-3 rounded-md border px-4 text-left ${deliveryMethod === 'shipping' ? 'border-[#247253] bg-[#dceee7]' : 'border-black/10'}`}><Truck size={20} /><span><span className="block text-sm font-bold">黑貓宅配</span><span className="mt-1 block text-xs text-black/45">運費 NT${storeSettings.shipping_fee.toLocaleString()}</span></span></button>
+            {storeSettings.pickup_enabled && <button type="button" onClick={() => setDeliveryMethod('pickup')} className={`flex min-h-20 items-center gap-3 rounded-md border px-4 text-left ${deliveryMethod === 'pickup' ? 'border-[#247253] bg-[#dceee7]' : 'border-black/10'}`}><MapPin size={20} /><span><span className="block text-sm font-bold">{storeSettings.pickup_label}</span><span className="mt-1 block text-xs text-black/45">免運費</span></span></button>}
+          </div>
+          {deliveryMethod === 'pickup' && <p className="mt-3 rounded-md bg-[#fff5d6] px-4 py-3 text-sm text-[#674f13]">{storeSettings.pickup_instructions}</p>}
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="text-sm text-black/55">{deliveryMethod === 'shipping' ? '收件人姓名' : '取件人姓名'}<input required value={shipping.recipientName} onChange={e => setShipping({ ...shipping, recipientName: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label>
+            <label className="text-sm text-black/55">聯絡電話<input required inputMode="tel" value={shipping.recipientPhone} onChange={e => setShipping({ ...shipping, recipientPhone: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label>
+            {deliveryMethod === 'shipping' && <><label className="text-sm text-black/55">郵遞區號<input inputMode="numeric" value={shipping.postalCode} onChange={e => setShipping({ ...shipping, postalCode: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label><label className="text-sm text-black/55 sm:col-span-2">收件地址<input required value={shipping.shippingAddress} onChange={e => setShipping({ ...shipping, shippingAddress: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-black/12 px-3 outline-none focus:border-[#247253]" /></label></>}
+            <label className="text-sm text-black/55 sm:col-span-2">訂單備註<textarea rows={3} value={shipping.shippingNote} onChange={e => setShipping({ ...shipping, shippingNote: e.target.value })} className="mt-2 w-full rounded-md border border-black/12 p-3 outline-none focus:border-[#247253]" /></label>
+          </div>
+          <div className="my-6 border-y border-black/8 py-4 text-sm"><div className="flex justify-between text-black/50"><span>商品合計</span><span>NT${subtotal.toLocaleString()}</span></div><div className="mt-2 flex justify-between text-black/50"><span>{deliveryMethod === 'pickup' ? '預約面交' : '宅配運費'}</span><span>{shippingFee === 0 ? '免運' : `NT$${shippingFee.toLocaleString()}`}</span></div><div className="mt-3 flex items-end justify-between"><div><p className="font-semibold">本次付款</p><p className="text-xs text-[#247253]">儲值金餘額 NT${Number(tokenBalance || 0).toLocaleString()}</p></div><p className="text-2xl font-bold text-[#df4d5f]">NT${total.toLocaleString()}</p></div></div>
+          {hasRental && <div className="mb-4 rounded-md border border-[#247253]/20 bg-[#dceee7] px-4 py-3 text-sm leading-6 text-[#174d38]">租借商品不開放超商條碼直接結帳。如需現金付款，請先完成超商儲值，入帳後再使用儲值金付款。</div>}
+          <div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('TOKENS')} disabled={paying !== null || tokenBalance === null || tokenBalance < total} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#df4d5f] font-bold text-white disabled:bg-black/10 disabled:text-black/30"><WalletCards size={18} /> {paying === 'TOKENS' ? '立即扣款中...' : '儲值金立即付款'}</button><button onClick={() => checkout('Credit')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button>{!hasRental && <button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button>}</div>
+          {tokenBalance !== null && tokenBalance < total && <Link href="/member?topup=1" className="mt-4 flex h-11 items-center justify-center rounded-md border border-[#df4d5f]/30 text-sm font-bold text-[#c43b4e] hover:bg-[#df4d5f]/5">餘額不足，先前往會員中心儲值</Link>}<p className="mt-3 text-center text-xs text-black/40">儲值金付款會立即扣款並成立訂單。</p>
+        </div>
+      </div>}
     </main>
   );
 }

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       .from('physical_orders')
       .select(`
         id, created_at, updated_at, recipient_name, recipient_phone,
-        postal_code, shipping_address, shipping_note, total_amount,
+        postal_code, shipping_address, shipping_note, delivery_method, subtotal, shipping_fee, total_amount,
         payment_method, payment_status, order_status,
         physical_order_items (
           id, product_name, product_image, quantity, unit_price,

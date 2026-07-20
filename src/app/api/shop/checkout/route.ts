@@ -10,6 +10,11 @@ import { getPhysicalStoreAdmin } from '@/lib/physical-store';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { calculateRentalPrice, normalizeRentalPriceTiers } from '@/lib/rental-pricing';
 import { sendPhysicalRentalOrderCreatedAlert } from '@/lib/physical-rental-alerts';
+import {
+  calculatePhysicalShippingFee,
+  normalizePhysicalStoreSettings,
+  type DeliveryMethod
+} from '@/lib/physical-store-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +65,19 @@ export async function POST(request: Request) {
     if (paymentMethod !== 'Credit' && paymentMethod !== 'BARCODE' && paymentMethod !== 'TOKENS') {
       return NextResponse.json({ error: '不支援的付款方式' }, { status: 400 });
     }
+    const deliveryMethod = String(body.deliveryMethod || 'shipping') as DeliveryMethod;
+    if (deliveryMethod !== 'shipping' && deliveryMethod !== 'pickup') {
+      return NextResponse.json({ error: '配送方式不正確' }, { status: 400 });
+    }
+
+    const { data: rawStoreSettings, error: storeSettingsError } = await supabase
+      .from('physical_store_settings')
+      .select('*')
+      .eq('id', 'main')
+      .single();
+    if (storeSettingsError) throw storeSettingsError;
+    const storeSettings = normalizePhysicalStoreSettings(rawStoreSettings);
+    if (deliveryMethod === 'pickup' && !storeSettings.pickup_enabled) throw new Error('目前未開放面交，請選擇宅配');
 
     const rawItems: CheckoutItem[] = Array.isArray(body.items) ? body.items : [];
     if (!rawItems.length || rawItems.length > 20) throw new Error('購物車內容不正確');
@@ -127,7 +145,12 @@ export async function POST(request: Request) {
     if (hasRental && paymentMethod === 'BARCODE') {
       throw new Error('租借商品不開放超商條碼直接結帳，請先儲值後使用儲值金付款');
     }
-    const shippingFee = 0;
+    const shippingFee = calculatePhysicalShippingFee(
+      subtotal,
+      orderItems.map(item => item.rental_days).filter((days): days is number => days !== null),
+      deliveryMethod,
+      storeSettings
+    );
     const totalAmount = subtotal + shippingFee;
     if (!Number.isInteger(totalAmount) || totalAmount <= 0) throw new Error('訂單金額不正確');
 
@@ -161,9 +184,12 @@ export async function POST(request: Request) {
         customer_email: authUser.email,
         recipient_name: requiredText(body.recipientName, '收件人姓名', 80),
         recipient_phone: requiredText(body.recipientPhone, '聯絡電話', 30),
-        postal_code: String(body.postalCode || '').trim().slice(0, 10),
-        shipping_address: requiredText(body.shippingAddress, '收件地址', 300),
+        postal_code: deliveryMethod === 'shipping' ? String(body.postalCode || '').trim().slice(0, 10) : '',
+        shipping_address: deliveryMethod === 'shipping'
+          ? requiredText(body.shippingAddress, '收件地址', 300)
+          : storeSettings.pickup_label,
         shipping_note: String(body.shippingNote || '').trim().slice(0, 500),
+        delivery_method: deliveryMethod,
         subtotal,
         shipping_fee: shippingFee,
         payment_method: paymentMethod === 'TOKENS' ? 'TOKENS' : paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',

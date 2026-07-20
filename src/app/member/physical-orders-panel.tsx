@@ -26,6 +26,9 @@ interface PhysicalOrder {
   postal_code: string | null;
   shipping_address: string;
   shipping_note: string | null;
+  delivery_method: 'shipping' | 'pickup';
+  subtotal: number;
+  shipping_fee: number;
   total_amount: number;
   payment_method: string;
   payment_status: string;
@@ -123,7 +126,7 @@ export default function PhysicalOrdersPanel() {
 
           <div className="space-y-3 border-t border-white/8 px-4 py-4">{order.physical_order_items.map(item => <div key={item.id} className="flex justify-between gap-4"><div className="min-w-0"><p className="font-semibold text-white/90">{item.product_name} × {item.quantity}</p>{item.rental_start_date && item.rental_end_date && <p className="mt-1 flex items-center gap-1.5 text-xs text-cyan-200"><CalendarDays size={13} />{formatDate(item.rental_start_date)} 至 {formatDate(item.rental_end_date)} · {item.rental_days} 天</p>}</div><p className="shrink-0 font-mono text-sm text-white/55">NT${(Number(item.unit_price) * item.quantity).toLocaleString()}</p></div>)}</div>
 
-          <div className="border-t border-white/8 bg-black/10 px-4 py-4 text-xs leading-5 text-white/45"><p className="font-semibold text-white/65">{STATUS_DESCRIPTIONS[order.order_status] || '訂單處理中。'}</p><div className="mt-3 grid gap-1 sm:grid-cols-2"><p>付款方式：{paymentLabel(order.payment_method)}</p><p>付款狀態：{order.payment_status === 'PAID' ? '已付款' : order.payment_status === 'REFUNDED' ? '已退款' : '等待付款'}</p><p className="sm:col-span-2">收件資訊：{order.recipient_name} · {order.recipient_phone}</p><p className="sm:col-span-2">{order.postal_code || ''} {order.shipping_address}</p>{order.shipping_note && <p className="sm:col-span-2 text-cyan-200/70">備註：{order.shipping_note}</p>}</div></div>
+          <div className="border-t border-white/8 bg-black/10 px-4 py-4 text-xs leading-5 text-white/45"><p className="font-semibold text-white/65">{STATUS_DESCRIPTIONS[order.order_status] || '訂單處理中。'}</p><div className="mt-3 grid gap-1 sm:grid-cols-2"><p>付款方式：{paymentLabel(order.payment_method)}</p><p>付款狀態：{order.payment_status === 'PAID' ? '已付款' : order.payment_status === 'REFUNDED' ? '已退款' : '等待付款'}</p><p>配送方式：{order.delivery_method === 'pickup' ? '預約面交' : '宅配'}</p><p>運費：{Number(order.shipping_fee) === 0 ? '免運' : `NT$${Number(order.shipping_fee).toLocaleString()}`}</p><p className="sm:col-span-2">{order.delivery_method === 'pickup' ? '取件資訊' : '收件資訊'}：{order.recipient_name} · {order.recipient_phone}</p><p className="sm:col-span-2">{order.postal_code || ''} {order.shipping_address}</p>{order.shipping_note && <p className="sm:col-span-2 text-cyan-200/70">備註：{order.shipping_note}</p>}</div></div>
         </article>;
       })}
     </div>}

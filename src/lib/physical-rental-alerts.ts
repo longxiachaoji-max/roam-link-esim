@@ -22,6 +22,8 @@ interface RentalOrder {
   postal_code: string | null;
   shipping_address: string;
   shipping_note: string | null;
+  delivery_method: 'shipping' | 'pickup';
+  shipping_fee: number;
   total_amount: number;
   payment_method: string;
   physical_order_items: RentalOrderItem[];
@@ -60,7 +62,7 @@ async function loadRentalOrder(supabase: SupabaseLike, orderId: string): Promise
     .from('physical_orders')
     .select(`
       id, customer_email, recipient_name, recipient_phone, postal_code,
-      shipping_address, shipping_note, total_amount, payment_method,
+      shipping_address, shipping_note, delivery_method, shipping_fee, total_amount, payment_method,
       physical_order_items (
         id, product_name, quantity, rental_start_date, rental_end_date, rental_days
       )
@@ -107,6 +109,7 @@ export async function sendPhysicalRentalOrderCreatedAlert(supabase: SupabaseLike
       `客戶：${escapeTelegramHtml(order.customer_email)}`,
       `聯絡：${escapeTelegramHtml(order.recipient_name)} / ${escapeTelegramHtml(order.recipient_phone)}`,
       ...itemLines,
+      `交付：${order.delivery_method === 'pickup' ? '預約面交' : `宅配（運費 NT$${Number(order.shipping_fee).toLocaleString('zh-TW')}）`}`,
       `金額：NT$${Number(order.total_amount).toLocaleString('zh-TW')}（${paymentLabel(order.payment_method)}已付款）`,
       `後台：${adminOrderUrl()}`
     ], 'Failed to send rental order Telegram alert');
@@ -147,7 +150,7 @@ export async function sendDuePhysicalRentalReminders(supabase: SupabaseLike) {
         `期間：${formatDate(item.rental_start_date)} 至 ${formatDate(item.rental_end_date)}（${item.rental_days || '-'} 天）`,
         `客戶：${escapeTelegramHtml(order.customer_email)}`,
         `聯絡：${escapeTelegramHtml(order.recipient_name)} / ${escapeTelegramHtml(order.recipient_phone)}`,
-        `地址：${escapeTelegramHtml(`${order.postal_code || ''} ${order.shipping_address}`.trim())}`,
+        `${order.delivery_method === 'pickup' ? '面交' : '地址'}：${escapeTelegramHtml(`${order.postal_code || ''} ${order.shipping_address}`.trim())}`,
         order.shipping_note ? `備註：${escapeTelegramHtml(order.shipping_note)}` : '',
         `後台：${adminOrderUrl()}`
       ], 'Failed to send rental start Telegram reminder');

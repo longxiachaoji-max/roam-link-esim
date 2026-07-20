@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ExternalLink, ImageIcon, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ExternalLink, ImageIcon, Pencil, Plus, Save, Settings2, Trash2, Upload, X } from 'lucide-react';
 import { adminFetch } from '@/lib/admin-fetch';
 import type { RentalPriceTier } from '@/lib/rental-pricing';
+import { DEFAULT_PHYSICAL_STORE_SETTINGS, type PhysicalStoreSettings } from '@/lib/physical-store-settings';
 
 type Category = 'rental' | 'travel_card' | 'other';
 
@@ -53,14 +54,22 @@ export default function PhysicalProductsAdminPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
+  const [storeSettings, setStoreSettings] = useState<PhysicalStoreSettings>(DEFAULT_PHYSICAL_STORE_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await adminFetch('/api/admin/physical-products', { cache: 'no-store' });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || '讀取商品失敗');
-      setProducts(result.products || []);
+      const [productsResponse, settingsResponse] = await Promise.all([
+        adminFetch('/api/admin/physical-products', { cache: 'no-store' }),
+        adminFetch('/api/admin/physical-store-settings', { cache: 'no-store' })
+      ]);
+      const [productsResult, settingsResult] = await Promise.all([productsResponse.json(), settingsResponse.json()]);
+      if (!productsResponse.ok) throw new Error(productsResult.error || '讀取商品失敗');
+      if (!settingsResponse.ok) throw new Error(settingsResult.error || '讀取商城設定失敗');
+      setProducts(productsResult.products || []);
+      setStoreSettings(settingsResult.settings || DEFAULT_PHYSICAL_STORE_SETTINGS);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '讀取商品失敗');
     } finally {
@@ -144,6 +153,24 @@ export default function PhysicalProductsAdminPage() {
     await loadProducts();
   };
 
+  const saveStoreSettings = async () => {
+    setSavingSettings(true);
+    setMessage('');
+    try {
+      const response = await adminFetch('/api/admin/physical-store-settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(storeSettings)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '儲存商城設定失敗');
+      setStoreSettings(result.settings);
+      setMessage('配送與免運設定已儲存');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '儲存商城設定失敗');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl pb-20">
       <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
@@ -162,6 +189,30 @@ export default function PhysicalProductsAdminPage() {
       </div>
 
       {message && <div className="mb-5 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">{message}</div>}
+
+      <section className="mb-6 overflow-hidden rounded-md border border-white/10 bg-[#141426]">
+        <button type="button" onClick={() => setSettingsOpen(value => !value)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-white/[0.03]">
+          <span className="flex items-center gap-3"><Settings2 size={18} className="text-cyan-300" /><span><span className="block font-semibold text-white">商城配送與免運</span><span className="mt-1 block text-xs text-white/40">宅配 NT${storeSettings.shipping_fee.toLocaleString()} · 滿 NT${storeSettings.free_shipping_threshold.toLocaleString()} 免運 · 租借 {storeSettings.rental_free_shipping_days} 天免運</span></span></span>
+          <span className="text-xs text-white/45">{settingsOpen ? '收起' : '開啟設定'}</span>
+        </button>
+        {settingsOpen && <div className="border-t border-white/10 px-5 py-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="text-sm text-white/65">宅配運費 (NT$)<input type="number" min="0" value={storeSettings.shipping_fee} onChange={e => setStoreSettings({ ...storeSettings, shipping_fee: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
+            <label className="text-sm text-white/65">滿額免運門檻 (NT$)<input type="number" min="0" value={storeSettings.free_shipping_threshold} onChange={e => setStoreSettings({ ...storeSettings, free_shipping_threshold: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
+            <label className="text-sm text-white/65">租借滿幾天免運<input type="number" min="1" value={storeSettings.rental_free_shipping_days} onChange={e => setStoreSettings({ ...storeSettings, rental_free_shipping_days: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/70">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={storeSettings.free_shipping_enabled} onChange={e => setStoreSettings({ ...storeSettings, free_shipping_enabled: e.target.checked })} className="h-4 w-4 accent-cyan-400" />啟用滿額免運</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={storeSettings.rental_free_shipping_enabled} onChange={e => setStoreSettings({ ...storeSettings, rental_free_shipping_enabled: e.target.checked })} className="h-4 w-4 accent-cyan-400" />啟用租期免運</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={storeSettings.pickup_enabled} onChange={e => setStoreSettings({ ...storeSettings, pickup_enabled: e.target.checked })} className="h-4 w-4 accent-cyan-400" />開放預約面交</label>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="text-sm text-white/65">面交名稱或地點<input value={storeSettings.pickup_label} onChange={e => setStoreSettings({ ...storeSettings, pickup_label: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" /></label>
+            <label className="text-sm text-white/65">面交說明<input value={storeSettings.pickup_instructions} onChange={e => setStoreSettings({ ...storeSettings, pickup_instructions: e.target.value })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" /></label>
+          </div>
+          <div className="mt-5 flex justify-end"><button type="button" onClick={saveStoreSettings} disabled={savingSettings} className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-500 px-4 text-sm font-bold text-[#07141a] disabled:opacity-40"><Save size={16} />{savingSettings ? '儲存中...' : '儲存配送設定'}</button></div>
+        </div>}
+      </section>
 
       <div className="overflow-hidden rounded-md border border-white/10 bg-[#141426]">
         <div className="grid grid-cols-[72px_minmax(220px,1fr)_140px_110px_90px_110px] gap-4 border-b border-white/10 px-5 py-3 text-xs font-medium text-white/40 max-lg:hidden">
@@ -230,8 +281,8 @@ export default function PhysicalProductsAdminPage() {
                   <textarea value={form.rental_terms} onChange={e => setForm({ ...form, rental_terms: e.target.value })} rows={4} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="押金、交付、歸還方式與逾期規則" />
                 </label>
                 <div className="rounded-md border border-white/10 bg-black/15 p-4">
-                  <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-white/75">租期優惠總價</p><p className="mt-1 text-xs text-white/35">未設定的天數會自動使用每日租金乘以天數。</p></div><button type="button" onClick={() => setForm(current => ({ ...current, rental_price_tiers: [...current.rental_price_tiers, { days: Math.max(2, (current.rental_price_tiers.at(-1)?.days || 1) + 1), total: 0 }] }))} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-cyan-400/25 text-cyan-300 hover:bg-cyan-400/10" title="新增租期優惠"><Plus size={16} /></button></div>
-                  <div className="mt-4 space-y-3">{form.rental_price_tiers.length === 0 ? <p className="py-3 text-center text-xs text-white/30">尚未設定租期優惠</p> : form.rental_price_tiers.map((tier, index) => <div key={`${tier.days}-${index}`} className="grid grid-cols-[1fr_1.2fr_36px] items-end gap-2"><label className="text-xs text-white/45">租借天數<input type="number" min="2" max="365" value={tier.days} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? { ...item, days: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><label className="text-xs text-white/45">優惠總價 (NT$)<input type="number" min="0" value={tier.total} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? { ...item, total: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><button type="button" title="刪除租期優惠" onClick={() => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.filter((_, itemIndex) => itemIndex !== index) }))} className="grid h-10 w-9 place-items-center rounded-md text-rose-300 hover:bg-rose-400/10"><Trash2 size={15} /></button></div>)}</div>
+                  <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-white/75">階梯式租借售價</p><p className="mt-1 text-xs text-white/35">每個級距會沿用到下一級；可設定折扣率或該天數的固定總價。</p></div><button type="button" onClick={() => setForm(current => ({ ...current, rental_price_tiers: [...current.rental_price_tiers, { days: Math.max(2, (current.rental_price_tiers.at(-1)?.days || 1) + 1), mode: 'discount', discount: 10 }] }))} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-cyan-400/25 text-cyan-300 hover:bg-cyan-400/10" title="新增租期級距"><Plus size={16} /></button></div>
+                  <div className="mt-4 space-y-3">{form.rental_price_tiers.length === 0 ? <p className="py-3 text-center text-xs text-white/30">尚未設定租期優惠</p> : form.rental_price_tiers.map((tier, index) => <div key={`${tier.days}-${index}`} className="grid grid-cols-[0.8fr_1fr_1.15fr_36px] items-end gap-2"><label className="text-xs text-white/45">起始天數<input type="number" min="2" max="365" value={tier.days} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? { ...item, days: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><label className="text-xs text-white/45">計價方式<select value={tier.mode} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? e.target.value === 'discount' ? { days: item.days, mode: 'discount', discount: 10 } : { days: item.days, mode: 'fixed_total', total: Math.round(current.price * item.days) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-[#0d0d1a] px-2 text-white outline-none focus:border-cyan-400"><option value="discount">折扣率</option><option value="fixed_total">固定總價</option></select></label><label className="text-xs text-white/45">{tier.mode === 'discount' ? '折扣（減少 %）' : '該天數總價 (NT$)'}<input type="number" min="0" max={tier.mode === 'discount' ? 100 : undefined} value={tier.mode === 'discount' ? tier.discount || 0 : tier.total || 0} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? item.mode === 'discount' ? { ...item, discount: Number(e.target.value) } : { ...item, total: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><button type="button" title="刪除租期級距" onClick={() => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.filter((_, itemIndex) => itemIndex !== index) }))} className="grid h-10 w-9 place-items-center rounded-md text-rose-300 hover:bg-rose-400/10"><Trash2 size={15} /></button></div>)}</div>
                 </div>
               </>}
               <div className="grid gap-4 sm:grid-cols-2">

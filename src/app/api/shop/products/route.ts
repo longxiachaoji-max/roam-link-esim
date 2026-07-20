@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPhysicalStoreAdmin, normalizePhysicalProduct } from '@/lib/physical-store';
+import { normalizePhysicalStoreSettings } from '@/lib/physical-store-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,17 @@ export async function GET(request: Request) {
     if (id && products.length === 0) {
       return NextResponse.json({ error: '找不到商品或商品尚未上架' }, { status: 404 });
     }
-    return NextResponse.json({ products, product: id ? products[0] : undefined });
+    const { data: settings, error: settingsError } = await supabase
+      .from('physical_store_settings')
+      .select('*')
+      .eq('id', 'main')
+      .single();
+    if (settingsError) throw settingsError;
+    return NextResponse.json({
+      products,
+      product: id ? products[0] : undefined,
+      shippingSettings: normalizePhysicalStoreSettings(settings)
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : '讀取商品失敗' }, { status: 500 });
   }

@@ -18,6 +18,7 @@ interface OrderItem {
 interface Order {
   id: string; created_at: string; customer_email: string; recipient_name: string; recipient_phone: string;
   postal_code: string | null; shipping_address: string; shipping_note: string | null; total_amount: number;
+  delivery_method: 'shipping' | 'pickup'; shipping_fee: number;
   payment_method: string; payment_status: string; order_status: string; physical_order_items: OrderItem[];
 }
 
@@ -82,7 +83,7 @@ export default function PhysicalOrdersAdminPage() {
             </div>
             {expanded === order.id && <div className="border-t border-white/8 bg-black/15 px-5 py-5">
               <div className="grid gap-5 md:grid-cols-2">
-                <div><p className="mb-2 text-xs font-semibold text-white/35">收件資訊</p><p>{order.recipient_name} · {order.recipient_phone}</p><p className="mt-1 text-sm text-white/60">{order.postal_code} {order.shipping_address}</p>{order.shipping_note && <p className="mt-2 text-sm text-cyan-200">備註：{order.shipping_note}</p>}</div>
+                <div><p className="mb-2 text-xs font-semibold text-white/35">{order.delivery_method === 'pickup' ? '面交資訊' : '收件資訊'}</p><p>{order.recipient_name} · {order.recipient_phone}</p><p className="mt-1 text-sm text-white/60">{order.delivery_method === 'pickup' ? '預約面交' : '宅配'} · {order.shipping_fee === 0 ? '免運' : `運費 NT$${Number(order.shipping_fee).toLocaleString()}`}</p><p className="mt-1 text-sm text-white/60">{order.postal_code} {order.shipping_address}</p>{order.shipping_note && <p className="mt-2 text-sm text-cyan-200">備註：{order.shipping_note}</p>}</div>
                 <div><p className="mb-2 text-xs font-semibold text-white/35">商品內容</p><div className="space-y-3">{order.physical_order_items.map(item => <div key={item.id} className="flex justify-between gap-4 text-sm"><div><span>{item.product_name} × {item.quantity}</span>{item.rental_start_date && item.rental_end_date && <p className="mt-1 flex items-center gap-1.5 text-xs text-cyan-200"><CalendarDays size={13} />{formatDate(item.rental_start_date)} 至 {formatDate(item.rental_end_date)} · 共 {item.rental_days} 天</p>}{item.rental_daily_rate !== null && <p className="mt-1 text-xs text-white/35">每日租金 NT${Number(item.rental_daily_rate).toLocaleString()}</p>}</div><span className="shrink-0 font-mono text-white/60">NT${(Number(item.unit_price) * item.quantity).toLocaleString()}</span></div>)}</div></div>
               </div>
             </div>}
