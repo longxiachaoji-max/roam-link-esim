@@ -736,7 +736,7 @@ export default function MemberCenter() {
                   <>
                     <div className="mb-3 border-l-2 border-yellow-300/70 bg-yellow-300/5 px-3 py-3 text-sm">
                       <div className="flex items-center gap-2 font-bold text-yellow-100">
-                        <Clock3 size={16} /> 建議出國前再安裝
+                        <Clock3 size={16} /> 請於啟用日前或旅程出發前完成安裝
                       </div>
                       <p className="mt-1 text-xs leading-5 text-white/60">
                         最晚安裝日：{formatUsageDate(item.e_sim_inventory.installation_deadline || item.e_sim_inventory.expiry_date)}
@@ -841,7 +841,7 @@ export default function MemberCenter() {
               <Wifi size={22} />
             </div>
             <h3 className="text-xl font-bold">付款成功，安裝前請留意</h3>
-            <p className="mt-3 text-sm leading-6 text-white/65">建議接近出國時間、確認行程後再安裝 eSIM。安裝時請連接穩定的 Wi-Fi 或行動網路，過程中不要切換網路或關閉手機。</p>
+            <p className="mt-3 text-sm leading-6 text-white/65">請於啟用日前或旅程出發前完成安裝 eSIM。安裝時請連接穩定的 Wi-Fi 或行動網路，過程中不要切換網路或關閉手機。</p>
             <p className="mt-3 text-sm leading-6 text-white/65">每張 eSIM 的最晚安裝日會顯示在會員中心卡片上；方案效期則依商品規則從安裝或連上當地網路後開始計算。</p>
             <button type="button" onClick={() => setPurchaseReminderOpen(false)} className="mt-6 h-12 w-full rounded-md bg-[#F05A28] font-bold text-white hover:bg-[#d94f22]">查看我的 eSIM</button>
           </div>
@@ -856,7 +856,7 @@ export default function MemberCenter() {
               <div><h3 className="text-xl font-bold">安裝前確認</h3><p className="mt-0.5 text-xs text-white/45">確認完成後再開啟安裝</p></div>
             </div>
             <div className="space-y-3 border-y border-white/10 py-4 text-sm leading-6 text-white/70">
-              <p>建議在出國前、接近使用日期時安裝。</p>
+              <p>請於啟用日前或旅程出發前完成安裝。</p>
               <p>請先連接穩定的 Wi-Fi 或行動網路，安裝期間不要中斷連線。</p>
               <p>安裝完成後請勿刪除 eSIM，部分方案刪除後無法再次安裝。</p>
             </div>
