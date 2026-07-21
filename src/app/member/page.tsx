@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3 } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
@@ -29,6 +29,8 @@ export default function MemberCenter() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [usageByItemId, setUsageByItemId] = useState<Record<string, any>>({});
   const [usageLoadingId, setUsageLoadingId] = useState<string | null>(null);
+  const [purchaseReminderOpen, setPurchaseReminderOpen] = useState(false);
+  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'qr'; lpa: string } | null>(null);
 
   // Credit card topup
   const [isTopupOpen, setIsTopupOpen] = useState(false);
@@ -114,6 +116,7 @@ export default function MemberCenter() {
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => showToast('付款成功，訂單已更新'), 0);
+      window.setTimeout(() => setPurchaseReminderOpen(true), 0);
     } else if (payment === 'barcode') {
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
@@ -264,6 +267,16 @@ export default function MemberCenter() {
   const getUsageValue = (value: any) => {
     if (value === null || value === undefined || value === '') return '尚未回傳';
     return String(value);
+  };
+
+  const continueInstallation = () => {
+    if (!installConfirmation) return;
+    if (installConfirmation.type === 'ios') {
+      window.location.href = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(installConfirmation.lpa)}`;
+    } else {
+      setQrCodeData(installConfirmation.lpa);
+    }
+    setInstallConfirmation(null);
   };
 
   const handleUsageQuery = async (item: any) => {
@@ -721,16 +734,28 @@ export default function MemberCenter() {
                 {/* Action Buttons */}
                 {item.e_sim_inventory && !deleted && (
                   <>
+                    <div className="mb-3 border-l-2 border-yellow-300/70 bg-yellow-300/5 px-3 py-3 text-sm">
+                      <div className="flex items-center gap-2 font-bold text-yellow-100">
+                        <Clock3 size={16} /> 建議出國前再安裝
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-white/60">
+                        最晚安裝日：{formatUsageDate(item.e_sim_inventory.installation_deadline || item.e_sim_inventory.expiry_date)}
+                      </p>
+                      <p className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-white/60">
+                        <Wifi className="mt-0.5 shrink-0" size={14} /> 安裝前請確認手機已連接穩定的 Wi-Fi 或行動網路，安裝過程請勿中斷連線。
+                      </p>
+                    </div>
                     <div className="flex gap-3 mb-3">
-                       <a 
-                         href={`https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}`}
+                       <button
+                         type="button"
+                         onClick={() => setInstallConfirmation({ type: 'ios', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}` })}
                          className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
                        >
                          <Smartphone size={16} /> iOS 17.4+ 一鍵安裝
-                       </a>
+                       </button>
                        <button 
                          className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
-                         onClick={() => setQrCodeData(`LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`)}
+                         onClick={() => setInstallConfirmation({ type: 'qr', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}` })}
                        >
                          <QrCode size={16} /> 顯示 QRCODE
                        </button>
@@ -741,7 +766,7 @@ export default function MemberCenter() {
                         <div>
                           <p className="text-sm font-bold text-white/90">用量與到期日</p>
                           <p className="text-xs text-white/40 mt-0.5">
-                            {item.e_sim_inventory.microesim_topup_id ? '由 MicroEsim 即時查詢' : '此 eSIM 不支援即時用量查詢'}
+                            {item.e_sim_inventory.microesim_topup_id ? '由電信系統即時查詢' : '此 eSIM 不支援即時用量查詢'}
                           </p>
                         </div>
                         <button
@@ -769,8 +794,8 @@ export default function MemberCenter() {
                             <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.status)}</div>
                           </div>
                           <div className="rounded-xl bg-black/20 p-2">
-                            <div className="text-white/35 mb-1">到期日</div>
-                            <div className="font-bold text-white/90">{formatUsageDate(usageByItemId[item.id].usage?.expiresAt || item.e_sim_inventory.expiry_date)}</div>
+                            <div className="text-white/35 mb-1">方案到期日</div>
+                            <div className="font-bold text-white/90">{usageByItemId[item.id].usage?.expiresAt ? formatUsageDate(usageByItemId[item.id].usage.expiresAt) : '啟用後顯示'}</div>
                           </div>
                           <div className="col-span-2 text-white/35 px-1">
                             最後查詢：{formatUsageDate(usageByItemId[item.id].checkedAt)}
@@ -808,6 +833,40 @@ export default function MemberCenter() {
           </div>
         </> : <PhysicalOrdersPanel />}
       </div>
+
+      {purchaseReminderOpen && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-md border border-white/10 bg-[#1A1A2E] p-6 shadow-2xl">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-md bg-yellow-300/10 text-yellow-200">
+              <Wifi size={22} />
+            </div>
+            <h3 className="text-xl font-bold">付款成功，安裝前請留意</h3>
+            <p className="mt-3 text-sm leading-6 text-white/65">建議接近出國時間、確認行程後再安裝 eSIM。安裝時請連接穩定的 Wi-Fi 或行動網路，過程中不要切換網路或關閉手機。</p>
+            <p className="mt-3 text-sm leading-6 text-white/65">每張 eSIM 的最晚安裝日會顯示在會員中心卡片上；方案效期則依商品規則從安裝或連上當地網路後開始計算。</p>
+            <button type="button" onClick={() => setPurchaseReminderOpen(false)} className="mt-6 h-12 w-full rounded-md bg-[#F05A28] font-bold text-white hover:bg-[#d94f22]">查看我的 eSIM</button>
+          </div>
+        </div>
+      )}
+
+      {installConfirmation && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-md border border-white/10 bg-[#1A1A2E] p-6 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-cyan/10 text-cyan"><Wifi size={21} /></div>
+              <div><h3 className="text-xl font-bold">安裝前確認</h3><p className="mt-0.5 text-xs text-white/45">確認完成後再開啟安裝</p></div>
+            </div>
+            <div className="space-y-3 border-y border-white/10 py-4 text-sm leading-6 text-white/70">
+              <p>建議在出國前、接近使用日期時安裝。</p>
+              <p>請先連接穩定的 Wi-Fi 或行動網路，安裝期間不要中斷連線。</p>
+              <p>安裝完成後請勿刪除 eSIM，部分方案刪除後無法再次安裝。</p>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setInstallConfirmation(null)} className="h-12 rounded-md border border-white/15 text-sm font-bold text-white/65 hover:bg-white/5">稍後安裝</button>
+              <button type="button" onClick={continueInstallation} className="h-12 rounded-md bg-cyan text-sm font-bold text-[#071317] hover:bg-cyan/90">已確認，繼續</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirm Modal */}
       {deleteConfirmId && (

@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { fetchMicroesimTopupDetail } from '@/lib/microesim';
+import {
+  fetchMicroesimDeviceDetail,
+  fetchMicroesimEventDetail,
+  getMicroesimInstallationDeadline,
+  normalizeMicroesimDate,
+  type MicroesimDeviceDetail,
+  type MicroesimEventDetail
+} from '@/lib/microesim';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
@@ -9,117 +16,54 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-type AnyRecord = Record<string, unknown>;
-
-function normalizeKey(key: string) {
-  return key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+type UsageRelation<T> = T | T[] | null;
+interface UsageOrderRelation { customer_id: string; payment_status: string; created_at: string; }
+interface UsageProductRelation { supplier?: string | null; supplier_raw?: Record<string, unknown> | null; }
+interface UsageInventoryRelation {
+  id: string;
+  iccid: string | null;
+  expiry_date: string | null;
+  microesim_topup_id: string | null;
+  microesim_usage_cache: unknown;
+  microesim_usage_checked_at: string | null;
+}
+interface UsageItemResult {
+  orders: UsageRelation<UsageOrderRelation>;
+  products: UsageRelation<UsageProductRelation>;
+  e_sim_inventory: UsageRelation<UsageInventoryRelation>;
 }
 
-function findFirstValue(source: unknown, keys: string[], depth = 0): unknown {
-  if (!source || depth > 5) return undefined;
-  const wanted = new Set(keys.map(normalizeKey));
+function normalizeMicroesimUsage(
+  detail: MicroesimDeviceDetail,
+  events: MicroesimEventDetail[],
+  installationDeadline: string | null
+) {
+  const successfulEvents = events
+    .filter(event => !event.notification_status || /success/i.test(event.notification_status))
+    .sort((a, b) => String(a.event_date || '').localeCompare(String(b.event_date || '')));
+  const lastEvent = successfulEvents.at(-1)?.notify_type?.toUpperCase() || '';
+  const installedEvent = [...successfulEvents].reverse().find(event => event.notify_type?.toUpperCase() === 'INSTALLED');
+  const activatedAt = normalizeMicroesimDate(detail.active_time);
+  const expiresAt = normalizeMicroesimDate(detail.expire_time);
+  const isExpired = expiresAt ? new Date(expiresAt).getTime() <= Date.now() : false;
 
-  if (Array.isArray(source)) {
-    for (const item of source) {
-      const found = findFirstValue(item, keys, depth + 1);
-      if (found !== undefined && found !== null && found !== '') return found;
-    }
-    return undefined;
-  }
-
-  if (typeof source === 'object') {
-    const record = source as AnyRecord;
-    for (const [key, value] of Object.entries(record)) {
-      if (wanted.has(normalizeKey(key)) && value !== undefined && value !== null && value !== '') {
-        return value;
-      }
-    }
-    for (const value of Object.values(record)) {
-      const found = findFirstValue(value, keys, depth + 1);
-      if (found !== undefined && found !== null && found !== '') return found;
-    }
-  }
-
-  return undefined;
-}
-
-function stringifyValue(value: unknown) {
-  if (value === undefined || value === null || value === '') return null;
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'string') return value;
-  return JSON.stringify(value);
-}
-
-function normalizeDate(value: unknown) {
-  const text = stringifyValue(value);
-  if (!text) return null;
-  const date = new Date(text);
-  if (Number.isNaN(date.getTime())) return text;
-  return date.toISOString();
-}
-
-function normalizeMicroesimUsage(detail: AnyRecord, fallbackExpiryDate?: string | null) {
-  const status = stringifyValue(findFirstValue(detail, [
-    'status',
-    'esim_status',
-    'esimStatus',
-    'active_status',
-    'activeStatus',
-    'install_status',
-    'installStatus'
-  ]));
-  const usedData = stringifyValue(findFirstValue(detail, [
-    'used_data',
-    'usedData',
-    'usage',
-    'used',
-    'used_flow',
-    'usedFlow'
-  ]));
-  const remainingData = stringifyValue(findFirstValue(detail, [
-    'remaining_data',
-    'remainingData',
-    'remain_data',
-    'remainData',
-    'available_data',
-    'availableData',
-    'left_data',
-    'leftData'
-  ]));
-  const totalData = stringifyValue(findFirstValue(detail, [
-    'total_data',
-    'totalData',
-    'data_total',
-    'dataTotal',
-    'data'
-  ]));
-  const activatedAt = normalizeDate(findFirstValue(detail, [
-    'active_time',
-    'activeTime',
-    'activated_at',
-    'activatedAt',
-    'start_time',
-    'startTime'
-  ]));
-  const expiresAt = normalizeDate(findFirstValue(detail, [
-    'expire_time',
-    'expireTime',
-    'expired_time',
-    'expiredTime',
-    'end_time',
-    'endTime',
-    'expiry_date',
-    'expiryDate'
-  ])) || fallbackExpiryDate || null;
+  let status = '尚未安裝';
+  if (lastEvent === 'DELETE') status = '已刪除';
+  else if (detail.terminate_time) status = '已停用';
+  else if (isExpired) status = '已到期';
+  else if (activatedAt) status = '已啟用';
+  else if (installedEvent) status = '已安裝';
+  else if (lastEvent === 'DOWNLOADED') status = '已下載';
 
   return {
     status,
-    usedData,
-    remainingData,
-    totalData,
+    usedData: detail.data_usage === undefined || detail.data_usage === '' ? null : String(detail.data_usage),
+    remainingData: null,
+    totalData: null,
+    installedAt: normalizeMicroesimDate(installedEvent?.event_date),
     activatedAt,
     expiresAt,
-    raw: detail
+    installationDeadline
   };
 }
 
@@ -148,9 +92,11 @@ export async function POST(request: Request) {
       .select(`
         id,
         inventory_id,
-        orders!inner(customer_id, payment_status),
+        orders!inner(customer_id, payment_status, created_at),
+        products ( supplier, supplier_raw ),
         e_sim_inventory (
           id,
+          iccid,
           expiry_date,
           microesim_topup_id,
           microesim_usage_cache,
@@ -160,28 +106,39 @@ export async function POST(request: Request) {
       .eq('id', order_item_id)
       .single();
 
-    const orderRecord = (item as any)?.orders;
+    const relations = item as unknown as UsageItemResult | null;
+    const orderRecord = relations?.orders;
     const order = Array.isArray(orderRecord) ? orderRecord[0] : orderRecord;
-    const inventoryRecord = (item as any)?.e_sim_inventory;
+    const productRecord = relations?.products;
+    const product = Array.isArray(productRecord) ? productRecord[0] : productRecord;
+    const inventoryRecord = relations?.e_sim_inventory;
     const inventory = Array.isArray(inventoryRecord) ? inventoryRecord[0] : inventoryRecord;
 
     if (itemError || !item || order?.customer_id !== customer.id || order?.payment_status !== 'PAID') {
       return NextResponse.json({ error: '無權限查詢此 eSIM' }, { status: 403 });
     }
 
-    if (!inventory?.microesim_topup_id) {
+    if (!inventory?.microesim_topup_id || !inventory?.iccid) {
       return NextResponse.json({
-        error: '這張 eSIM 沒有 MicroEsim 查詢編號，可能是手動庫存或舊訂單'
+        error: '這張 eSIM 沒有完整的 MicroEsim 查詢資料，可能是手動庫存或舊訂單'
       }, { status: 400 });
     }
 
     try {
-      const detail = await fetchMicroesimTopupDetail(inventory.microesim_topup_id);
-      const usage = normalizeMicroesimUsage(detail as AnyRecord, inventory.expiry_date);
+      const installationDeadline = getMicroesimInstallationDeadline(product, null, order.created_at) || inventory.expiry_date || null;
+      const [detail, events] = await Promise.all([
+        fetchMicroesimDeviceDetail(inventory.microesim_topup_id, inventory.iccid),
+        fetchMicroesimEventDetail(inventory.iccid).catch(error => {
+          console.error('MicroEsim event query failed:', error);
+          return [];
+        })
+      ]);
+      const usage = normalizeMicroesimUsage(detail, events, installationDeadline);
 
       await supabase
         .from('e_sim_inventory')
         .update({
+          expiry_date: installationDeadline,
           microesim_usage_cache: usage,
           microesim_usage_checked_at: new Date().toISOString()
         })

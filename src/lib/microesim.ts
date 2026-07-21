@@ -9,12 +9,35 @@ export interface MicroesimSubscribeResult {
 
 export interface MicroesimTopupDetail {
   topup_id?: string;
+  create_time?: string;
   device_ids?: string[];
   lpa_str?: string[];
   qrcode?: string[];
   ios_esim_install_link?: string[];
   android_esim_install_link?: string[];
   channel_dataplan_name?: string;
+  [key: string]: unknown;
+}
+
+export interface MicroesimDeviceDetail {
+  topup_id?: string;
+  device_id?: string;
+  status?: string;
+  active_time?: string;
+  expire_time?: string;
+  terminate_time?: string;
+  create_time?: string;
+  data_usage?: string | number;
+  data_usage_daily?: unknown[];
+  is_daily?: string | boolean;
+  daily_reset_time?: string;
+  [key: string]: unknown;
+}
+
+export interface MicroesimEventDetail {
+  event_date?: string;
+  notification_status?: string;
+  notify_type?: string;
   [key: string]: unknown;
 }
 
@@ -144,6 +167,7 @@ export interface MicroesimProductLink {
   name?: string | null;
   supplier?: string | null;
   supplier_plan_id?: string | null;
+  supplier_raw?: Record<string, unknown> | null;
 }
 
 function getMicroesimConfig() {
@@ -607,6 +631,58 @@ export async function fetchMicroesimTopupDetail(topupId: string) {
   return microesimPost<MicroesimTopupDetail>('/allesim/v1/topupDetail', {
     topup_id: normalizedTopupId
   });
+}
+
+export async function fetchMicroesimDeviceDetail(topupId: string, deviceId: string) {
+  const normalizedTopupId = topupId.trim();
+  const normalizedDeviceId = deviceId.trim();
+  if (!normalizedTopupId || !normalizedDeviceId) throw new Error('MicroEsim 查詢編號不完整');
+
+  return microesimPost<MicroesimDeviceDetail>('/allesim/v1/deviceDetail', {
+    topup_id: normalizedTopupId,
+    device_id: normalizedDeviceId
+  });
+}
+
+export async function fetchMicroesimEventDetail(deviceId: string) {
+  const normalizedDeviceId = deviceId.trim();
+  if (!normalizedDeviceId) throw new Error('MicroEsim ICCID 不可為空');
+
+  return microesimPost<MicroesimEventDetail[]>('/allesim/v1/eventDetail', {
+    device_id: normalizedDeviceId
+  });
+}
+
+function parseMicroesimDate(value?: string | null) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+
+  const localDate = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+  if (localDate) {
+    const parsed = new Date(`${localDate[1]}-${localDate[2]}-${localDate[3]}T${localDate[4]}:${localDate[5]}:${localDate[6]}+08:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  const parsed = new Date(text.replace(/\bCST\b/i, 'GMT+0800'));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function getMicroesimInstallationDeadline(
+  product?: MicroesimProductLink | null,
+  supplierCreatedAt?: string | null,
+  fallbackCreatedAt?: string | null
+) {
+  const validityPeriod = Number(product?.supplier_raw?.validity_period || 0);
+  if (!Number.isFinite(validityPeriod) || validityPeriod <= 0) return null;
+
+  const createdAt = parseMicroesimDate(supplierCreatedAt) || parseMicroesimDate(fallbackCreatedAt);
+  if (!createdAt) return null;
+  createdAt.setUTCDate(createdAt.getUTCDate() + Math.floor(validityPeriod));
+  return createdAt.toISOString();
+}
+
+export function normalizeMicroesimDate(value?: string | null) {
+  return parseMicroesimDate(value)?.toISOString() || null;
 }
 
 export async function subscribeMicroesimPlan(

@@ -15,6 +15,7 @@ interface ProductSummary {
   supplier_plan_id?: string | null;
   supplier_plan_name?: string | null;
   supplier_cost_twd?: number | string | null;
+  supplier_raw?: Record<string, unknown> | null;
 }
 
 interface FulfillmentItem {
@@ -98,6 +99,8 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
           <h1>付款成功</h1>
           <p>訂單商品：<strong>${productNames}</strong></p>
           <p>${pendingItems.length ? '部分或全部 eSIM 正在準備中，配發後會員中心會自動出現安裝按鈕。' : '你的 eSIM 已經配發完成，可前往會員中心安裝。'}</p>
+          <p><strong>安裝提醒：</strong>建議在出國前、接近使用日期時安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
+          <p>每張 eSIM 的最晚安裝日與啟用後方案到期日，可在會員中心分別查看。</p>
           <p><a href="${memberUrl}">前往會員中心</a></p>
         `
       });
@@ -158,7 +161,7 @@ export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount:
       customers ( email, name ),
       order_items (
         id, product_id, inventory_id,
-        products ( id, name, country, validity_days, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd )
+        products ( id, name, country, validity_days, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd, supplier_raw )
       )
     `)
     .eq('id', orderId)

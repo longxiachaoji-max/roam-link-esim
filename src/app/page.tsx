@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User } from "lucide-react";
+import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User, Wifi } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { trackPageView } from "@/lib/analytics";
@@ -1100,7 +1100,11 @@ export default function Home() {
               ✓
             </div>
             <h3 className="text-2xl font-black mb-2">訂購成功！</h3>
-            <p className="text-muted mb-8">您可以在會員中心查看訂單。若 eSIM 尚未配發，會先顯示處理中，完成後即可安裝或顯示 QR Code。</p>
+            <p className="text-muted">您可以在會員中心查看訂單。若 eSIM 尚未配發，會先顯示處理中，完成後即可安裝或顯示 QR Code。</p>
+            <div className="my-5 border-l-2 border-yellow bg-yellow/5 px-4 py-3 text-left">
+              <p className="flex items-center gap-2 font-bold text-yellow"><Wifi size={17} /> 建議出國前再安裝</p>
+              <p className="mt-1 text-sm leading-6 text-white/60">安裝前請先連接穩定的 Wi-Fi 或行動網路，安裝過程請勿中斷連線。最晚安裝日可在會員中心查看。</p>
+            </div>
             <a href="/member" className="inline-block bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 px-8 rounded-full hover:-translate-y-1 transition-all">
               前往會員中心查看
             </a>

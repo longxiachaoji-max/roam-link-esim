@@ -55,7 +55,8 @@ export async function GET() {
             supplier,
             supplier_plan_id,
             supplier_plan_name,
-            supplier_cost_twd
+            supplier_cost_twd,
+            supplier_raw
           ),
           e_sim_inventory (
             iccid,

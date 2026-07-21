@@ -2,6 +2,7 @@ import {
   createMicroesimInventoryFromDetail,
   createMicroesimCallbackToken,
   fetchMicroesimTopupDetail,
+  getMicroesimInstallationDeadline,
   getMicroesimProductPlanId,
   subscribeMicroesimPlan,
   type MicroesimProductLink,
@@ -20,7 +21,7 @@ interface FulfillmentState {
   supplier_order_id: string | null;
   supplier_status: string | null;
   supplier_last_checked_at: string | null;
-  orders: { order_number?: string | null } | Array<{ order_number?: string | null }> | null;
+  orders: { order_number?: string | null; created_at?: string | null } | Array<{ order_number?: string | null; created_at?: string | null }> | null;
 }
 
 interface PendingFulfillmentItem {
@@ -66,7 +67,8 @@ async function saveInventory(
   state: FulfillmentState,
   productId: string,
   cost: number,
-  detail: MicroesimTopupDetail
+  detail: MicroesimTopupDetail,
+  product: MicroesimFulfillmentProduct | null | undefined
 ) {
   const esim = createMicroesimInventoryFromDetail(detail, cost);
   const checkedAt = new Date().toISOString();
@@ -80,8 +82,8 @@ async function saveInventory(
     return null;
   }
 
-  const expiresAt = new Date();
-  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  const order = Array.isArray(state.orders) ? state.orders[0] : state.orders;
+  const installationDeadline = getMicroesimInstallationDeadline(product, detail.create_time, order?.created_at);
   const inventoryPayload = {
     product_id: productId,
     iccid: esim.iccid,
@@ -89,7 +91,7 @@ async function saveInventory(
     activation_code: esim.activation_code,
     status: 'SOLD',
     sold_at: checkedAt,
-    expiry_date: expiresAt.toISOString(),
+    expiry_date: installationDeadline,
     cost: esim.cost,
     microesim_topup_id: esim.topup_id
   };
@@ -172,7 +174,7 @@ export async function fulfillMicroesimOrderItem(
       supplier_order_id,
       supplier_status,
       supplier_last_checked_at,
-      orders ( order_number )
+      orders ( order_number, created_at )
     `)
     .eq('id', orderItemId)
     .single();
@@ -247,7 +249,7 @@ export async function fulfillMicroesimOrderItem(
     return null;
   }
 
-  return saveInventory(supabase, state, productId, cost, detail);
+  return saveInventory(supabase, state, productId, cost, detail, product);
 }
 
 export async function reconcilePendingMicroesimItems(
@@ -263,7 +265,7 @@ export async function reconcilePendingMicroesimItems(
       supplier_order_id,
       supplier_last_checked_at,
       orders!inner ( customer_id, payment_status ),
-      products ( id, name, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd )
+      products ( id, name, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd, supplier_raw )
     `)
     .is('inventory_id', null)
     .not('supplier_order_id', 'is', null)

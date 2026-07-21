@@ -1,11 +1,36 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
+import { getMicroesimInstallationDeadline } from '@/lib/microesim';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+interface MemberProductResult {
+  id: string;
+  name: string;
+  country: string;
+  data_amount: string | null;
+  validity_days: number;
+  supplier: string | null;
+  supplier_raw: Record<string, unknown> | null;
+}
+
+interface MemberInventoryResult extends Record<string, unknown> {
+  expiry_date: string | null;
+}
+
+interface MemberOrderItemResult extends Record<string, unknown> {
+  products: MemberProductResult | MemberProductResult[] | null;
+  e_sim_inventory: MemberInventoryResult | MemberInventoryResult[] | null;
+}
+
+interface MemberOrderResult extends Record<string, unknown> {
+  created_at: string;
+  order_items: MemberOrderItemResult[];
+}
 
 export async function GET(request: Request) {
   try {
@@ -48,7 +73,7 @@ export async function GET(request: Request) {
           supplier_status,
           supplier_last_checked_at,
           supplier_error,
-          products ( id, name, country, data_amount, validity_days ),
+          products ( id, name, country, data_amount, validity_days, supplier, supplier_raw ),
           e_sim_inventory (
             id,
             iccid,
@@ -71,11 +96,38 @@ export async function GET(request: Request) {
       throw ordersError;
     }
 
-    return NextResponse.json({ orders: orders || [] });
-  } catch (error: any) {
+    const normalizedOrders = ((orders || []) as unknown as MemberOrderResult[]).map(order => ({
+      ...order,
+      order_items: (order.order_items || []).map(item => {
+        const product = Array.isArray(item.products) ? item.products[0] : item.products;
+        const inventory = Array.isArray(item.e_sim_inventory) ? item.e_sim_inventory[0] : item.e_sim_inventory;
+        const installationDeadline = getMicroesimInstallationDeadline(product, null, order.created_at)
+          || inventory?.expiry_date
+          || null;
+        const publicProduct = product ? {
+          id: product.id,
+          name: product.name,
+          country: product.country,
+          data_amount: product.data_amount,
+          validity_days: product.validity_days
+        } : null;
+
+        return {
+          ...item,
+          products: publicProduct,
+          e_sim_inventory: inventory ? {
+            ...inventory,
+            installation_deadline: installationDeadline
+          } : null
+        };
+      })
+    }));
+
+    return NextResponse.json({ orders: normalizedOrders });
+  } catch (error: unknown) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
     console.error('Fetch orders error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : '讀取訂單失敗' }, { status: 500 });
   }
 }

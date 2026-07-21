@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         product_id,
         inventory_id,
         supplier_order_ref,
-        products ( id, name, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd )
+        products ( id, name, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd, supplier_raw )
       `)
       .eq('supplier_order_id', topupId)
       .maybeSingle();

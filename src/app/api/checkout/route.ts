@@ -360,11 +360,13 @@ export async function POST(request: Request) {
           <p><strong>SM-DP+ Address:</strong> ${fulfilledInventory.smdp_address}</p>
           <p><strong>Activation Code:</strong> ${fulfilledInventory.activation_code}</p>
           <p>Or scan the QR code (generated from the LPA string) on your device.</p>
+          <p><strong>安裝提醒：</strong>建議在出國前、接近使用日期時安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
           <p>Enjoy your trip to ${product.country}!</p>
         ` : `
           <h1>Thank you for your purchase!</h1>
           <p>Your order for <strong>${product.name}</strong> has been received and is being prepared.</p>
           <p>You can check your member center later. The installation button and QR Code will appear once the eSIM is assigned.</p>
+          <p><strong>安裝提醒：</strong>建議在出國前、接近使用日期時安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
         `,
       });
 
