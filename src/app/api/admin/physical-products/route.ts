@@ -27,6 +27,9 @@ function cleanPayload(body: Record<string, unknown>) {
     description: String(body.description || '').trim() || null,
     rental_terms: String(body.rental_terms || '').trim() || null,
     rental_price_tiers: category === 'rental' ? normalizeRentalPriceTiers(body.rental_price_tiers) : [],
+    rental_free_shipping_days: category === 'rental' && Number(body.rental_free_shipping_days) > 0
+      ? Math.min(365, Math.trunc(Number(body.rental_free_shipping_days)))
+      : null,
     price,
     stock_quantity: stockQuantity,
     images: Array.isArray(body.images)

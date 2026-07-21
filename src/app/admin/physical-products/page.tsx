@@ -18,6 +18,7 @@ interface Product {
   description: string | null;
   rental_terms: string | null;
   rental_price_tiers: RentalPriceTier[];
+  rental_free_shipping_days: number | null;
   price: number;
   stock_quantity: number;
   images: string[];
@@ -38,6 +39,7 @@ const EMPTY_FORM = {
   description: '',
   rental_terms: '',
   rental_price_tiers: [] as RentalPriceTier[],
+  rental_free_shipping_days: null as number | null,
   price: 0,
   stock_quantity: 0,
   images: [] as string[],
@@ -97,6 +99,7 @@ export default function PhysicalProductsAdminPage() {
       description: product.description || '',
       rental_terms: product.rental_terms || '',
       rental_price_tiers: product.rental_price_tiers || [],
+      rental_free_shipping_days: product.rental_free_shipping_days,
       price: product.price,
       stock_quantity: product.stock_quantity,
       images: product.images || [],
@@ -192,18 +195,16 @@ export default function PhysicalProductsAdminPage() {
 
       <section className="mb-6 overflow-hidden rounded-md border border-white/10 bg-[#141426]">
         <button type="button" onClick={() => setSettingsOpen(value => !value)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-white/[0.03]">
-          <span className="flex items-center gap-3"><Settings2 size={18} className="text-cyan-300" /><span><span className="block font-semibold text-white">商城配送與免運</span><span className="mt-1 block text-xs text-white/40">宅配 NT${storeSettings.shipping_fee.toLocaleString()} · 滿 NT${storeSettings.free_shipping_threshold.toLocaleString()} 免運 · 租借 {storeSettings.rental_free_shipping_days} 天免運</span></span></span>
+          <span className="flex items-center gap-3"><Settings2 size={18} className="text-cyan-300" /><span><span className="block font-semibold text-white">商城配送與免運</span><span className="mt-1 block text-xs text-white/40">宅配 NT${storeSettings.shipping_fee.toLocaleString()} · 滿 NT${storeSettings.free_shipping_threshold.toLocaleString()} 免運 · 租期免運改由各商品設定</span></span></span>
           <span className="text-xs text-white/45">{settingsOpen ? '收起' : '開啟設定'}</span>
         </button>
         {settingsOpen && <div className="border-t border-white/10 px-5 py-5">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <label className="text-sm text-white/65">宅配運費 (NT$)<input type="number" min="0" value={storeSettings.shipping_fee} onChange={e => setStoreSettings({ ...storeSettings, shipping_fee: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
             <label className="text-sm text-white/65">滿額免運門檻 (NT$)<input type="number" min="0" value={storeSettings.free_shipping_threshold} onChange={e => setStoreSettings({ ...storeSettings, free_shipping_threshold: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
-            <label className="text-sm text-white/65">租借滿幾天免運<input type="number" min="1" value={storeSettings.rental_free_shipping_days} onChange={e => setStoreSettings({ ...storeSettings, rental_free_shipping_days: Number(e.target.value) })} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
           </div>
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/70">
             <label className="flex items-center gap-2"><input type="checkbox" checked={storeSettings.free_shipping_enabled} onChange={e => setStoreSettings({ ...storeSettings, free_shipping_enabled: e.target.checked })} className="h-4 w-4 accent-cyan-400" />啟用滿額免運</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={storeSettings.rental_free_shipping_enabled} onChange={e => setStoreSettings({ ...storeSettings, rental_free_shipping_enabled: e.target.checked })} className="h-4 w-4 accent-cyan-400" />啟用租期免運</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={storeSettings.pickup_enabled} onChange={e => setStoreSettings({ ...storeSettings, pickup_enabled: e.target.checked })} className="h-4 w-4 accent-cyan-400" />開放預約面交</label>
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -280,6 +281,11 @@ export default function PhysicalProductsAdminPage() {
                 <label className="block text-sm text-white/65">租借說明
                   <textarea value={form.rental_terms} onChange={e => setForm({ ...form, rental_terms: e.target.value })} rows={4} className="mt-2 w-full rounded-md border border-white/12 bg-black/25 p-3 text-white outline-none focus:border-cyan-400" placeholder="押金、交付、歸還方式與逾期規則" />
                 </label>
+                <div className="rounded-md border border-white/10 bg-black/15 p-4">
+                  <label className="flex items-center gap-3 text-sm font-semibold text-white/75"><input type="checkbox" checked={form.rental_free_shipping_days !== null} onChange={e => setForm({ ...form, rental_free_shipping_days: e.target.checked ? 3 : null })} className="h-4 w-4 accent-cyan-400" />此商品啟用租期免運</label>
+                  {form.rental_free_shipping_days !== null && <label className="mt-4 block max-w-xs text-xs text-white/45">租借滿幾天免運<input type="number" min="1" max="365" value={form.rental_free_shipping_days} onChange={e => setForm({ ...form, rental_free_shipping_days: Math.max(1, Number(e.target.value)) })} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>}
+                  <p className="mt-2 text-xs text-white/30">未啟用時仍可套用商城滿額免運或預約面交。</p>
+                </div>
                 <div className="rounded-md border border-white/10 bg-black/15 p-4">
                   <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-white/75">階梯式租借售價</p><p className="mt-1 text-xs text-white/35">每個級距會沿用到下一級；可設定折扣率或該天數的固定總價。</p></div><button type="button" onClick={() => setForm(current => ({ ...current, rental_price_tiers: [...current.rental_price_tiers, { days: Math.max(2, (current.rental_price_tiers.at(-1)?.days || 1) + 1), mode: 'discount', discount: 10 }] }))} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-cyan-400/25 text-cyan-300 hover:bg-cyan-400/10" title="新增租期級距"><Plus size={16} /></button></div>
                   <div className="mt-4 space-y-3">{form.rental_price_tiers.length === 0 ? <p className="py-3 text-center text-xs text-white/30">尚未設定租期優惠</p> : form.rental_price_tiers.map((tier, index) => <div key={`${tier.days}-${index}`} className="grid grid-cols-[0.8fr_1fr_1.15fr_36px] items-end gap-2"><label className="text-xs text-white/45">起始天數<input type="number" min="2" max="365" value={tier.days} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? { ...item, days: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><label className="text-xs text-white/45">計價方式<select value={tier.mode} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? e.target.value === 'discount' ? { days: item.days, mode: 'discount', discount: 10 } : { days: item.days, mode: 'fixed_total', total: Math.round(current.price * item.days) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-[#0d0d1a] px-2 text-white outline-none focus:border-cyan-400"><option value="discount">折扣率</option><option value="fixed_total">固定總價</option></select></label><label className="text-xs text-white/45">{tier.mode === 'discount' ? '折扣（減少 %）' : '該天數總價 (NT$)'}<input type="number" min="0" max={tier.mode === 'discount' ? 100 : undefined} value={tier.mode === 'discount' ? tier.discount || 0 : tier.total || 0} onChange={e => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.map((item, itemIndex) => itemIndex === index ? item.mode === 'discount' ? { ...item, discount: Number(e.target.value) } : { ...item, total: Number(e.target.value) } : item) }))} className="mt-1 h-10 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><button type="button" title="刪除租期級距" onClick={() => setForm(current => ({ ...current, rental_price_tiers: current.rental_price_tiers.filter((_, itemIndex) => itemIndex !== index) }))} className="grid h-10 w-9 place-items-center rounded-md text-rose-300 hover:bg-rose-400/10"><Trash2 size={15} /></button></div>)}</div>

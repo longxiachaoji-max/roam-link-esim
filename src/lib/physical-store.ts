@@ -18,6 +18,7 @@ export interface PhysicalProduct {
   description: string | null;
   rental_terms: string | null;
   rental_price_tiers: RentalPriceTier[];
+  rental_free_shipping_days: number | null;
   price: number;
   stock_quantity: number;
   images: string[];
@@ -45,6 +46,7 @@ export function normalizePhysicalProduct(row: Record<string, unknown>): Physical
     stock_quantity: Number(row.stock_quantity || 0),
     sort_order: Number(row.sort_order || 0),
     rental_price_tiers: normalizeRentalPriceTiers(row.rental_price_tiers),
+    rental_free_shipping_days: Number(row.rental_free_shipping_days) > 0 ? Number(row.rental_free_shipping_days) : null,
     images: Array.isArray(row.images) ? row.images.filter((value): value is string => typeof value === 'string') : []
   };
 }

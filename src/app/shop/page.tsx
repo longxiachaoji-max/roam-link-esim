@@ -14,7 +14,7 @@ import {
 } from '@/lib/physical-store-settings';
 
 type Category = 'all' | 'rental' | 'travel_card' | 'other';
-interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; rental_price_tiers: RentalPriceTier[]; }
+interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; rental_price_tiers: RentalPriceTier[]; rental_free_shipping_days: number | null; }
 interface CartItem extends Product {
   quantity: number;
   rentalStartDate?: string;
@@ -124,7 +124,10 @@ export default function PhysicalShopPage() {
   const hasRental = cart.some(item => item.category === 'rental');
   const shippingFee = calculatePhysicalShippingFee(
     subtotal,
-    cart.filter(item => item.category === 'rental').map(item => Number(item.rentalDays || 0)),
+    cart.filter(item => item.category === 'rental').map(item => ({
+      days: Number(item.rentalDays || 0),
+      freeShippingDays: Number(item.rental_free_shipping_days) > 0 ? Number(item.rental_free_shipping_days) : null
+    })),
     deliveryMethod,
     storeSettings
   );

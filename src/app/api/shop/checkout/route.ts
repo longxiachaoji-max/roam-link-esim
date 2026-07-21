@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     const productIds = [...new Set(rawItems.map(item => String(item.productId || '')))];
     const { data: products, error: productError } = await supabase
       .from('physical_products')
-      .select('id, name, category, price, rental_price_tiers, stock_quantity, images, is_active')
+      .select('id, name, category, price, rental_price_tiers, rental_free_shipping_days, stock_quantity, images, is_active')
       .in('id', productIds)
       .eq('is_active', true);
     if (productError) throw productError;
@@ -133,7 +133,10 @@ export async function POST(request: Request) {
         unit_price: unitPrice,
         rental_start_date: rentalStartDate,
         rental_end_date: rentalEndDate,
-        rental_days: rentalDays
+        rental_days: rentalDays,
+        rental_free_shipping_days: Number(product.rental_free_shipping_days) > 0
+          ? Number(product.rental_free_shipping_days)
+          : null
       };
     });
     for (const [productId, quantity] of nonRentalQuantities) {
@@ -147,7 +150,10 @@ export async function POST(request: Request) {
     }
     const shippingFee = calculatePhysicalShippingFee(
       subtotal,
-      orderItems.map(item => item.rental_days).filter((days): days is number => days !== null),
+      orderItems.filter(item => item.rental_days !== null).map(item => ({
+        days: Number(item.rental_days),
+        freeShippingDays: item.rental_free_shipping_days
+      })),
       deliveryMethod,
       storeSettings
     );
