@@ -661,7 +661,7 @@ export default function MemberCenter() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={`${deleted ? 'bg-red-500/10 border-red-500/20 text-red-300' : item.e_sim_inventory ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300'} border px-2.5 py-1 rounded-lg text-xs font-bold`}>
-                      {deleted ? '刪除倒數中' : item.e_sim_inventory ? '使用中' : '處理中'}
+                      {deleted ? '刪除倒數中' : item.e_sim_inventory ? '已配發' : '處理中'}
                     </div>
                   </div>
                 </div>

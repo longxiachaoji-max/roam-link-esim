@@ -101,8 +101,8 @@ export async function GET(request: Request) {
       order_items: (order.order_items || []).map(item => {
         const product = Array.isArray(item.products) ? item.products[0] : item.products;
         const inventory = Array.isArray(item.e_sim_inventory) ? item.e_sim_inventory[0] : item.e_sim_inventory;
-        const installationDeadline = getMicroesimInstallationDeadline(product, null, order.created_at)
-          || inventory?.expiry_date
+        const installationDeadline = inventory?.expiry_date
+          || getMicroesimInstallationDeadline(product, null, order.created_at)
           || null;
         const publicProduct = product ? {
           id: product.id,

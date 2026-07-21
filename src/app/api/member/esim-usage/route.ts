@@ -125,7 +125,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const installationDeadline = getMicroesimInstallationDeadline(product, null, order.created_at) || inventory.expiry_date || null;
+      const installationDeadline = inventory.expiry_date || getMicroesimInstallationDeadline(product, null, order.created_at) || null;
       const [detail, events] = await Promise.all([
         fetchMicroesimDeviceDetail(inventory.microesim_topup_id, inventory.iccid),
         fetchMicroesimEventDetail(inventory.iccid).catch(error => {
