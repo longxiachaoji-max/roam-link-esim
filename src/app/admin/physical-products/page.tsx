@@ -47,6 +47,66 @@ const EMPTY_FORM = {
   sort_order: 0
 };
 
+const MAX_SOURCE_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_PRODUCT_IMAGE_EDGE = 2000;
+const TARGET_PRODUCT_IMAGE_BYTES = 1.5 * 1024 * 1024;
+const PASSTHROUGH_IMAGE_BYTES = 1024 * 1024;
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function loadBrowserImage(file: File) {
+  return new Promise<{ image: HTMLImageElement; objectUrl: string }>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => resolve({ image, objectUrl });
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('無法讀取圖片，請改用 JPG、PNG、WebP 或 AVIF'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('圖片壓縮失敗')), 'image/webp', quality);
+  });
+}
+
+async function compressProductImage(file: File) {
+  if (file.size > MAX_SOURCE_IMAGE_BYTES) throw new Error('原始圖片不可超過 25MB');
+
+  const { image, objectUrl } = await loadBrowserImage(file);
+  try {
+    const longestEdge = Math.max(image.naturalWidth, image.naturalHeight);
+    if (file.size <= PASSTHROUGH_IMAGE_BYTES && longestEdge <= MAX_PRODUCT_IMAGE_EDGE) return file;
+
+    const scale = Math.min(1, MAX_PRODUCT_IMAGE_EDGE / longestEdge);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('瀏覽器無法壓縮圖片');
+    context.drawImage(image, 0, 0, width, height);
+
+    let blob = await canvasToBlob(canvas, 0.84);
+    for (const quality of [0.76, 0.68]) {
+      if (blob.size <= TARGET_PRODUCT_IMAGE_BYTES) break;
+      blob = await canvasToBlob(canvas, quality);
+    }
+
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'product-image';
+    return new File([blob], `${baseName}.webp`, { type: 'image/webp', lastModified: Date.now() });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function PhysicalProductsAdminPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +115,7 @@ export default function PhysicalProductsAdminPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [imageUploadNote, setImageUploadNote] = useState('');
   const [message, setMessage] = useState('');
   const [storeSettings, setStoreSettings] = useState<PhysicalStoreSettings>(DEFAULT_PHYSICAL_STORE_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -87,11 +148,13 @@ export default function PhysicalProductsAdminPage() {
   const openNew = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setImageUploadNote('');
     setIsEditorOpen(true);
   };
 
   const openEdit = (product: Product) => {
     setEditingId(product.id);
+    setImageUploadNote('');
     setForm({
       name: product.name,
       category: product.category,
@@ -112,15 +175,22 @@ export default function PhysicalProductsAdminPage() {
   const uploadImage = async (file: File) => {
     setUploading(true);
     setMessage('');
+    setImageUploadNote('正在壓縮圖片...');
     try {
+      const uploadFile = await compressProductImage(file);
       const body = new FormData();
-      body.append('file', file);
+      body.append('file', uploadFile);
       const response = await adminFetch('/api/admin/physical-products/upload', { method: 'POST', body });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '圖片上傳失敗');
       setForm(current => ({ ...current, images: [...current.images, result.url].slice(0, 8) }));
+      setImageUploadNote(file.size === uploadFile.size
+        ? `圖片已上傳（${formatFileSize(uploadFile.size)}）`
+        : `已自動壓縮 ${formatFileSize(file.size)} → ${formatFileSize(uploadFile.size)}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '圖片上傳失敗');
+      const errorMessage = error instanceof Error ? error.message : '圖片上傳失敗';
+      setMessage(errorMessage);
+      setImageUploadNote(errorMessage);
     } finally {
       setUploading(false);
     }
@@ -304,10 +374,11 @@ export default function PhysicalProductsAdminPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm text-white/65">商品圖片（第一張為封面，最多 8 張）</span>
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/75 hover:bg-white/5">
-                    <Upload size={15} /> {uploading ? '上傳中...' : '上傳圖片'}
+                    <Upload size={15} /> {uploading ? '壓縮並上傳中...' : '上傳圖片'}
                     <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading || form.images.length >= 8} className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) uploadImage(file); e.target.value = ''; }} />
                   </label>
                 </div>
+                {imageUploadNote && <p className="mb-3 text-xs text-cyan-300/80">{imageUploadNote}</p>}
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
                   {form.images.map((url, index) => (
                     <div key={url} className="relative aspect-square overflow-hidden rounded-md border border-white/10 bg-white/5">
