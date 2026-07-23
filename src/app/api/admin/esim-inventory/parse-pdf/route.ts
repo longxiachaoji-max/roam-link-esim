@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const denied = await adminApiGuard(req);
+  if (denied) return denied;
   try {
     const pdfParse = require('pdf-parse');
     const data = await req.json();

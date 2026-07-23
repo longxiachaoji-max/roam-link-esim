@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import { parseTrafficAnalytics } from '@/lib/traffic-analytics';
 
@@ -119,7 +120,9 @@ async function getOrderWindows() {
   return result;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const [{ data: settings }, tables, storage, orderWindows] = await Promise.all([
       supabase.from('site_settings').select('usage_guide').eq('id', 'main').single(),

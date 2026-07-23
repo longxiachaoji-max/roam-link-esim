@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
@@ -11,7 +12,9 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET - 取得所有訂單
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     try {
       await reconcilePendingMicroesimItems(supabase, { limit: 10, minAgeSeconds: 10 });
@@ -81,6 +84,8 @@ export async function GET() {
 
 // PUT - 手動補上 eSIM 庫存到訂單明細
 export async function PUT(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { order_item_id, inventory_id, action } = body;
@@ -265,6 +270,8 @@ export async function PUT(request: Request) {
 
 // DELETE - 刪除訂單，並將已綁定的 eSIM 庫存退回可用
 export async function DELETE(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { order_id } = body;

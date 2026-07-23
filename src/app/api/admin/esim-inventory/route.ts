@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,9 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET - 取得所有庫存
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { data, error } = await supabase
       .from('e_sim_inventory')
@@ -28,6 +31,8 @@ export async function GET() {
 
 // POST - 新增 eSIM
 export async function POST(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { product_id, iccid, smdp_address, activation_code, expiry_date } = body;
@@ -65,6 +70,8 @@ export async function POST(request: Request) {
 
 // PUT - 更新 eSIM
 export async function PUT(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { id, product_id, iccid, smdp_address, activation_code, status, expiry_date } = body;
@@ -101,6 +108,8 @@ export async function PUT(request: Request) {
 
 // DELETE - 刪除 eSIM
 export async function DELETE(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

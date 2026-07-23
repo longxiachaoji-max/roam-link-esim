@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import { fetchMicroesimPlanPage, transformMicroesimPlan } from '@/lib/microesim';
 
@@ -17,6 +18,8 @@ type LinkedProduct = {
 };
 
 export async function POST(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json().catch(() => ({}));
     const hkdRate = Number(body.hkdRate || 4.15);

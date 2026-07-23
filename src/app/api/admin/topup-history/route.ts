@@ -1,6 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,9 @@ function withReceivedAmount(reason: string | null, receivedAmount: number) {
   return `[收款金額:${receivedAmount}]${cleanReason ? ` ${cleanReason}` : ''}`;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { data: transactions, error } = await supabase
       .from('token_transactions')
@@ -40,6 +43,8 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { id, receivedAmount } = await request.json();
     const numericReceivedAmount = Number(receivedAmount);

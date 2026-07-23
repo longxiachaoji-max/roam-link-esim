@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,9 @@ function withExistingSortConfig(nextUsageGuide: string, currentUsageGuide: strin
 }
 
 // GET - 取得網站設定
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { data, error } = await supabase
       .from('site_settings')
@@ -49,6 +52,8 @@ export async function GET() {
 
 // PUT - 更新網站設定
 export async function PUT(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { hero_badge, hero_title, hero_subtitle, section_title, usage_guide } = body;

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import type { TransformedMicroesimPlan } from '@/lib/microesim';
 
@@ -65,6 +66,8 @@ function stripInternalNote<T extends { internal_note?: string | null }>(product:
 }
 
 export async function POST(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { plans } = await request.json();
     if (!Array.isArray(plans) || plans.length === 0) {

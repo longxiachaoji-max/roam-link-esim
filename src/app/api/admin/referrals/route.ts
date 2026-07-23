@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import {
   ensureReferralCodeIsUnique,
@@ -22,7 +23,9 @@ function percent(value: unknown, fallback: number) {
   return Math.min(100, Math.max(0, Math.round(numberValue * 100) / 100));
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const supabase = getSupabase();
     const { config } = await readReferralConfig(supabase);
@@ -33,6 +36,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const supabase = getSupabase();
     const body = await request.json();

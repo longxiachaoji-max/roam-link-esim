@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // POST - 批量新增商品 (自動排除重複)
 export async function POST(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { items } = await request.json();
 

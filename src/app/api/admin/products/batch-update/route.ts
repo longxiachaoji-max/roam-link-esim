@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,8 @@ type ProductTextUpdate = {
 const textFields = ['name', 'country', 'data_amount', 'description', 'internal_note'] as const;
 
 export async function POST(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { updates } = await request.json();
 

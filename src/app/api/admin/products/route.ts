@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +59,9 @@ async function fetchProductsWithOptionalColumns() {
 }
 
 // GET - 取得所有商品，按 country 排序
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { data, error } = await fetchProductsWithOptionalColumns();
 
@@ -97,6 +100,8 @@ export async function GET() {
 
 // POST - 新增商品
 export async function POST(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { name, country, data_amount, validity_days, price, description, internal_note } = body;
@@ -144,6 +149,8 @@ export async function POST(request: Request) {
 
 // PUT - 更新商品
 export async function PUT(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { id, name, country, data_amount, validity_days, price, description, internal_note, is_active } = body;
@@ -188,6 +195,8 @@ export async function PUT(request: Request) {
 
 // DELETE - 刪除商品（會連帶刪除庫存，因為 FK ON DELETE CASCADE）
 export async function DELETE(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

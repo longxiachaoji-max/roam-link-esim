@@ -41,6 +41,17 @@ export async function requireAdminUser(request: Request) {
   return user;
 }
 
+export async function adminApiGuard(request: Request) {
+  try {
+    await requireAdminUser(request);
+    return null;
+  } catch (error) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
+    return NextResponse.json({ error: '管理員驗證服務暫時無法使用' }, { status: 503 });
+  }
+}
+
 export function authenticationErrorResponse(error: unknown) {
   if (!(error instanceof AuthenticationError)) return null;
   return NextResponse.json({ error: error.message }, { status: error.status });

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { fetchMicroesimPlansByCountry, MICROESIM_COUNTRY_OPTIONS, MICROESIM_REGION_OPTION } from '@/lib/microesim';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,8 @@ function getNumberParam(url: URL, key: string, fallback: number) {
 }
 
 export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const url = new URL(request.url);
     const countryCode = (url.searchParams.get('country') || 'KR').toUpperCase();

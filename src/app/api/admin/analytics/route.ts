@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import { parseTrafficAnalytics } from '@/lib/traffic-analytics';
 
@@ -11,7 +12,9 @@ function getAdminClient() {
   return createClient(url, serviceKey);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await adminApiGuard(request);
+  if (denied) return denied;
   try {
     const { data, error } = await getAdminClient()
       .from('site_settings')
