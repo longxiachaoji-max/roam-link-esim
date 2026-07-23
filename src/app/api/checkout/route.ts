@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { buildReferralQuote, readReferralConfig } from '@/lib/referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
-import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
+import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
 import { parseTokenCheckoutRequest, TokenCheckoutRequestError } from '@/lib/token-checkout';
-
-// Initialize Supabase client with Service Role Key for backend operations
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
 
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
@@ -49,6 +41,7 @@ async function getNotificationSettings(): Promise<NotificationSettings> {
   const fallback = getFallbackNotificationSettings();
 
   try {
+    const supabase = getServerSupabase();
     const { data, error } = await supabase
       .from('site_settings')
       .select('usage_guide')
@@ -104,6 +97,7 @@ function escapeTelegramHtml(value: string) {
 export async function POST(request: Request) {
   try {
     const authUser = await requireAuthenticatedUser(request);
+    const supabase = getServerSupabase();
     const body = await request.json();
     const { name, productId, discountCode } = parseTokenCheckoutRequest(body);
     const email = authUser.email.toLowerCase();
@@ -254,6 +248,7 @@ export async function POST(request: Request) {
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
     const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
     try {
+      const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
       await resend.emails.send({
         from: `Roam Link eSIM <${fromEmail}>`,
         to: [email],
