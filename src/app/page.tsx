@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User, Wifi } from "lucide-react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { trackPageView } from "@/lib/analytics";
@@ -77,29 +79,6 @@ export default function Home() {
 
   // 分頁切換
   const [activeTab, setActiveTab] = useState<'plans' | 'guide'>('plans');
-
-  // 簡易 Markdown 轉 HTML
-  const renderMarkdown = (md: string) => {
-    if (!md) return '';
-    let html = md
-      // 圖片
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="max-w-full rounded-xl my-4" />')
-      // 標題
-      .replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-white mt-6 mb-2">$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-white mt-8 mb-3">$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-black text-white mt-8 mb-4">$1</h1>')
-      // 粗體
-      .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
-      // 列表
-      .replace(/^- (.+)$/gm, '<li class="text-muted ml-4 list-disc">$1</li>')
-      // 換行
-      .replace(/\n/g, '<br />');
-    // 包裝連續的 li
-    html = html.replace(/(<li[^>]*>.*?<\/li>(<br \/>)?)+/g, (match) => {
-      return '<ul class="my-3">' + match.replace(/<br \/>/g, '') + '</ul>';
-    });
-    return html;
-  };
 
   useEffect(() => {
     trackPageView('roamlink_page_view');
@@ -629,10 +608,11 @@ export default function Home() {
         {activeTab === 'guide' ? (
           <div className="bg-card-bg border border-white/10 rounded-3xl p-8 md:p-12">
             {siteSettings.usage_guide ? (
-              <div
-                className="prose prose-invert max-w-none text-muted leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(siteSettings.usage_guide) }}
-              />
+              <div className="max-w-none text-muted leading-relaxed [&_a]:text-cyan [&_a]:underline [&_a]:underline-offset-4 [&_h1]:mb-4 [&_h1]:mt-8 [&_h1]:text-2xl [&_h1]:font-black [&_h1]:text-white [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-white [&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-white [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-md [&_li]:ml-5 [&_li]:list-disc [&_p]:my-3 [&_strong]:font-bold [&_strong]:text-white [&_ul]:my-3">
+                <Markdown remarkPlugins={[remarkGfm]}>
+                  {siteSettings.usage_guide}
+                </Markdown>
+              </div>
             ) : (
               <div className="text-center py-20">
                 <p className="text-4xl mb-4">📖</p>
