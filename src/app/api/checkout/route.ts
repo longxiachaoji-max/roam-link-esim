@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
-import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
+import { buildReferralQuote, readReferralConfig } from '@/lib/referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
+import { parseTokenCheckoutRequest, TokenCheckoutRequestError } from '@/lib/token-checkout';
 
 // Initialize Supabase client with Service Role Key for backend operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -104,12 +105,8 @@ export async function POST(request: Request) {
   try {
     const authUser = await requireAuthenticatedUser(request);
     const body = await request.json();
-    const { name, productId, useTokens, paymentMethod, discountCode } = body;
+    const { name, productId, discountCode } = parseTokenCheckoutRequest(body);
     const email = authUser.email.toLowerCase();
-
-    if (!productId) {
-      return NextResponse.json({ error: 'ProductId is required' }, { status: 400 });
-    }
 
     // 1. Get or create customer
     let { data: customer, error: customerError } = await supabase
@@ -169,105 +166,35 @@ export async function POST(request: Request) {
       totalAmount = referralQuote.payableTotal;
     }
 
-    // Check for sufficient tokens if payment method is TOKENS
-    if (paymentMethod === 'TOKENS') {
-      if (!customer.token_balance || customer.token_balance < totalAmount) {
-        return NextResponse.json({ error: '請儲值後結帳' }, { status: 400 });
+    if (!customer.token_balance || customer.token_balance < totalAmount) {
+      return NextResponse.json({ error: '請儲值後結帳' }, { status: 400 });
+    }
+    tokensUsed = totalAmount;
+    totalAmount = 0;
+
+    // Keep the balance deduction, order and ledger entry in one locked DB transaction.
+    const { data: checkoutRows, error: checkoutError } = await supabase.rpc('create_atomic_token_checkout', {
+      p_customer_id: customer.id,
+      p_product_id: product.id,
+      p_payable_tokens: tokensUsed
+    });
+    if (checkoutError || !checkoutRows?.[0]) {
+      if (checkoutError?.message.includes('INSUFFICIENT_BALANCE')) {
+        return NextResponse.json({ error: '儲值金餘額不足，請重新整理後再試' }, { status: 400 });
       }
-      tokensUsed = totalAmount;
-      totalAmount = 0;
-    } else if (useTokens && customer.token_balance > 0) {
-      // Assuming 1 token = $1 discount
-      if (customer.token_balance >= totalAmount) {
-        tokensUsed = totalAmount;
-        totalAmount = 0;
-      } else {
-        tokensUsed = customer.token_balance;
-        totalAmount -= tokensUsed;
-      }
+      throw checkoutError || new Error('建立儲值金訂單失敗');
     }
-
-    // 5. Token checkout uses a database transaction so concurrent requests cannot
-    // read and overwrite the same balance.
-    let order: Record<string, any>;
-    let orderItem: { id: string } | null = null;
-    const isAtomicTokenCheckout = paymentMethod === 'TOKENS';
-
-    if (isAtomicTokenCheckout) {
-      const { data: checkoutRows, error: checkoutError } = await supabase.rpc('create_atomic_token_checkout', {
-        p_customer_id: customer.id,
-        p_product_id: product.id,
-        p_payable_tokens: tokensUsed
-      });
-      if (checkoutError || !checkoutRows?.[0]) {
-        if (checkoutError?.message.includes('INSUFFICIENT_BALANCE')) {
-          return NextResponse.json({ error: '儲值金餘額不足，請重新整理後再試' }, { status: 400 });
-        }
-        throw checkoutError || new Error('建立儲值金訂單失敗');
-      }
-      const checkout = checkoutRows[0];
-      order = {
-        id: checkout.order_id,
-        order_number: checkout.order_number,
-        total_amount: 0,
-        tokens_used: tokensUsed,
-        payment_status: 'PAID',
-        order_status: 'PENDING'
-      };
-      orderItem = { id: checkout.order_item_id };
-      customer.token_balance = checkout.new_balance;
-    } else {
-      const { data: createdOrder, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          customer_id: customer.id,
-          total_amount: totalAmount,
-          tokens_used: tokensUsed,
-          payment_method: paymentMethod || 'CREDIT_CARD',
-          payment_status: totalAmount === 0 ? 'PAID' : 'PENDING',
-          order_status: 'PENDING'
-        }])
-        .select()
-        .single();
-
-      if (orderError || !createdOrder) throw orderError || new Error('建立訂單失敗');
-      order = createdOrder;
-    }
-
-    if (referralQuote && paymentMethod !== 'TOKENS') {
-      const { usageGuide, config } = await readReferralConfig(supabase);
-      config.pendingRewards[order.id] = {
-        orderId: order.id,
-        source: 'checkout',
-        customerId: customer.id,
-        customerEmail: email.toLowerCase(),
-        referrerEmail: referralQuote.referrerEmail,
-        code: referralQuote.code,
-        originalTotal: originalTotalAmount,
-        discountAmount: referralQuote.discountAmount,
-        paidTotal: referralQuote.payableTotal,
-        buyerRewardPercent: referralQuote.buyerRewardPercent,
-        referrerRewardPercent: referralQuote.referrerRewardPercent,
-        createdAt: new Date().toISOString()
-      };
-      await saveReferralConfig(supabase, usageGuide, config);
-    }
-
-    // Create the item for non-token legacy checkout. The atomic RPC already did this.
-    if (!orderItem) {
-      const { data: createdItem, error: orderItemError } = await supabase
-        .from('order_items')
-        .insert([{
-          order_id: order.id,
-          product_id: product.id,
-          inventory_id: null,
-          price: product.price
-        }])
-        .select('id')
-        .single();
-      if (orderItemError || !createdItem) throw orderItemError || new Error('建立訂單明細失敗');
-      orderItem = createdItem;
-    }
+    const checkout = checkoutRows[0];
+    const order: Record<string, any> = {
+      id: checkout.order_id,
+      order_number: checkout.order_number,
+      total_amount: 0,
+      tokens_used: tokensUsed,
+      payment_status: 'PAID',
+      order_status: 'PENDING'
+    };
+    const orderItem = { id: checkout.order_item_id };
+    customer.token_balance = checkout.new_balance;
 
     // 6. Claim inventory only after the paid order item exists.
     let fulfilledInventory = null;
@@ -321,29 +248,6 @@ export async function POST(request: Request) {
           error: microError
         });
       }
-    }
-
-    // Deduct tokens from customer if used
-    if (tokensUsed > 0 && !isAtomicTokenCheckout) {
-      const newBalance = customer.token_balance - tokensUsed;
-      const { error: tokenError } = await supabase
-        .from('customers')
-        .update({ token_balance: newBalance })
-        .eq('id', customer.id);
-      
-      if (tokenError) throw tokenError;
-
-      // 新增：寫入扣款紀錄到 token_transactions
-      const { error: txError } = await supabase
-        .from('token_transactions')
-        .insert([{
-          customer_id: customer.id,
-          amount: -tokensUsed,
-          transaction_type: 'purchase',
-          balance_after: newBalance,
-          reason: `購買 eSIM (訂單 ${order.order_number || order.id.split('-')[0]})`
-        }]);
-      if (txError) console.error("Failed to insert token_transaction:", txError);
     }
 
     // 7. Send email via Resend
@@ -426,6 +330,9 @@ export async function POST(request: Request) {
   } catch (error: any) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
+    if (error instanceof TokenCheckoutRequestError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error('Checkout error:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
