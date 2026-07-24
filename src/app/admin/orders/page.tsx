@@ -3,13 +3,30 @@
 import { adminFetch } from '@/lib/admin-fetch';
 
 import { Fragment, useState, useEffect } from 'react';
+import { Activity, RefreshCw } from 'lucide-react';
+
+interface MicroesimUsage {
+  status: string;
+  usedData: string | null;
+  remainingData: string | null;
+  totalData: string | null;
+  installedAt: string | null;
+  activatedAt: string | null;
+  expiresAt: string | null;
+  installationDeadline: string | null;
+}
 
 interface ESimInventory {
+  id: string;
   iccid: string | null;
   smdp_address: string | null;
   activation_code: string | null;
   status: string | null;
   cost: number | null;
+  expiry_date: string | null;
+  microesim_topup_id: string | null;
+  microesim_usage_cache: MicroesimUsage | null;
+  microesim_usage_checked_at: string | null;
 }
 
 interface Product {
@@ -108,6 +125,22 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+const getUsageBadgeClass = (status: string) => {
+  if (status === '已啟用') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
+  if (status === '已安裝') return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200';
+  if (status === '已下載') return 'border-blue-500/30 bg-blue-500/10 text-blue-200';
+  if (status === '已到期' || status === '已停用' || status === '已刪除') {
+    return 'border-red-500/30 bg-red-500/10 text-red-200';
+  }
+  return 'border-white/15 bg-white/5 text-white/55';
+};
+
+const formatUsageTime = (value: string | null | undefined) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-TW');
+};
+
 const RECEIVED_AMOUNT_PATTERN = /\[收款金額:(\d+(?:\.\d+)?)\]/;
 
 function getReceivedRevenue(transaction: TokenTransaction) {
@@ -138,6 +171,7 @@ export default function OrdersPage() {
   const [assignSelections, setAssignSelections] = useState<Record<string, string>>({});
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [fulfillingMicroItemId, setFulfillingMicroItemId] = useState<string | null>(null);
+  const [checkingStatusItemId, setCheckingStatusItemId] = useState<string | null>(null);
   const [restoringItemId, setRestoringItemId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -295,6 +329,28 @@ export default function OrdersPage() {
     }
   };
 
+  const handleRefreshEsimStatus = async (item: OrderItem) => {
+    setCheckingStatusItemId(item.id);
+    try {
+      const res = await adminFetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: item.id,
+          action: 'refresh_esim_status'
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '查詢安裝狀態失敗');
+      await fetchOrders();
+      if (json.warning) alert(`已顯示上次查詢結果\n${json.warning}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '查詢安裝狀態失敗');
+    } finally {
+      setCheckingStatusItemId(null);
+    }
+  };
+
   const handleDeleteOrder = async (order: Order) => {
     const customer = order.customers?.email || '未知客戶';
     const ok = window.confirm(
@@ -345,8 +401,33 @@ export default function OrdersPage() {
   };
 
   const renderAssignControls = (item: OrderItem, compact = false) => {
+    const usage = item.e_sim_inventory?.microesim_usage_cache;
+    const canRefreshStatus = Boolean(
+      item.e_sim_inventory?.microesim_topup_id && item.e_sim_inventory?.iccid
+    );
+
     if (item.inventory_id) {
-      return <span className="text-green-400 text-xs">已配發</span>;
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-green-400 text-xs">已配發</span>
+          {usage?.status && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] ${getUsageBadgeClass(usage.status)}`}>
+              <Activity size={12} />
+              {usage.status}
+            </span>
+          )}
+          {canRefreshStatus && (
+            <button
+              onClick={() => handleRefreshEsimStatus(item)}
+              disabled={checkingStatusItemId === item.id}
+              className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
+            >
+              <RefreshCw size={13} className={checkingStatusItemId === item.id ? 'animate-spin' : ''} />
+              {checkingStatusItemId === item.id ? '查詢中' : '安裝狀態'}
+            </button>
+          )}
+        </div>
+      );
     }
 
     const availableInventory = getAvailableInventoryForItem(item);
@@ -418,6 +499,48 @@ export default function OrdersPage() {
           >
             {fulfillingMicroItemId === item.id ? '配發中...' : '自動配發 Micro'}
           </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderEsimUsage = (item: OrderItem) => {
+    const inventory = item.e_sim_inventory;
+    if (!inventory) return null;
+    const usage = inventory.microesim_usage_cache;
+    const canRefreshStatus = Boolean(inventory.microesim_topup_id && inventory.iccid);
+
+    return (
+      <div className="mt-3 border-t border-white/10 pt-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-white/45">安裝狀態</span>
+          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${getUsageBadgeClass(usage?.status || '尚未查詢')}`}>
+            <Activity size={12} />
+            {usage?.status || '尚未查詢'}
+          </span>
+          {canRefreshStatus && (
+            <button
+              onClick={() => handleRefreshEsimStatus(item)}
+              disabled={checkingStatusItemId === item.id}
+              className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 font-bold text-cyan-100 hover:bg-cyan-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
+            >
+              <RefreshCw size={13} className={checkingStatusItemId === item.id ? 'animate-spin' : ''} />
+              {checkingStatusItemId === item.id ? '查詢中' : '重新查詢'}
+            </button>
+          )}
+          {!canRefreshStatus && (
+            <span className="text-white/30">手動庫存或舊訂單無法向供應商查詢</span>
+          )}
+        </div>
+        {usage && (
+          <div className="mt-3 grid gap-x-6 gap-y-2 text-white/45 sm:grid-cols-2 lg:grid-cols-3">
+            <p>下載／安裝時間：<span className="text-white/70">{formatUsageTime(usage.installedAt)}</span></p>
+            <p>啟用時間：<span className="text-white/70">{formatUsageTime(usage.activatedAt)}</span></p>
+            <p>方案到期日：<span className="text-white/70">{formatUsageTime(usage.expiresAt)}</span></p>
+            <p>最晚安裝期限：<span className="text-white/70">{formatUsageTime(usage.installationDeadline)}</span></p>
+            <p>已用流量：<span className="text-white/70">{usage.usedData || '-'}</span></p>
+            <p>最後查詢：<span className="text-white/70">{formatUsageTime(inventory.microesim_usage_checked_at)}</span></p>
+          </div>
         )}
       </div>
     );
@@ -683,6 +806,7 @@ export default function OrdersPage() {
                                             <p>eSIM 狀態: {oi.e_sim_inventory?.status || '-'}</p>
                                           </div>
                                         )}
+                                        {renderEsimUsage(oi)}
                                         {!oi.e_sim_inventory && (
                                           <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
                                             <p className="text-yellow-100/80 text-xs mb-2">尚未配發 eSIM，客戶會員頁會顯示處理中</p>

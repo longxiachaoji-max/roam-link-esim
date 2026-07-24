@@ -1,21 +1,43 @@
 import { NextResponse } from 'next/server';
-import { adminApiGuard } from '@/lib/server-auth';
-import { createClient } from '@supabase/supabase-js';
+import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
 import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
+import {
+  fetchMicroesimDeviceDetail,
+  fetchMicroesimEventDetail,
+  getMicroesimInstallationDeadline,
+  type MicroesimProductLink
+} from '@/lib/microesim';
+import {
+  normalizeMicroesimUsage,
+  type MicroesimUsageSummary
+} from '@/lib/microesim-usage';
 
 export const dynamic = 'force-dynamic';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+type QueryRelation<T> = T | T[] | null;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+interface EsimStatusInventory {
+  id: string;
+  iccid: string | null;
+  expiry_date: string | null;
+  microesim_topup_id: string | null;
+  microesim_usage_cache: MicroesimUsageSummary | null;
+  microesim_usage_checked_at: string | null;
+}
+
+interface EsimStatusOrderItem {
+  orders: QueryRelation<{ created_at: string | null }>;
+  products: QueryRelation<MicroesimProductLink>;
+  e_sim_inventory: QueryRelation<EsimStatusInventory>;
+}
 
 // GET - 取得所有訂單
 export async function GET(request: Request) {
   const denied = await adminApiGuard(request);
   if (denied) return denied;
   try {
+    const supabase = getServerSupabase();
     try {
       await reconcilePendingMicroesimItems(supabase, { limit: 10, minAgeSeconds: 10 });
     } catch (reconcileError) {
@@ -62,11 +84,16 @@ export async function GET(request: Request) {
             supplier_raw
           ),
           e_sim_inventory (
+            id,
             iccid,
             smdp_address,
             activation_code,
             status,
-            cost
+            cost,
+            expiry_date,
+            microesim_topup_id,
+            microesim_usage_cache,
+            microesim_usage_checked_at
           )
         )
       `)
@@ -87,6 +114,7 @@ export async function PUT(request: Request) {
   const denied = await adminApiGuard(request);
   if (denied) return denied;
   try {
+    const supabase = getServerSupabase();
     const body = await request.json();
     const { order_item_id, inventory_id, action } = body;
 
@@ -105,6 +133,81 @@ export async function PUT(request: Request) {
       }
 
       return NextResponse.json({ success: true, message: '已恢復客戶 eSIM 顯示' });
+    }
+
+    if (action === 'refresh_esim_status') {
+      const { data: orderItem, error: itemError } = await supabase
+        .from('order_items')
+        .select(`
+          id,
+          orders ( created_at ),
+          products ( supplier_raw ),
+          e_sim_inventory (
+            id,
+            iccid,
+            expiry_date,
+            microesim_topup_id,
+            microesim_usage_cache,
+            microesim_usage_checked_at
+          )
+        `)
+        .eq('id', order_item_id)
+        .single();
+
+      if (itemError || !orderItem) {
+        return NextResponse.json({ error: itemError?.message || '找不到訂單明細' }, { status: 404 });
+      }
+
+      const statusOrderItem = orderItem as unknown as EsimStatusOrderItem;
+      const inventoryRecord = statusOrderItem.e_sim_inventory;
+      const inventory = Array.isArray(inventoryRecord) ? inventoryRecord[0] : inventoryRecord;
+      const productRecord = statusOrderItem.products;
+      const product = Array.isArray(productRecord) ? productRecord[0] : productRecord;
+      const orderRecord = statusOrderItem.orders;
+      const order = Array.isArray(orderRecord) ? orderRecord[0] : orderRecord;
+
+      if (!inventory?.microesim_topup_id || !inventory?.iccid) {
+        return NextResponse.json({
+          error: '這張 eSIM 沒有完整的 MicroEsim 查詢資料，可能是手動庫存或舊訂單'
+        }, { status: 400 });
+      }
+
+      try {
+        const installationDeadline = inventory.expiry_date
+          || getMicroesimInstallationDeadline(product, null, order?.created_at)
+          || null;
+        const [detail, events] = await Promise.all([
+          fetchMicroesimDeviceDetail(inventory.microesim_topup_id, inventory.iccid),
+          fetchMicroesimEventDetail(inventory.iccid).catch(error => {
+            console.error('Admin MicroEsim event query failed:', error);
+            return [];
+          })
+        ]);
+        const usage = normalizeMicroesimUsage(detail, events, installationDeadline);
+        const checkedAt = new Date().toISOString();
+        const { error: updateError } = await supabase
+          .from('e_sim_inventory')
+          .update({
+            expiry_date: installationDeadline,
+            microesim_usage_cache: usage,
+            microesim_usage_checked_at: checkedAt
+          })
+          .eq('id', inventory.id);
+
+        if (updateError) throw updateError;
+        return NextResponse.json({ success: true, usage, checkedAt });
+      } catch (error) {
+        if (inventory.microesim_usage_cache) {
+          return NextResponse.json({
+            success: true,
+            stale: true,
+            usage: inventory.microesim_usage_cache,
+            checkedAt: inventory.microesim_usage_checked_at,
+            warning: error instanceof Error ? error.message : 'MicroEsim 查詢暫時失敗'
+          });
+        }
+        throw error;
+      }
     }
 
     if (action === 'fulfill_microesim') {
@@ -273,6 +376,7 @@ export async function DELETE(request: Request) {
   const denied = await adminApiGuard(request);
   if (denied) return denied;
   try {
+    const supabase = getServerSupabase();
     const body = await request.json();
     const { order_id } = body;
 

@@ -3,11 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import {
   fetchMicroesimDeviceDetail,
   fetchMicroesimEventDetail,
-  getMicroesimInstallationDeadline,
-  normalizeMicroesimDate,
-  type MicroesimDeviceDetail,
-  type MicroesimEventDetail
+  getMicroesimInstallationDeadline
 } from '@/lib/microesim';
+import { normalizeMicroesimUsage } from '@/lib/microesim-usage';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
@@ -31,40 +29,6 @@ interface UsageItemResult {
   orders: UsageRelation<UsageOrderRelation>;
   products: UsageRelation<UsageProductRelation>;
   e_sim_inventory: UsageRelation<UsageInventoryRelation>;
-}
-
-function normalizeMicroesimUsage(
-  detail: MicroesimDeviceDetail,
-  events: MicroesimEventDetail[],
-  installationDeadline: string | null
-) {
-  const successfulEvents = events
-    .filter(event => !event.notification_status || /success/i.test(event.notification_status))
-    .sort((a, b) => String(a.event_date || '').localeCompare(String(b.event_date || '')));
-  const lastEvent = successfulEvents.at(-1)?.notify_type?.toUpperCase() || '';
-  const installedEvent = [...successfulEvents].reverse().find(event => event.notify_type?.toUpperCase() === 'INSTALLED');
-  const activatedAt = normalizeMicroesimDate(detail.active_time);
-  const expiresAt = normalizeMicroesimDate(detail.expire_time);
-  const isExpired = expiresAt ? new Date(expiresAt).getTime() <= Date.now() : false;
-
-  let status = '尚未安裝';
-  if (lastEvent === 'DELETE') status = '已刪除';
-  else if (detail.terminate_time) status = '已停用';
-  else if (isExpired) status = '已到期';
-  else if (activatedAt) status = '已啟用';
-  else if (installedEvent) status = '已安裝';
-  else if (lastEvent === 'DOWNLOADED') status = '已下載';
-
-  return {
-    status,
-    usedData: detail.data_usage === undefined || detail.data_usage === '' ? null : String(detail.data_usage),
-    remainingData: null,
-    totalData: null,
-    installedAt: normalizeMicroesimDate(installedEvent?.event_date),
-    activatedAt,
-    expiresAt,
-    installationDeadline
-  };
 }
 
 export async function POST(request: Request) {
