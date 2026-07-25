@@ -52,58 +52,132 @@ const MAX_PRODUCT_IMAGE_EDGE = 2000;
 const TARGET_PRODUCT_IMAGE_BYTES = 1.5 * 1024 * 1024;
 const PASSTHROUGH_IMAGE_BYTES = 1024 * 1024;
 
+interface PreparedProductImage {
+  blob: Blob;
+  fileName: string;
+}
+
 function formatFileSize(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function loadBrowserImage(file: File) {
-  return new Promise<{ image: HTMLImageElement; objectUrl: string }>((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('無法讀取圖片內容'));
+    reader.onerror = () => reject(new Error('無法讀取圖片內容'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadBrowserImage(file: File) {
+  if (typeof window.createImageBitmap === 'function') {
+    try {
+      const bitmap = await window.createImageBitmap(file);
+      if (bitmap.width > 0 && bitmap.height > 0) {
+        return {
+          source: bitmap as CanvasImageSource,
+          width: bitmap.width,
+          height: bitmap.height,
+          dispose: () => bitmap.close()
+        };
+      }
+      bitmap.close();
+    } catch (error) {
+      console.warn('createImageBitmap failed; using FileReader fallback', error);
+    }
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  return new Promise<{
+    source: CanvasImageSource;
+    width: number;
+    height: number;
+    dispose: () => void;
+  }>((resolve, reject) => {
     const image = new window.Image();
-    image.onload = () => resolve({ image, objectUrl });
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('無法讀取圖片，請改用 JPG、PNG、WebP 或 AVIF'));
+    image.onload = () => {
+      if (!image.naturalWidth || !image.naturalHeight) {
+        reject(new Error('圖片尺寸無效'));
+        return;
+      }
+      resolve({
+        source: image,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        dispose: () => { image.src = ''; }
+      });
     };
-    image.src = objectUrl;
+    image.onerror = () => reject(new Error('無法讀取圖片，請改用 JPG、PNG、WebP 或 AVIF'));
+    image.src = dataUrl;
   });
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
+function canvasToBlob(canvas: HTMLCanvasElement, type: 'image/webp' | 'image/jpeg', quality: number) {
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('圖片壓縮失敗')), 'image/webp', quality);
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('圖片壓縮失敗')), type, quality);
   });
 }
 
-async function compressProductImage(file: File) {
+async function encodeProductImage(canvas: HTMLCanvasElement, quality: number) {
+  try {
+    const webp = await canvasToBlob(canvas, 'image/webp', quality);
+    if (webp.type === 'image/webp') return webp;
+  } catch (error) {
+    console.warn('WebP encoding failed; using JPEG fallback', error);
+  }
+  return canvasToBlob(canvas, 'image/jpeg', quality);
+}
+
+function extensionForImageType(type: string) {
+  if (type === 'image/png') return 'png';
+  if (type === 'image/avif') return 'avif';
+  if (type === 'image/webp') return 'webp';
+  return 'jpg';
+}
+
+async function compressProductImage(file: File): Promise<PreparedProductImage> {
   if (file.size > MAX_SOURCE_IMAGE_BYTES) throw new Error('原始圖片不可超過 25MB');
 
-  const { image, objectUrl } = await loadBrowserImage(file);
+  const loaded = await loadBrowserImage(file);
   try {
-    const longestEdge = Math.max(image.naturalWidth, image.naturalHeight);
-    if (file.size <= PASSTHROUGH_IMAGE_BYTES && longestEdge <= MAX_PRODUCT_IMAGE_EDGE) return file;
+    const longestEdge = Math.max(loaded.width, loaded.height);
+    if (file.size <= PASSTHROUGH_IMAGE_BYTES && longestEdge <= MAX_PRODUCT_IMAGE_EDGE) {
+      return {
+        blob: file,
+        fileName: `product-image-${Date.now()}.${extensionForImageType(file.type)}`
+      };
+    }
 
     const scale = Math.min(1, MAX_PRODUCT_IMAGE_EDGE / longestEdge);
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const width = Math.max(1, Math.round(loaded.width * scale));
+    const height = Math.max(1, Math.round(loaded.height * scale));
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('瀏覽器無法壓縮圖片');
-    context.drawImage(image, 0, 0, width, height);
+    context.drawImage(loaded.source, 0, 0, width, height);
 
-    let blob = await canvasToBlob(canvas, 0.84);
+    let blob = await encodeProductImage(canvas, 0.84);
     for (const quality of [0.76, 0.68]) {
       if (blob.size <= TARGET_PRODUCT_IMAGE_BYTES) break;
-      blob = await canvasToBlob(canvas, quality);
+      blob = await canvasToBlob(
+        canvas,
+        blob.type === 'image/webp' ? 'image/webp' : 'image/jpeg',
+        quality
+      );
     }
 
-    const baseName = file.name.replace(/\.[^.]+$/, '') || 'product-image';
-    return new File([blob], `${baseName}.webp`, { type: 'image/webp', lastModified: Date.now() });
+    return {
+      blob,
+      fileName: `product-image-${Date.now()}.${extensionForImageType(blob.type)}`
+    };
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    loaded.dispose();
   }
 }
 
@@ -177,17 +251,25 @@ export default function PhysicalProductsAdminPage() {
     setMessage('');
     setImageUploadNote('正在壓縮圖片...');
     try {
-      const uploadFile = await compressProductImage(file);
+      const prepared = await compressProductImage(file);
       const body = new FormData();
-      body.append('file', uploadFile);
+      body.append('file', prepared.blob, prepared.fileName);
+      setImageUploadNote('正在上傳圖片...');
       const response = await adminFetch('/api/admin/physical-products/upload', { method: 'POST', body });
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
+      if (!result || typeof result !== 'object') {
+        throw new Error(`圖片上傳服務回傳格式錯誤（${response.status}）`);
+      }
       if (!response.ok) throw new Error(result.error || '圖片上傳失敗');
+      if (typeof result.url !== 'string' || !result.url.startsWith('https://')) {
+        throw new Error('圖片已送出，但未取得有效的圖片網址');
+      }
       setForm(current => ({ ...current, images: [...current.images, result.url].slice(0, 8) }));
-      setImageUploadNote(file.size === uploadFile.size
-        ? `圖片已上傳（${formatFileSize(uploadFile.size)}）`
-        : `已自動壓縮 ${formatFileSize(file.size)} → ${formatFileSize(uploadFile.size)}`);
+      setImageUploadNote(file.size === prepared.blob.size
+        ? `圖片已上傳（${formatFileSize(prepared.blob.size)}）`
+        : `已自動壓縮 ${formatFileSize(file.size)} → ${formatFileSize(prepared.blob.size)}`);
     } catch (error) {
+      console.error('Physical product image upload failed:', error);
       const errorMessage = error instanceof Error ? error.message : '圖片上傳失敗';
       setMessage(errorMessage);
       setImageUploadNote(errorMessage);

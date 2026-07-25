@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { getPhysicalStoreAdmin, requirePhysicalStoreAdmin } from '@/lib/physical-store';
+import { detectImageType } from '@/lib/image-upload';
 
 export const runtime = 'nodejs';
 
@@ -21,17 +22,28 @@ export async function POST(request: Request) {
     if (!extension) return NextResponse.json({ error: '只支援 JPG、PNG、WebP 或 AVIF 圖片' }, { status: 400 });
     if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: '圖片不可超過 5MB' }, { status: 400 });
 
-    const path = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${extension}`;
+    const fileBody = await file.arrayBuffer();
+    const detectedType = detectImageType(new Uint8Array(fileBody));
+    if (!detectedType) {
+      return NextResponse.json({ error: '圖片內容無法辨識，請改用 JPG、PNG、WebP 或 AVIF' }, { status: 400 });
+    }
+    if (detectedType.mimeType !== file.type) {
+      return NextResponse.json({ error: '圖片格式與檔案內容不一致' }, { status: 400 });
+    }
+
+    const path = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${detectedType.extension}`;
     const supabase = getPhysicalStoreAdmin();
-    const { error } = await supabase.storage.from('physical-products').upload(path, file, {
-      contentType: file.type,
+    const { error } = await supabase.storage.from('physical-products').upload(path, fileBody, {
+      contentType: detectedType.mimeType,
       cacheControl: '31536000',
       upsert: false
     });
     if (error) throw error;
     const { data } = supabase.storage.from('physical-products').getPublicUrl(path);
+    if (!data.publicUrl?.startsWith('https://')) throw new Error('無法產生圖片公開網址');
     return NextResponse.json({ url: data.publicUrl, path });
   } catch (error) {
+    console.error('Physical product image upload API failed:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : '圖片上傳失敗' }, { status: 500 });
   }
 }
