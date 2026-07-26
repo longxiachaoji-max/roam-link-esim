@@ -1,6 +1,7 @@
 'use client';
 
 import { adminFetch } from '@/lib/admin-fetch';
+import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 
 import { Fragment, useState, useEffect } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
@@ -401,7 +402,8 @@ export default function OrdersPage() {
   };
 
   const renderAssignControls = (item: OrderItem, compact = false) => {
-    const usage = item.e_sim_inventory?.microesim_usage_cache;
+    const cachedUsage = item.e_sim_inventory?.microesim_usage_cache;
+    const usage = cachedUsage ? sanitizeMicroesimUsageForDisplay(cachedUsage) : null;
     const canRefreshStatus = Boolean(
       item.e_sim_inventory?.microesim_topup_id && item.e_sim_inventory?.iccid
     );
@@ -507,7 +509,9 @@ export default function OrdersPage() {
   const renderEsimUsage = (item: OrderItem) => {
     const inventory = item.e_sim_inventory;
     if (!inventory) return null;
-    const usage = inventory.microesim_usage_cache;
+    const usage = inventory.microesim_usage_cache
+      ? sanitizeMicroesimUsageForDisplay(inventory.microesim_usage_cache)
+      : null;
     const canRefreshStatus = Boolean(inventory.microesim_topup_id && inventory.iccid);
 
     return (
@@ -536,8 +540,11 @@ export default function OrdersPage() {
           <div className="mt-3 grid gap-x-6 gap-y-2 text-white/45 sm:grid-cols-2 lg:grid-cols-3">
             <p>下載／安裝時間：<span className="text-white/70">{formatUsageTime(usage.installedAt)}</span></p>
             <p>啟用時間：<span className="text-white/70">{formatUsageTime(usage.activatedAt)}</span></p>
-            <p>方案到期日：<span className="text-white/70">{formatUsageTime(usage.expiresAt)}</span></p>
-            <p>最晚安裝期限：<span className="text-white/70">{formatUsageTime(usage.installationDeadline)}</span></p>
+            {usage.expiresAt ? (
+              <p>方案到期日：<span className="text-white/70">{formatUsageTime(usage.expiresAt)}</span></p>
+            ) : (
+              <p>最晚安裝期限：<span className="text-white/70">{formatUsageTime(usage.installationDeadline)}</span></p>
+            )}
             <p>已用流量：<span className="text-white/70">{usage.usedData || '-'}</span></p>
             <p>最後查詢：<span className="text-white/70">{formatUsageTime(inventory.microesim_usage_checked_at)}</span></p>
           </div>

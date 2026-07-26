@@ -6,6 +6,7 @@ import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, Cr
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
+import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import PhysicalOrdersPanel from './physical-orders-panel';
 
 export default function MemberCenter() {
@@ -645,6 +646,10 @@ export default function MemberCenter() {
           <div className="space-y-4">
           {orders.map(order => order.order_items.filter((item: any) => !isDeleteWindowExpired(item)).map((item: any) => {
             const deleted = isSoftDeleted(item);
+            const usageResult = usageByItemId[item.id];
+            const usage = usageResult?.usage
+              ? sanitizeMicroesimUsageForDisplay(usageResult.usage)
+              : null;
             
             return (
               <div key={item.id} className={`rounded-3xl p-5 border shadow-lg transition-all bg-[#1a1a24] border-white/5 ${deleted ? 'opacity-45 grayscale' : ''}`}>
@@ -779,27 +784,29 @@ export default function MemberCenter() {
                         </button>
                       </div>
 
-                      {usageByItemId[item.id] && (
+                      {usageResult && usage && (
                         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                           <div className="rounded-xl bg-black/20 p-2">
                             <div className="text-white/35 mb-1">剩餘流量</div>
-                            <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.remainingData)}</div>
+                            <div className="font-bold text-white/90">{getUsageValue(usage.remainingData)}</div>
                           </div>
                           <div className="rounded-xl bg-black/20 p-2">
                             <div className="text-white/35 mb-1">已用流量</div>
-                            <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.usedData)}</div>
+                            <div className="font-bold text-white/90">{getUsageValue(usage.usedData)}</div>
                           </div>
                           <div className="rounded-xl bg-black/20 p-2">
                             <div className="text-white/35 mb-1">安裝狀態</div>
-                            <div className="font-bold text-white/90">{getUsageValue(usageByItemId[item.id].usage?.status)}</div>
+                            <div className="font-bold text-white/90">{getUsageValue(usage.status)}</div>
                           </div>
                           <div className="rounded-xl bg-black/20 p-2">
-                            <div className="text-white/35 mb-1">方案到期日</div>
-                            <div className="font-bold text-white/90">{usageByItemId[item.id].usage?.expiresAt ? formatUsageDate(usageByItemId[item.id].usage.expiresAt) : '啟用後顯示'}</div>
+                            <div className="text-white/35 mb-1">{usage.expiresAt ? '方案到期日' : '最晚安裝期限'}</div>
+                            <div className="font-bold text-white/90">
+                              {formatUsageDate(usage.expiresAt || usage.installationDeadline)}
+                            </div>
                           </div>
                           <div className="col-span-2 text-white/35 px-1">
-                            最後查詢：{formatUsageDate(usageByItemId[item.id].checkedAt)}
-                            {usageByItemId[item.id].stale && <span className="ml-2 text-yellow-300/80">快取資料</span>}
+                            最後查詢：{formatUsageDate(usageResult.checkedAt)}
+                            {usageResult.stale && <span className="ml-2 text-yellow-300/80">快取資料</span>}
                           </div>
                         </div>
                       )}
