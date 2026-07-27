@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import type { Session } from '@supabase/supabase-js';
 import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, MapPin, Minus, Package, Plus, ShoppingBag, Trash2, Truck, User, WalletCards, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateRentalPrice, type RentalPriceTier } from '@/lib/rental-pricing';
@@ -12,6 +13,15 @@ import {
   type DeliveryMethod,
   type PhysicalStoreSettings
 } from '@/lib/physical-store-settings';
+import {
+  mergePhysicalCartSnapshots,
+  normalizePhysicalCartSnapshot,
+  physicalCartSnapshotsEqual,
+  PHYSICAL_CART_OWNER_KEY,
+  readPhysicalCartSnapshot,
+  writePhysicalCartSnapshot,
+  type PhysicalCartSnapshotItem
+} from '@/lib/physical-cart';
 
 type Category = 'all' | 'rental' | 'travel_card' | 'other';
 interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; rental_price_tiers: RentalPriceTier[]; rental_free_shipping_days: number | null; }
@@ -22,7 +32,6 @@ interface CartItem extends Product {
   rentalDays?: number;
 }
 
-const CART_KEY = 'firstroamlink-physical-cart-v1';
 const CATEGORY_LABELS: Record<Category, string> = { all: '全部商品', rental: '商品租借', travel_card: '實體漫遊卡', other: '其他旅遊商品' };
 
 function cartItemKey(item: CartItem) {
@@ -41,15 +50,80 @@ function formatRentalDate(value?: string) {
   return new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' }).format(new Date(year, month - 1, day));
 }
 
+function cartToSnapshot(cart: CartItem[]) {
+  return normalizePhysicalCartSnapshot(cart.map(item => ({
+    productId: item.id,
+    quantity: item.quantity,
+    rentalStartDate: item.rentalStartDate,
+    rentalEndDate: item.rentalEndDate
+  })));
+}
+
+function rentalDaysBetween(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+function hydrateCart(items: PhysicalCartSnapshotItem[], products: Product[]) {
+  const productsById = new Map(products.map(product => [product.id, product]));
+  return items.flatMap(item => {
+    const product = productsById.get(item.productId);
+    if (!product) return [];
+    if (product.category === 'rental') {
+      if (!item.rentalStartDate || !item.rentalEndDate) return [];
+      const rentalDays = rentalDaysBetween(item.rentalStartDate, item.rentalEndDate);
+      if (rentalDays < 1) return [];
+      return [{
+        ...product,
+        quantity: 1,
+        rentalStartDate: item.rentalStartDate,
+        rentalEndDate: item.rentalEndDate,
+        rentalDays
+      }];
+    }
+    return [{
+      ...product,
+      quantity: Math.min(item.quantity, Math.max(product.stock_quantity, 1))
+    }];
+  });
+}
+
+async function readMemberCart(accessToken: string) {
+  const response = await fetch('/api/member/cart', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store'
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || '讀取會員購物車失敗');
+  return normalizePhysicalCartSnapshot(result.items);
+}
+
+async function saveMemberCart(accessToken: string, items: PhysicalCartSnapshotItem[]) {
+  const response = await fetch('/api/member/cart', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ items })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || '儲存會員購物車失敗');
+}
+
 export default function PhysicalShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [productsReady, setProductsReady] = useState(false);
   const [category, setCategory] = useState<Category>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartReady, setCartReady] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [authSession, setAuthSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [sessionEmail, setSessionEmail] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +133,32 @@ export default function PhysicalShopPage() {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('shipping');
   const [storeSettings, setStoreSettings] = useState<PhysicalStoreSettings>(DEFAULT_PHYSICAL_STORE_SETTINGS);
   const [shipping, setShipping] = useState({ recipientName: '', recipientPhone: '', postalCode: '', shippingAddress: '', shippingNote: '' });
+  const cartInitializationRef = useRef('');
+  const cloudSyncTimerRef = useRef<number | null>(null);
+  const paymentSucceededRef = useRef(false);
+
+  useEffect(() => {
+    const payment = new URLSearchParams(window.location.search).get('payment');
+    let paymentMessage = '';
+    if (payment === 'success') {
+      paymentSucceededRef.current = true;
+      writePhysicalCartSnapshot([]);
+      paymentMessage = '付款完成，訂單已成立，我們會開始備貨。';
+      void supabase.auth.getSession().then(({ data }) => {
+        if (data.session?.access_token) {
+          return saveMemberCart(data.session.access_token, []);
+        }
+      }).catch(() => undefined);
+    } else if (payment === 'barcode') {
+      paymentMessage = '超商條碼已建立，完成繳費後訂單會自動更新。';
+    } else if (payment === 'cancelled') {
+      paymentMessage = '付款尚未完成，購物車已為你保留。';
+    } else if (payment === 'failed') {
+      paymentMessage = '付款未完成，請再試一次。';
+    }
+    if (paymentMessage) queueMicrotask(() => setMessage(paymentMessage));
+    if (payment) window.history.replaceState({}, '', '/shop');
+  }, []);
 
   useEffect(() => {
     fetch('/api/shop/products').then(async response => {
@@ -66,27 +166,13 @@ export default function PhysicalShopPage() {
       if (!response.ok) throw new Error(result.error || '商品載入失敗');
       setProducts(result.products || []);
       setStoreSettings(result.shippingSettings || DEFAULT_PHYSICAL_STORE_SETTINGS);
-    }).catch(error => setMessage(error.message)).finally(() => setLoading(false));
-
-    queueMicrotask(() => {
-      try {
-        const saved = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
-        if (Array.isArray(saved)) setCart(saved.filter((item: CartItem) => item.category !== 'rental'
-          || (item.rentalStartDate && item.rentalEndDate && Number(item.rentalDays) > 0)));
-      } catch { localStorage.removeItem(CART_KEY); }
-      setCartReady(true);
-
-      const payment = new URLSearchParams(window.location.search).get('payment');
-      if (payment === 'success') {
-        localStorage.removeItem(CART_KEY);
-        setCart([]);
-        setMessage('付款完成，訂單已成立，我們會開始備貨。');
-      } else if (payment === 'barcode') setMessage('超商條碼已建立，完成繳費後訂單會自動更新。');
-      else if (payment === 'cancelled') setMessage('付款尚未完成，購物車已為你保留。');
-      else if (payment === 'failed') setMessage('付款未完成，請再試一次。');
-      if (payment) window.history.replaceState({}, '', '/shop');
+      setProductsReady(true);
+    }).catch(error => setMessage(error.message)).finally(() => {
+      setLoading(false);
     });
+  }, []);
 
+  useEffect(() => {
     const loadBalance = async (accessToken?: string) => {
       if (!accessToken) { setTokenBalance(null); return; }
       const response = await fetch('/api/topup/profile', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
@@ -94,22 +180,94 @@ export default function PhysicalShopPage() {
       if (response.ok) setTokenBalance(Number(result.customer?.token_balance || 0));
     };
     supabase.auth.getSession().then(({ data }) => {
+      setAuthSession(data.session);
       setSessionEmail(data.session?.user.email || '');
       void loadBalance(data.session?.access_token);
+      setAuthReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthSession(session);
       setSessionEmail(session?.user.email || '');
       void loadBalance(session?.access_token);
+      setAuthReady(true);
+      if (!session) localStorage.removeItem(PHYSICAL_CART_OWNER_KEY);
     });
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
+    if (!productsReady || !authReady) return;
+    const syncKey = authSession?.user.id || 'anonymous';
+    if (cartInitializationRef.current === syncKey) return;
+    cartInitializationRef.current = syncKey;
+    let cancelled = false;
+
+    const initializeCart = async () => {
+      setCartReady(false);
+      let selectedItems = paymentSucceededRef.current ? [] : readPhysicalCartSnapshot();
+
+      if (authSession?.access_token) {
+        try {
+          if (paymentSucceededRef.current) {
+            await saveMemberCart(authSession.access_token, []);
+          } else {
+            const cloudItems = await readMemberCart(authSession.access_token);
+            const localOwner = localStorage.getItem(PHYSICAL_CART_OWNER_KEY);
+            selectedItems = localOwner === authSession.user.id
+              ? cloudItems
+              : mergePhysicalCartSnapshots(cloudItems, selectedItems);
+            if (localOwner !== authSession.user.id
+              || !physicalCartSnapshotsEqual(selectedItems, cloudItems)) {
+              await saveMemberCart(authSession.access_token, selectedItems);
+            }
+          }
+          localStorage.setItem(PHYSICAL_CART_OWNER_KEY, authSession.user.id);
+        } catch (error) {
+          localStorage.removeItem(PHYSICAL_CART_OWNER_KEY);
+          setMessage(error instanceof Error
+            ? `${error.message}，目前先保存在這個裝置`
+            : '購物車目前先保存在這個裝置');
+        }
+      } else {
+        localStorage.removeItem(PHYSICAL_CART_OWNER_KEY);
+      }
+
+      if (cancelled) return;
+      writePhysicalCartSnapshot(selectedItems);
+      setCart(hydrateCart(selectedItems, products));
+      setCartReady(true);
+    };
+
+    void initializeCart();
+    return () => { cancelled = true; };
+  }, [authReady, authSession?.access_token, authSession?.user.id, products, productsReady]);
+
+  useEffect(() => {
     if (!cartReady) return;
-    if (cart.length) localStorage.setItem(CART_KEY, JSON.stringify(cart));
-    else localStorage.removeItem(CART_KEY);
-  }, [cart, cartReady]);
+    const snapshot = cartToSnapshot(cart);
+    writePhysicalCartSnapshot(snapshot);
+    if (!authSession?.access_token) return;
+
+    if (cloudSyncTimerRef.current !== null) {
+      window.clearTimeout(cloudSyncTimerRef.current);
+    }
+    cloudSyncTimerRef.current = window.setTimeout(() => {
+      void saveMemberCart(authSession.access_token, snapshot)
+        .then(() => localStorage.setItem(PHYSICAL_CART_OWNER_KEY, authSession.user.id))
+        .catch(() => {
+          localStorage.removeItem(PHYSICAL_CART_OWNER_KEY);
+          setMessage('購物車已保存在這個裝置，雲端同步稍後再試');
+        });
+    }, 350);
+
+    return () => {
+      if (cloudSyncTimerRef.current !== null) {
+        window.clearTimeout(cloudSyncTimerRef.current);
+        cloudSyncTimerRef.current = null;
+      }
+    };
+  }, [authSession?.access_token, authSession?.user.id, cart, cartReady]);
 
   useEffect(() => {
     const resetPayment = () => setPaying(null);
@@ -193,7 +351,8 @@ export default function PhysicalShopPage() {
       if (!response.ok) throw new Error(result.error || '無法建立付款');
       if (paymentMethod === 'TOKENS') {
         if (!result.success) throw new Error(result.error || '儲值金付款失敗');
-        localStorage.removeItem(CART_KEY);
+        await saveMemberCart(data.session.access_token, []);
+        writePhysicalCartSnapshot([]);
         setCart([]);
         setTokenBalance(Number(result.newBalance || 0));
         setCheckoutOpen(false);
@@ -285,7 +444,7 @@ export default function PhysicalShopPage() {
             <label className="text-sm text-black/55 sm:col-span-2">訂單備註<textarea rows={3} value={shipping.shippingNote} onChange={e => setShipping({ ...shipping, shippingNote: e.target.value })} className="mt-2 w-full rounded-md border border-black/12 p-3 outline-none focus:border-[#247253]" /></label>
           </div>
           <div className="my-6 border-y border-black/8 py-4 text-sm"><div className="flex justify-between text-black/50"><span>商品合計</span><span>NT${subtotal.toLocaleString()}</span></div><div className="mt-2 flex justify-between text-black/50"><span>{deliveryMethod === 'pickup' ? '預約面交' : '宅配運費'}</span><span>{shippingFee === 0 ? '免運' : `NT$${shippingFee.toLocaleString()}`}</span></div><div className="mt-3 flex items-end justify-between"><div><p className="font-semibold">本次付款</p><p className="text-xs text-[#247253]">儲值金餘額 NT${Number(tokenBalance || 0).toLocaleString()}</p></div><p className="text-2xl font-bold text-[#df4d5f]">NT${total.toLocaleString()}</p></div></div>
-          {hasRental && <div className="mb-4 rounded-md border border-[#247253]/20 bg-[#dceee7] px-4 py-3 text-sm leading-6 text-[#174d38]">租借商品不開放超商條碼直接結帳。如需現金付款，請先完成超商儲值，入帳後再使用儲值金付款。</div>}
+          {hasRental && <div className="mb-4 rounded-md border border-[#247253]/20 bg-[#dceee7] px-4 py-3 text-sm leading-6 text-[#174d38]">租借商品不開放超商條碼直接結帳。如需現金付款，請先儲值至超商繳款後，再以儲值金結帳。</div>}
           <div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('TOKENS')} disabled={paying !== null || tokenBalance === null || tokenBalance < total} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#df4d5f] font-bold text-white disabled:bg-black/10 disabled:text-black/30"><WalletCards size={18} /> {paying === 'TOKENS' ? '立即扣款中...' : '儲值金立即付款'}</button><button onClick={() => checkout('Credit')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button>{!hasRental && <button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button>}</div>
           {tokenBalance !== null && tokenBalance < total && <Link href="/member?topup=1" className="mt-4 flex h-11 items-center justify-center rounded-md border border-[#df4d5f]/30 text-sm font-bold text-[#c43b4e] hover:bg-[#df4d5f]/5">餘額不足，先前往會員中心儲值</Link>}<p className="mt-3 text-center text-xs text-black/40">儲值金付款會立即扣款並成立訂單。</p>
         </div>

@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     const subtotal = orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
     const hasRental = orderItems.some(item => item.rental_days !== null);
     if (hasRental && paymentMethod === 'BARCODE') {
-      throw new Error('租借商品不開放超商條碼直接結帳，請先儲值後使用儲值金付款');
+      throw new Error('租借商品不開放超商條碼直接結帳。如需現金付款，請先儲值至超商繳款後，再以儲值金結帳');
     }
     const shippingFee = calculatePhysicalShippingFee(
       subtotal,
