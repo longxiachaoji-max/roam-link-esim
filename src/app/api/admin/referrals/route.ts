@@ -3,10 +3,10 @@ import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import {
   ensureReferralCodeIsUnique,
-  normalizeReferralCode,
   readReferralConfig,
   saveReferralConfig
 } from '@/lib/referrals';
+import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,8 +54,8 @@ export async function PUT(request: Request) {
       if (!email) return NextResponse.json({ error: '缺少會員 Email' }, { status: 400 });
 
       const code = normalizeReferralCode(String(body.customer.code || ''));
-      if (code && code.length < 4) {
-        return NextResponse.json({ error: '推薦碼至少需要 4 個英數字' }, { status: 400 });
+      if (code && referralCodeLength(code) < MIN_REFERRAL_CODE_LENGTH) {
+        return NextResponse.json({ error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字` }, { status: 400 });
       }
       if (code && !ensureReferralCodeIsUnique(config, code, email)) {
         return NextResponse.json({ error: '此推薦碼已被其他會員使用' }, { status: 400 });

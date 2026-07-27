@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { trackPageView } from "@/lib/analytics";
+import { normalizeReferralCode } from '@/lib/referral-code';
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
@@ -839,7 +840,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-sm text-muted mb-2">推薦碼（選填）</label>
-                  <input type="text" value={authPromoCode} onChange={(e) => setAuthPromoCode(e.target.value.toUpperCase())} placeholder="輸入推薦碼可獲得優惠" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan font-mono placeholder:font-sans" />
+                  <input type="text" value={authPromoCode} onChange={(e) => setAuthPromoCode(normalizeReferralCode(e.target.value))} placeholder="輸入推薦碼可獲得優惠" className="w-full bg-card-bg border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan font-mono placeholder:font-sans" />
                 </div>
                 </>
               )}
@@ -983,7 +984,7 @@ export default function Home() {
                   <input
                     type="text"
                     value={checkoutCode}
-                    onChange={(e) => setCheckoutCode(e.target.value.toUpperCase())}
+                    onChange={(e) => setCheckoutCode(normalizeReferralCode(e.target.value))}
                     placeholder="折扣碼 / 推薦碼"
                     className="min-w-0 flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-cyan font-mono placeholder:font-sans"
                   />

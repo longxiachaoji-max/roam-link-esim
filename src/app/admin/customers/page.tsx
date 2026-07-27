@@ -5,6 +5,7 @@ import { adminFetch } from '@/lib/admin-fetch';
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Search, Zap, User, PlusCircle, TicketPercent } from "lucide-react";
+import { normalizeReferralCode } from '@/lib/referral-code';
 
 export default function AdminCustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -474,8 +475,8 @@ export default function AdminCustomersPage() {
                 <input
                   type="text"
                   value={referralForm.code}
-                  onChange={(e) => setReferralForm(prev => ({ ...prev, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '') }))}
-                  placeholder="例如 FIRST123；清空可移除"
+                  onChange={(e) => setReferralForm(prev => ({ ...prev, code: normalizeReferralCode(e.target.value) }))}
+                  placeholder="例如 一飛通或 FIRST123；清空可移除"
                   className="mt-2 w-full bg-[#0B0B1A] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-300 font-mono"
                 />
               </label>

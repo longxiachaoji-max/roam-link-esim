@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
+import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 import PhysicalOrdersPanel from './physical-orders-panel';
 
 export default function MemberCenter() {
@@ -471,7 +472,7 @@ export default function MemberCenter() {
                 <input
                   type="text"
                   value={topupReferralCode}
-                  onChange={(e) => setTopupReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
+                  onChange={(e) => setTopupReferralCode(normalizeReferralCode(e.target.value))}
                   placeholder="儲值不折扣，只依設定回饋"
                   className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-white outline-none focus:border-[#F05A28]/60 font-mono placeholder:font-sans placeholder:text-white/25"
                 />
@@ -522,15 +523,15 @@ export default function MemberCenter() {
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="例如 FIRST123"
+              placeholder="例如 一飛通或 FIRST123"
               value={referralCode}
-              onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
+              onChange={(e) => setReferralCode(normalizeReferralCode(e.target.value))}
               className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-[#F05A28]/50 uppercase font-mono"
             />
             <button
-              disabled={isSavingReferral || referralCode.trim().length < 4}
+              disabled={isSavingReferral || referralCodeLength(referralCode) < MIN_REFERRAL_CODE_LENGTH}
               onClick={async () => {
-                if (isSavingReferral || referralCode.trim().length < 4) return;
+                if (isSavingReferral || referralCodeLength(referralCode) < MIN_REFERRAL_CODE_LENGTH) return;
                 setIsSavingReferral(true);
                 try {
                   const { data: { session } } = await supabase.auth.getSession();

@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import {
   DEFAULT_REFERRAL_CONFIG,
   ensureReferralCodeIsUnique,
-  normalizeReferralCode,
   readReferralConfig,
   saveReferralConfig
 } from '@/lib/referrals';
+import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,8 +56,8 @@ export async function PUT(request: Request) {
 
     const body = await request.json();
     const code = normalizeReferralCode(String(body.code || ''));
-    if (code.length < 4) {
-      return NextResponse.json({ error: '推薦碼至少需要 4 個英數字' }, { status: 400 });
+    if (referralCodeLength(code) < MIN_REFERRAL_CODE_LENGTH) {
+      return NextResponse.json({ error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字` }, { status: 400 });
     }
 
     const { data: promoConflict } = await supabase

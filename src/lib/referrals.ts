@@ -1,4 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeReferralCode } from '@/lib/referral-code';
+
+export { normalizeReferralCode } from '@/lib/referral-code';
 
 const REFERRAL_PATTERN = /\n?<!--REFERRAL_CONFIG:([A-Za-z0-9+/=]+)-->\n?/;
 
@@ -54,10 +57,6 @@ export const DEFAULT_REFERRAL_CONFIG: ReferralConfig = {
   customers: {},
   pendingRewards: {}
 };
-
-export function normalizeReferralCode(value: string) {
-  return value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
-}
 
 function clampPercent(value: unknown, fallback: number) {
   const numberValue = Number(value);
