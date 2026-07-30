@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, PackageCheck, RefreshCw, Store, Truck } from 'lucide-react';
+import { CalendarDays, PackageCheck, RefreshCw, Store, Trash2, Truck, X } from 'lucide-react';
 import Link from 'next/link';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
+import { canMemberDeletePhysicalOrder, getPhysicalOrderDeleteHidesAt } from '@/lib/physical-order-visibility';
 
 interface PhysicalOrderItem {
   id: string;
@@ -21,6 +22,7 @@ interface PhysicalOrder {
   id: string;
   created_at: string;
   updated_at: string;
+  user_deleted_at: string | null;
   recipient_name: string;
   recipient_phone: string;
   postal_code: string | null;
@@ -80,10 +82,23 @@ function paymentLabel(method: string) {
   return method;
 }
 
+function formatDeleteHideAt(value: string) {
+  const hidesAt = getPhysicalOrderDeleteHidesAt(value);
+  if (hidesAt === null) return '';
+  return new Date(hidesAt).toLocaleString('zh-TW', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 export default function PhysicalOrdersPanel() {
   const [orders, setOrders] = useState<PhysicalOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<PhysicalOrder | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -105,6 +120,31 @@ export default function PhysicalOrdersPanel() {
     return () => window.clearTimeout(timer);
   }, [loadOrders]);
 
+  const handleSoftDelete = async (order: PhysicalOrder) => {
+    if (deletingOrderId) return;
+    setDeletingOrderId(order.id);
+    setMessage('');
+    try {
+      const response = await authenticatedFetch('/api/member/physical-orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, action: 'soft_delete' })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '訂單紀錄刪除失敗');
+      setOrders(current => current.map(item => (
+        item.id === order.id
+          ? { ...item, user_deleted_at: String(result.userDeletedAt || new Date().toISOString()) }
+          : item
+      )));
+      setDeleteConfirmOrder(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '訂單紀錄刪除失敗');
+    } finally {
+      setDeletingOrderId(null);
+    }
+  };
+
   return <section>
     <div className="mb-5 flex items-center justify-between gap-3">
       <div><h2 className="text-xl font-bold">實體商品訂單</h2><p className="mt-1 text-xs text-white/40">共 {orders.length} 筆</p></div>
@@ -115,12 +155,21 @@ export default function PhysicalOrdersPanel() {
     {loading && orders.length === 0 ? <div className="py-14 text-center text-white/40">訂單載入中...</div> : orders.length === 0 ? <div className="rounded-md border border-white/8 bg-white/[0.03] py-14 text-center"><Store className="mx-auto mb-3 text-white/20" size={36} /><p className="font-semibold text-white/60">目前沒有實體商品訂單</p><Link href="/shop" className="mt-4 inline-flex h-10 items-center rounded-md bg-[#F05A28] px-4 text-sm font-bold text-white">前往一飛通商城</Link></div> : <div className="space-y-4">
       {orders.map(order => {
         const cancelled = order.order_status === 'CANCELLED';
+        const deleted = Boolean(order.user_deleted_at);
         const currentProgress = progressIndex(order.order_status);
-        return <article key={order.id} className="overflow-hidden rounded-md border border-white/8 bg-[#17171f] shadow-lg">
+        return <article key={order.id} className={`overflow-hidden rounded-md border bg-[#17171f] shadow-lg transition-opacity ${deleted ? 'border-red-400/20 opacity-55 grayscale' : 'border-white/8'}`}>
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 px-4 py-4">
             <div><p className="font-mono text-xs text-white/40">訂單 #{order.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p></div>
-            <div className="text-right"><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${cancelled ? 'bg-red-400/10 text-red-300' : order.order_status === 'COMPLETED' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-200'}`}>{STATUS_LABELS[order.order_status] || order.order_status}</span><p className="mt-2 font-mono font-bold text-[#f5bd61]">NT${Number(order.total_amount).toLocaleString()}</p></div>
+            <div className="flex items-start gap-2">
+              <div className="text-right">
+                <span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${deleted ? 'bg-red-400/10 text-red-300' : cancelled ? 'bg-red-400/10 text-red-300' : order.order_status === 'COMPLETED' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-200'}`}>{deleted ? '刪除倒數中' : STATUS_LABELS[order.order_status] || order.order_status}</span>
+                <p className="mt-2 font-mono font-bold text-[#f5bd61]">NT${Number(order.total_amount).toLocaleString()}</p>
+              </div>
+              {canMemberDeletePhysicalOrder(order.order_status, order.user_deleted_at) && <button type="button" onClick={() => setDeleteConfirmOrder(order)} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 bg-white/5 text-white/45 hover:border-red-400/30 hover:bg-red-400/10 hover:text-red-300" title="刪除訂單紀錄" aria-label="刪除訂單紀錄"><Trash2 size={16} /></button>}
+            </div>
           </div>
+
+          {deleted && <div className="border-b border-red-400/15 bg-red-400/8 px-4 py-3 text-xs leading-5 text-red-200">此紀錄已標記刪除，將於 {formatDeleteHideAt(order.user_deleted_at!)} 後從會員中心隱藏。如需恢復請聯絡客服。</div>}
 
           {!cancelled && <div className="px-4 py-5"><div className="relative grid grid-cols-4"><div className="absolute left-[12.5%] right-[12.5%] top-4 h-px bg-white/10" /><div className="absolute left-[12.5%] top-4 h-px bg-[#F05A28] transition-all" style={{ width: `${(currentProgress / 3) * 75}%` }} />{PROGRESS_STEPS.map((step, index) => { const Icon = step.icon; const reached = index <= currentProgress; return <div key={step.label} className="relative z-10 flex flex-col items-center"><span className={`grid h-8 w-8 place-items-center rounded-full border ${reached ? 'border-[#F05A28] bg-[#F05A28] text-white' : 'border-white/10 bg-[#17171f] text-white/25'}`}><Icon size={14} /></span><span className={`mt-2 text-[11px] font-semibold ${reached ? 'text-white/75' : 'text-white/25'}`}>{step.label}</span></div>; })}</div></div>}
 
@@ -129,6 +178,19 @@ export default function PhysicalOrdersPanel() {
           <div className="border-t border-white/8 bg-black/10 px-4 py-4 text-xs leading-5 text-white/45"><p className="font-semibold text-white/65">{STATUS_DESCRIPTIONS[order.order_status] || '訂單處理中。'}</p><div className="mt-3 grid gap-1 sm:grid-cols-2"><p>付款方式：{paymentLabel(order.payment_method)}</p><p>付款狀態：{order.payment_status === 'PAID' ? '已付款' : order.payment_status === 'REFUNDED' ? '已退款' : '等待付款'}</p><p>配送方式：{order.delivery_method === 'pickup' ? '預約面交' : '宅配'}</p><p>運費：{Number(order.shipping_fee) === 0 ? '免運' : `NT$${Number(order.shipping_fee).toLocaleString()}`}</p><p className="sm:col-span-2">{order.delivery_method === 'pickup' ? '取件資訊' : '收件資訊'}：{order.recipient_name} · {order.recipient_phone}</p><p className="sm:col-span-2">{order.postal_code || ''} {order.shipping_address}</p>{order.shipping_note && <p className="sm:col-span-2 text-cyan-200/70">備註：{order.shipping_note}</p>}</div></div>
         </article>;
       })}
+    </div>}
+
+    {deleteConfirmOrder && <div className="fixed inset-0 z-[220] grid place-items-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-md border border-white/10 bg-[#17171f] p-6 shadow-2xl">
+        <button type="button" onClick={() => setDeleteConfirmOrder(null)} disabled={deletingOrderId !== null} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-md text-white/45 hover:bg-white/5 hover:text-white" title="關閉"><X size={18} /></button>
+        <h3 className="pr-12 text-lg font-bold text-white">刪除訂單紀錄</h3>
+        <p className="mt-3 text-sm leading-6 text-white/60">確定要刪除訂單 #{deleteConfirmOrder.id.slice(0, 8).toUpperCase()} 的會員中心紀錄嗎？</p>
+        <p className="mt-3 rounded-md border border-amber-300/15 bg-amber-300/8 px-3 py-3 text-xs leading-5 text-amber-100/80">此操作只會隱藏會員中心紀錄，不會取消訂單、退款或釋放租借日期。刪除後會反灰保留 24 小時，如需恢復請聯絡客服。</p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={() => setDeleteConfirmOrder(null)} disabled={deletingOrderId !== null} className="h-10 rounded-md border border-white/10 px-4 text-sm font-bold text-white/65 hover:bg-white/5 disabled:opacity-40">取消</button>
+          <button type="button" onClick={() => void handleSoftDelete(deleteConfirmOrder)} disabled={deletingOrderId !== null} className="inline-flex h-10 items-center gap-2 rounded-md bg-red-500 px-4 text-sm font-bold text-white hover:bg-red-400 disabled:opacity-40"><Trash2 size={15} />{deletingOrderId ? '處理中...' : '確認刪除'}</button>
+        </div>
+      </div>
     </div>}
   </section>;
 }

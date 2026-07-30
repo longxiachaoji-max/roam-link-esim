@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Session } from '@supabase/supabase-js';
-import { ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, MapPin, Minus, Package, Plus, ShoppingBag, Trash2, Truck, User, WalletCards, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, MapPin, Minus, Package, Plus, ShoppingBag, Trash2, Truck, User, WalletCards, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateRentalPrice, type RentalPriceTier } from '@/lib/rental-pricing';
 import {
@@ -381,8 +381,8 @@ export default function PhysicalShopPage() {
             <span className="block text-xs text-black/55 sm:text-sm">一飛通全球漫遊</span>
             <span className="block text-base text-[#df4d5f] sm:text-lg">FirstRoamLink</span>
           </Link>
-          <nav className="flex items-center gap-2">
-            <Link href="/" className="hidden rounded-md px-3 py-2 text-sm text-black/55 hover:bg-black/5 sm:block">eSIM 方案</Link>
+          <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <Link href="/" aria-label="返回 eSIM 方案" className="inline-flex h-10 items-center gap-1 rounded-md px-2 text-xs font-semibold text-black/55 hover:bg-black/5 sm:px-3 sm:text-sm"><ArrowLeft size={14} /><span>eSIM</span><span className="hidden min-[390px]:inline">方案</span></Link>
             <Link href="/member" title="會員中心" className="grid h-10 w-10 place-items-center rounded-md text-black/55 hover:bg-black/5"><User size={19} /></Link>
             <button title="購物車" onClick={() => setCartOpen(true)} className="relative grid h-10 w-10 place-items-center rounded-md bg-[#172028] text-white hover:bg-[#283541]">
               <ShoppingBag size={19} />{count > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#df4d5f] px-1 text-[11px] font-bold">{count}</span>}
