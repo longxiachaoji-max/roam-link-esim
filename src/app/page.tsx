@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
+import { ESIM_DESTINATIONS, getEsimDestinationHref } from '@/lib/esim-destinations';
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
@@ -21,6 +22,7 @@ const shortenHotspotText = (value?: string) => {
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
+  const [selectedCountry, setSelectedCountry] = useState("");
   const [cart, setCart] = useState<any[]>([]);
   const [isCartHydrated, setIsCartHydrated] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -82,6 +84,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'plans' | 'guide'>('plans');
 
   useEffect(() => {
+    const requestedCountry = new URLSearchParams(window.location.search).get('country');
+    if (requestedCountry) setSelectedCountry(requestedCountry);
     trackPageView('roamlink_page_view');
     setIsApplePayAvailable('ApplePaySession' in window);
 
@@ -165,9 +169,11 @@ export default function Home() {
   }, []);
 
   // 過濾區域，並過濾金探子方案 (方案層級，不是國家層級)
-  const filteredProducts = (activeRegion === "全部" 
-    ? products 
-    : products.filter(p => p.region === activeRegion)
+  const filteredProducts = (selectedCountry
+    ? products.filter(p => p.country === selectedCountry)
+    : activeRegion === "全部"
+      ? products
+      : products.filter(p => p.region === activeRegion)
   ).map(p => ({
     ...p,
     plans: p.plans.filter((plan: any) => !plan.isHiddenGem || showHiddenGem)
@@ -627,9 +633,12 @@ export default function Home() {
             {regions.map(region => (
               <button
                 key={region}
-                onClick={() => setActiveRegion(region)}
+                onClick={() => {
+                  setSelectedCountry('');
+                  setActiveRegion(region);
+                }}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  activeRegion === region 
+                  !selectedCountry && activeRegion === region
                     ? 'bg-coral/20 border-coral text-coral border' 
                     : 'bg-transparent border-white/10 text-muted border hover:bg-white/5'
                 }`}
@@ -638,6 +647,7 @@ export default function Home() {
               </button>
             ))}
         </div>
+        {selectedCountry && <div className="mb-7 flex items-center justify-center gap-3 text-sm"><span className="text-white/55">正在顯示：<strong className="text-cyan">{selectedCountry} eSIM</strong></span><button type="button" onClick={() => setSelectedCountry('')} className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5">查看全部</button></div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {productsLoading ? (
@@ -776,12 +786,13 @@ export default function Home() {
           <div className="border-l-0 border-white/10 md:border-l md:pl-8">
             <h3 className="text-sm font-bold text-white">熱門搜尋</h3>
             <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-              {['日本 eSIM', 'KDDI eSIM', '韓國 eSIM', '泰國 eSIM', '中國 eSIM', '全球漫遊 eSIM'].map(keyword => (
-                <a key={keyword} href="#products" className="border-b border-white/10 pb-2 text-white/55 hover:border-cyan hover:text-cyan">
-                  {keyword}
-                </a>
+              {ESIM_DESTINATIONS.slice(0, 6).map(destination => (
+                <Link key={destination.slug} href={getEsimDestinationHref(destination)} className="border-b border-white/10 pb-2 text-white/55 hover:border-cyan hover:text-cyan">
+                  {destination.name}
+                </Link>
               ))}
             </div>
+            <Link href="/esim" className="mt-5 inline-flex text-sm font-bold text-cyan hover:text-white">查看全部 eSIM 目的地 →</Link>
           </div>
         </div>
       </section>
