@@ -7,6 +7,8 @@ import { serializeJsonLd } from '@/lib/json-ld';
 import ProductPurchase from './product-purchase';
 import ProductGallery from './product-gallery';
 
+export const revalidate = 3600;
+
 async function getProduct(id: string) {
   const { data } = await getPhysicalStoreAdmin().from('physical_products').select('*').eq('id', id).eq('is_active', true).maybeSingle();
   return data ? normalizePhysicalProduct(data) : null;
@@ -16,11 +18,30 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const product = await getProduct(id);
   if (!product) return { title: '找不到商品' };
+  const categoryLabel = PHYSICAL_PRODUCT_CATEGORIES[product.category];
+  const rentalProductName = product.name.includes('租借') ? product.name : `${product.name}租借`;
+  const title = product.category === 'rental'
+    ? `${rentalProductName}｜一飛通商城`
+    : `${product.name}｜一飛通商城`;
+  const description = product.summary
+    || product.description?.slice(0, 150)
+    || `一飛通商城提供${categoryLabel}，查看價格、規格與訂購資訊。`;
+
   return {
-    title: `${product.name}｜一飛通旅行選物`,
-    description: product.summary || product.description?.slice(0, 150) || '一飛通全球漫遊實體旅行商品',
+    title,
+    description,
     alternates: { canonical: `/shop/${product.id}` },
-    openGraph: { images: product.images[0] ? [product.images[0]] : ['/icon.png'] }
+    keywords: [
+      product.name,
+      categoryLabel,
+      ...(product.category === 'rental' ? [rentalProductName, '旅遊用品租借', '旅行用品租借'] : [])
+    ],
+    openGraph: {
+      title,
+      description,
+      url: `https://firstesim.space/shop/${product.id}`,
+      images: product.images[0] ? [product.images[0]] : ['/icon.png']
+    }
   };
 }
 
@@ -29,10 +50,26 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const product = await getProduct(id);
   if (!product) notFound();
   const categoryLabel = PHYSICAL_PRODUCT_CATEGORIES[product.category];
+  const offer = {
+    '@type': 'Offer',
+    priceCurrency: 'TWD',
+    price: product.price,
+    availability: product.stock_quantity > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+    url: `https://firstesim.space/shop/${product.id}`,
+    ...(product.category === 'rental' ? {
+      priceSpecification: {
+        '@type': 'UnitPriceSpecification',
+        price: product.price,
+        priceCurrency: 'TWD',
+        unitCode: 'DAY'
+      }
+    } : {})
+  };
   const structuredData = {
     '@context': 'https://schema.org', '@type': 'Product', name: product.name,
     description: product.summary || product.description || '', image: product.images,
-    offers: { '@type': 'Offer', priceCurrency: 'TWD', price: product.price, availability: product.stock_quantity > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', url: `https://firstesim.space/shop/${product.id}` }
+    category: categoryLabel,
+    offers: offer
   };
 
   return <main className="min-h-screen bg-[#f5f7f8] text-[#172028]">
