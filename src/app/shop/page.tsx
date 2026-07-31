@@ -393,8 +393,11 @@ export default function PhysicalShopPage() {
 
       <section className="border-b border-black/8 bg-[#dceee7]">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 px-4 py-10 md:flex-row md:items-end md:px-6">
-          <div><p className="mb-2 text-sm font-semibold text-[#247253]">一飛通全球漫遊 FirstRoamLink</p><h1 className="text-3xl font-bold md:text-4xl">一飛通商城</h1><p className="mt-3 max-w-xl text-sm leading-6 text-black/55">實體漫遊卡、旅行租借與出國用品，付款完成後由專人安排出貨或租借。</p></div>
-          <div className="flex items-center gap-2 text-sm text-black/50"><Package size={18} /> 台灣寄送 · 訂單進度由後台處理</div>
+          <div><p className="mb-2 text-sm font-semibold text-[#247253]">一飛通全球漫遊 FirstRoamLink</p><h1 className="text-3xl font-bold md:text-4xl">一飛通商城</h1><p className="mt-3 max-w-xl text-sm leading-6 text-black/55">目前提供旅遊手機、空拍機與攝影配件租借，付款完成後由專人安排宅配或預約面交。</p></div>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <Link href="/shop/rental" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#172028] px-4 font-semibold text-white hover:bg-[#283541]"><CalendarDays size={17} />租借商品專區</Link>
+            <span className="inline-flex items-center gap-2 text-black/50"><Package size={18} />台灣寄送 · 訂單進度由後台處理</span>
+          </div>
         </div>
       </section>
 
@@ -417,6 +420,14 @@ export default function PhysicalShopPage() {
             </article>)}
           </div>
         )}
+      </section>
+
+      <section className="border-y border-black/8 bg-white px-4 py-10 md:px-6">
+        <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-3">
+          <div><h2 className="text-xl font-bold">目前上架的旅遊租借設備</h2><p className="mt-3 text-sm leading-7 text-black/55">依正式上架商品整理 S26 Ultra 漫遊藍手機、DJI Neo 空拍機、智慧飛行電池與 RC-N3 遙控器，適合自由行、演唱會與攝影旅程。</p></div>
+          <div><h2 className="text-lg font-bold">手機與空拍機租借</h2><p className="mt-3 text-sm leading-7 text-black/55">比較每日租金、租期優惠、可預約日期與配送方式；相關電池與遙控器也可依設備需求一併安排。</p><Link href="/shop/rental" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#247253] hover:text-[#174d38]">查看租借商品 <ArrowRight size={15} /></Link></div>
+          <div><h2 className="text-lg font-bold">出國上網方案</h2><p className="mt-3 text-sm leading-7 text-black/55">出發日本可比較日本網卡、日本 eSIM 吃到飽、KDDI 與 SoftBank 網路方案；其他目的地也可依國家查看。</p><div className="mt-4 flex flex-wrap gap-4"><Link href="/esim/japan" className="text-sm font-bold text-[#df4d5f] hover:text-[#b93749]">日本網卡</Link><Link href="/esim" className="text-sm font-bold text-[#247253] hover:text-[#174d38]">全部 eSIM</Link></div></div>
+        </div>
       </section>
 
       <footer className="mt-12 border-t border-black/8 bg-white"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-3 px-6 py-7 text-sm text-black/45 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><a href="mailto:roamlinktw@gmail.com" className="hover:text-black">roamlinktw@gmail.com</a></div></footer>

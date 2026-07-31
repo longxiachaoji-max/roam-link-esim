@@ -49,6 +49,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily',
       priority: 0.8
     },
+    {
+      url: 'https://firstesim.space/shop/rental',
+      lastModified,
+      changeFrequency: 'daily',
+      priority: 0.85
+    },
     ...physicalProducts.map(product => ({
       url: `https://firstesim.space/shop/${encodeURIComponent(product.id)}`,
       lastModified: product.updatedAt ? new Date(product.updatedAt) : lastModified,

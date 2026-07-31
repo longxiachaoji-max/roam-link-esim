@@ -11,6 +11,8 @@ import {
 test('keeps curated destination pages for popular countries', () => {
   assert.equal(getEsimDestination('japan')?.name, '日本 eSIM');
   assert.equal(getEsimDestinationForCountry('中國 香港 澳門')?.slug, 'greater-china');
+  assert.ok(getEsimDestination('japan')?.keywords.includes('日本網卡推薦'));
+  assert.ok((getEsimDestination('japan')?.guides?.length || 0) >= 3);
 });
 
 test('creates a safe automatic eSIM page configuration for a newly listed country', () => {

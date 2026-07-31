@@ -13,12 +13,13 @@ import { serializeJsonLd } from '@/lib/json-ld';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: '出國 eSIM 方案｜日本、韓國、泰國與亞洲旅遊上網',
-  description: '一飛通全球漫遊 eSIM 方案總覽，依目的地比較日本、韓國、泰國、越南、中國、中港澳與台灣旅遊上網方案。',
+  title: '出國 eSIM 方案｜日本、韓國、泰國與亞洲旅遊網卡',
+  description: '比較日本、韓國、泰國、越南、中國、中港澳與台灣 eSIM，依 1–30 天、每日流量、總量型、吃到飽及熱點分享需求挑選。',
+  keywords: ['出國 eSIM', '旅遊 eSIM', '亞洲 eSIM', 'eSIM 吃到飽', '每日流量 eSIM', '總量型 eSIM', '熱點分享 eSIM', '短期網卡'],
   alternates: { canonical: '/esim' },
   openGraph: {
     title: '出國 eSIM 方案｜一飛通全球漫遊 FirstRoamLink',
-    description: '依旅遊目的地、使用天數與流量需求挑選 eSIM 上網方案。',
+    description: '依旅遊目的地、1–30 天效期、每日流量、總量型與吃到飽需求挑選 eSIM 上網方案。',
     url: 'https://firstesim.space/esim'
   }
 };
@@ -95,11 +96,13 @@ export default async function EsimDestinationHubPage() {
 
     <section className="border-y border-white/10 bg-[#111827] px-4 py-10 md:px-6">
       <div className="mx-auto max-w-6xl">
-        <h2 className="text-xl font-bold">挑選旅遊 eSIM 的三個重點</h2>
-        <div className="mt-6 grid gap-6 md:grid-cols-3">
-          <div><h3 className="font-bold text-[#56d5ea]">目的地與涵蓋範圍</h3><p className="mt-2 text-sm leading-6 text-white/55">單國行程選擇目的地方案；跨國或跨區行程則確認每個停留地都在涵蓋範圍內。</p></div>
-          <div><h3 className="font-bold text-[#56d5ea]">天數與流量</h3><p className="mt-2 text-sm leading-6 text-white/55">將抵達日與離境日納入計算，再依地圖、社群、影音與工作需求估算流量。</p></div>
-          <div><h3 className="font-bold text-[#56d5ea]">安裝與熱點</h3><p className="mt-2 text-sm leading-6 text-white/55">於啟用日前或旅程出發前使用穩定網路安裝；需要分享網路時先查看熱點額度。</p></div>
+        <h2 className="text-xl font-bold">依使用方式比較旅遊 eSIM</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">目前上架地區提供 1–30 天等不同效期，並可依實際行程比較每日流量、總量型、吃到飽與熱點分享方案。</p>
+        <div className="mt-7 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div><h3 className="font-bold text-[#56d5ea]">每日流量 eSIM</h3><p className="mt-2 text-sm leading-6 text-white/55">每天補充固定高速流量，適合希望每日用量明確、行程天數固定的旅客。</p></div>
+          <div><h3 className="font-bold text-[#56d5ea]">總量型 eSIM</h3><p className="mt-2 text-sm leading-6 text-white/55">整段效期共用一筆流量，適合每天使用量不同，或想自行分配旅程流量。</p></div>
+          <div><h3 className="font-bold text-[#56d5ea]">吃到飽 eSIM</h3><p className="mt-2 text-sm leading-6 text-white/55">適合經常使用影音、導航與社群；購買前仍應確認高速額度及降速規則。</p></div>
+          <div><h3 className="font-bold text-[#56d5ea]">熱點分享方案</h3><p className="mt-2 text-sm leading-6 text-white/55">需要分享給筆電或同行裝置時，先查看每日或總量熱點額度與使用限制。</p></div>
         </div>
       </div>
     </section>

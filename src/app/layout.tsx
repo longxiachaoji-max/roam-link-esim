@@ -11,8 +11,8 @@ const spaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://firstesim.space"),
-  title: "一飛通全球漫遊 FirstRoamLink｜日本韓國全球 eSIM",
-  description: "一飛通全球漫遊 FirstRoamLink 提供日本、韓國、東南亞與全球多國 eSIM 上網方案。線上購買、快速取得安裝資訊，出國落地即可連線。",
+  title: "一飛通全球漫遊 FirstRoamLink｜日本韓國亞洲 eSIM",
+  description: "一飛通全球漫遊 FirstRoamLink 提供日本、韓國、泰國、越南、中國、中港澳與台灣 eSIM，上架每日流量、總量型、吃到飽及熱點分享方案。",
   applicationName: "一飛通全球漫遊 FirstRoamLink",
   keywords: [
     "一飛通全球漫遊",
@@ -23,9 +23,14 @@ export const metadata: Metadata = {
     "KDDI eSIM",
     "韓國 eSIM",
     "泰國 eSIM",
+    "越南 eSIM",
     "中國 eSIM",
-    "美國 eSIM",
-    "歐洲 eSIM",
+    "中港澳 eSIM",
+    "台灣 eSIM",
+    "eSIM 吃到飽",
+    "每日流量 eSIM",
+    "總量型 eSIM",
+    "熱點分享 eSIM",
     "出國上網",
     "全球漫遊 eSIM",
     "旅遊 eSIM",
@@ -50,7 +55,7 @@ export const metadata: Metadata = {
     url: "https://firstesim.space",
     siteName: "一飛通全球漫遊 FirstRoamLink",
     title: "一飛通全球漫遊 FirstRoamLink｜全球 eSIM 上網",
-    description: "日本、韓國、東南亞與全球多國 eSIM 方案，線上購買後快速取得安裝資訊。",
+    description: "日本、韓國、泰國、越南、中國、中港澳與台灣 eSIM，線上購買後快速取得安裝資訊。",
     images: [{
       url: "/icon.png",
       width: 512,
@@ -61,7 +66,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary",
     title: "一飛通全球漫遊 FirstRoamLink｜全球 eSIM 上網",
-    description: "日本、韓國、東南亞與全球多國 eSIM 方案，出國落地即可連線。",
+    description: "日本、韓國、泰國、越南、中國、中港澳與台灣 eSIM，出國落地即可連線。",
     images: ["/icon.png"],
   },
 };

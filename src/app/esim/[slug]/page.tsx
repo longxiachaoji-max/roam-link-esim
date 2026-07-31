@@ -137,6 +137,9 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
           <div><p className="text-xs font-bold text-[#56d5ea]">即時讀取上架資料</p><h2 id="plans-heading" className="mt-2 text-2xl font-bold">{destination.name} 方案摘要</h2></div>
           {summary.availableDays.length > 0 && <p className="text-xs text-white/40">可選天數：{summary.availableDays.map(days => `${days} 天`).join('、')}</p>}
         </div>
+        {summary.featureLabels.length > 0 && <div className="mt-4 flex flex-wrap gap-2" aria-label="目前方案類型">
+          {summary.featureLabels.map(label => <span key={label} className="rounded-md border border-[#56d5ea]/20 bg-[#56d5ea]/5 px-3 py-1.5 text-xs font-semibold text-[#56d5ea]">{label}</span>)}
+        </div>}
 
         {summary.plans.length === 0 ? (
           <div className="mt-7 border-y border-white/10 py-12 text-center text-white/45">目前方案整理中，請回首頁查看最新上架內容。</div>
@@ -164,6 +167,13 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
           {destination.highlights.map(highlight => <div key={highlight} className="flex gap-3"><CheckCircle2 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><p className="text-sm leading-6 text-white/60">{highlight}</p></div>)}
         </div>
       </section>
+
+      {destination.guides && destination.guides.length > 0 && <section className="border-b border-white/10 py-11" aria-labelledby="guide-heading">
+        <h2 id="guide-heading" className="text-2xl font-bold">{destination.shortName}旅遊上網選購指南</h2>
+        <div className="mt-6 grid gap-7 md:grid-cols-3">
+          {destination.guides.map(guide => <article key={guide.title}><h3 className="font-bold text-[#56d5ea]">{guide.title}</h3><p className="mt-3 text-sm leading-7 text-white/55">{guide.body}</p></article>)}
+        </div>
+      </section>}
 
       <section className="py-11" aria-labelledby="faq-heading">
         <h2 id="faq-heading" className="text-2xl font-bold">{destination.name} 常見問題</h2>

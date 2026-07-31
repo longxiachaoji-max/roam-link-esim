@@ -780,7 +780,7 @@ export default function Home() {
             <h2 id="travel-esim-heading" className="text-2xl font-black text-white md:text-3xl">熱門旅遊 eSIM 與出國上網方案</h2>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">
               正在找日本 eSIM、韓國 eSIM 或 KDDI 原生網路方案？一飛通提供日本 eSIM 吃到飽、每日流量與總量型方案，
-              也有泰國、中國、美國、歐洲等熱門目的地的旅遊 eSIM。線上選購後即可取得安裝資訊，出國落地快速連線。
+              也有韓國、泰國、越南、中國、中港澳與台灣等目前上架地區。線上選購後即可取得安裝資訊，出國落地快速連線。
             </p>
           </div>
           <div className="border-l-0 border-white/10 md:border-l md:pl-8">

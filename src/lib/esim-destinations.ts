@@ -3,6 +3,11 @@ export interface EsimDestinationFaq {
   answer: string;
 }
 
+export interface EsimDestinationGuide {
+  title: string;
+  body: string;
+}
+
 export interface EsimDestination {
   slug: string;
   name: string;
@@ -14,6 +19,7 @@ export interface EsimDestination {
   intro: string;
   keywords: string[];
   highlights: string[];
+  guides?: EsimDestinationGuide[];
   faqs: EsimDestinationFaq[];
 }
 
@@ -25,14 +31,43 @@ export const ESIM_DESTINATIONS: EsimDestination[] = [
     flag: '🇯🇵',
     countries: ['日本'],
     title: '日本 eSIM｜日本網卡、吃到飽與 KDDI 上網方案',
-    description: '比較日本 eSIM 吃到飽、每日流量與總量型上網方案，依旅遊天數、熱點需求及使用量選擇，線上購買後取得安裝資訊。',
-    intro: '前往東京、大阪、京都、北海道或沖繩，可依旅程天數與使用量挑選日本 eSIM。方案涵蓋吃到飽、每日流量與總量型，部分方案支援熱點分享。',
-    keywords: ['日本 eSIM', '日本網卡', '日本 eSIM 吃到飽', 'KDDI eSIM', '日本上網', '日本旅遊網路'],
-    highlights: ['依實際旅遊天數選擇，避免購買過多效期', '需要分享給同行裝置時，先確認熱點額度', '啟用日前或旅程出發前，在穩定網路環境完成安裝'],
+    description: '比較日本 eSIM、日本網卡吃到飽、每日流量與總量型方案，依旅遊天數、KDDI 或 SoftBank 網路、熱點需求及使用量選擇。',
+    intro: '規劃日本自由行時，可依東京、大阪、京都、北海道或沖繩的旅程天數與使用量，選擇免換實體卡的日本 eSIM。方案涵蓋吃到飽、每日流量、總量型，以及 KDDI、SoftBank 等日本網路選擇。',
+    keywords: [
+      '日本 eSIM',
+      '日本網卡',
+      '日本網卡推薦',
+      '日本 eSIM 推薦',
+      '日本 eSIM 吃到飽',
+      '日本網卡吃到飽',
+      '日本旅遊網卡',
+      '日本上網卡',
+      'KDDI eSIM',
+      'SoftBank eSIM',
+      '東京網卡',
+      '大阪網卡'
+    ],
+    highlights: ['依實際旅遊天數選擇，避免購買過多效期', '比較 KDDI、SoftBank 等網路與方案使用規則', '需要分享給同行裝置時，先確認熱點額度'],
+    guides: [
+      {
+        title: '日本網卡與日本 eSIM 怎麼選？',
+        body: '「日本網卡」是旅客常用的上網方案搜尋方式；本站目前提供免拆換原本 SIM 卡的日本 eSIM。挑選時應先確認手機支援 eSIM，再依旅遊天數、流量與熱點需求比較。'
+      },
+      {
+        title: '日本網卡吃到飽還是流量型比較適合？',
+        body: '經常觀看影片、直播、上傳大量照片或分享熱點，可優先比較吃到飽及高速流量較高的方案。主要使用地圖、通訊與查詢資訊，則每日流量或總量型方案通常更容易控制預算。'
+      },
+      {
+        title: 'KDDI 與 SoftBank 日本網路方案',
+        body: '部分日本 eSIM 會標示 KDDI、SoftBank 或其他當地合作網路。不同方案的涵蓋、限速、熱點與啟用規則可能不同，應以商品頁顯示的電信網路及備註為準。'
+      }
+    ],
     faqs: [
       { question: '日本 eSIM 要選吃到飽還是流量型？', answer: '會長時間使用地圖、社群與影音可優先比較吃到飽方案；一般查詢與通訊可依每日或總流量選擇。' },
       { question: '日本 eSIM 可以分享熱點嗎？', answer: '不同方案的熱點規則不同，可能是每日額度或總量額度，請以方案頁顯示的熱點分享說明為準。' },
-      { question: '日本 eSIM 什麼時候安裝？', answer: '建議在啟用日前或旅程出發前，於穩定網路環境完成安裝，抵達後再依方案說明開啟行動數據。' }
+      { question: '日本 eSIM 什麼時候安裝？', answer: '建議在啟用日前或旅程出發前，於穩定網路環境完成安裝，抵達後再依方案說明開啟行動數據。' },
+      { question: '日本網卡可以在東京、大阪和北海道使用嗎？', answer: '日本全國型方案通常可跨城市使用，實際訊號會依所在地、地形與合作電信網路涵蓋而異。' },
+      { question: '日本 eSIM 需要拔掉原本的 SIM 卡嗎？', answer: '不需要。支援雙 SIM 的手機可以保留原門號接收簡訊，同時將行動數據切換到日本 eSIM。' }
     ]
   },
   {
@@ -164,7 +199,15 @@ export function createAutomaticEsimDestination(country: string): EsimDestination
     title: `${normalizedCountry} eSIM｜旅遊網卡與行動上網方案`,
     description: `比較 ${normalizedCountry} eSIM 的使用天數、流量、價格與熱點分享規則，依旅遊行程挑選適合的行動上網方案。`,
     intro: `前往 ${normalizedCountry} 旅遊或出差，可依停留天數、日常通訊、導航與影音需求挑選 ${normalizedCountry} eSIM，免更換實體 SIM 卡。`,
-    keywords: [`${normalizedCountry} eSIM`, `${normalizedCountry}網卡`, `${normalizedCountry}上網`, `${normalizedCountry}旅遊網路`],
+    keywords: [
+      `${normalizedCountry} eSIM`,
+      `${normalizedCountry}網卡`,
+      `${normalizedCountry}上網`,
+      `${normalizedCountry}旅遊網路`,
+      `${normalizedCountry} eSIM 吃到飽`,
+      `${normalizedCountry}每日流量 eSIM`,
+      `${normalizedCountry}總量型網卡`
+    ],
     highlights: [
       '將抵達日與離境日納入方案天數',
       '依地圖、社群、影音與工作需求估算流量',

@@ -16,6 +16,7 @@ export interface EsimDestinationPlanSummary {
   planCount: number;
   lowestPrice: number | null;
   availableDays: number[];
+  featureLabels: string[];
   plans: EsimSeoPlan[];
 }
 
@@ -44,7 +45,7 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   if (!url || !serviceRoleKey) {
-    return { planCount: 0, lowestPrice: null, availableDays: [], plans: [] };
+    return { planCount: 0, lowestPrice: null, availableDays: [], featureLabels: [], plans: [] };
   }
 
   const supabase = createClient(url, serviceRoleKey);
@@ -59,7 +60,7 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
 
   if (error || !data) {
     console.error(`SEO plans failed for ${destination.slug}:`, error?.message || 'No data');
-    return { planCount: 0, lowestPrice: null, availableDays: [], plans: [] };
+    return { planCount: 0, lowestPrice: null, availableDays: [], featureLabels: [], plans: [] };
   }
 
   const normalized = data.map(row => ({
@@ -82,10 +83,21 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
     if (representativePlans.length >= 12) break;
   }
 
+  const searchablePlanText = normalized
+    .map(plan => `${plan.name} ${plan.dataAmount} ${plan.description}`)
+    .join(' ');
+  const featureLabels = [
+    /吃到飽|不限量|unlimited/i.test(searchablePlanText) ? '吃到飽方案' : '',
+    /每日|daily/i.test(searchablePlanText) ? '每日流量' : '',
+    /總量|total/i.test(searchablePlanText) ? '總量型方案' : '',
+    /熱點|hotspot/i.test(searchablePlanText) ? '熱點分享' : ''
+  ].filter(Boolean);
+
   return {
     planCount: normalized.length,
     lowestPrice: normalized.length ? Math.min(...normalized.map(plan => plan.price)) : null,
     availableDays: [...new Set(normalized.map(plan => plan.validityDays))].sort((a, b) => a - b).slice(0, 12),
+    featureLabels,
     plans: representativePlans
   };
 }
