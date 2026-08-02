@@ -8,24 +8,21 @@ import { serializeJsonLd } from '@/lib/json-ld';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'S26 Ultra 手機、DJI Neo 空拍機租借｜一飛通',
-  description: '一飛通租借專區目前提供 S26 Ultra 漫遊藍手機、DJI Neo 空拍機、智慧飛行電池與 RC-N3 遙控器，查看每日租金、可預約日期與配送方式。',
+  title: '手機、空拍機與攝影設備租借｜一飛通',
+  description: '一飛通租借專區提供旅遊手機、空拍機與攝影配件租借，可查看每日租金、租期優惠、可預約日期與配送方式。',
   keywords: [
     '手機租借',
     '旅遊手機租借',
     '演唱會手機租借',
-    'Samsung 手機租借',
-    'S26 Ultra 手機租借',
-    'S26Ultra 租借',
     '空拍機租借',
-    'DJI Neo 租借',
-    'DJI Neo 電池租借',
-    'DJI RC-N3 遙控器租借'
+    '攝影設備租借',
+    '空拍機配件租借',
+    '旅遊用品租借'
   ],
   alternates: { canonical: '/shop/rental' },
   openGraph: {
-    title: 'S26 Ultra 手機、DJI Neo 空拍機租借｜一飛通商城',
-    description: 'S26 Ultra 手機、DJI Neo 空拍機、智慧飛行電池與 RC-N3 遙控器租借。',
+    title: '手機、空拍機與攝影設備租借｜一飛通商城',
+    description: '旅遊手機、空拍機與攝影配件租借，查看價格與可預約日期。',
     url: 'https://firstesim.space/shop/rental'
   }
 };
@@ -131,12 +128,10 @@ export default async function RentalProductsPage() {
     <section className="border-b border-black/8 bg-[#dceee7] px-4 py-12 md:px-6 md:py-16">
       <div className="mx-auto max-w-7xl">
         <Link href="/shop" className="inline-flex items-center gap-2 text-sm text-black/50 hover:text-black"><ArrowLeft size={15} />返回一飛通商城</Link>
-        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
-          <div><p className="text-sm font-bold text-[#247253]">旅遊拍攝設備租借</p><h1 className="mt-3 max-w-4xl text-3xl font-black leading-tight md:text-5xl">S26 Ultra 手機與 DJI Neo 空拍機租借</h1><p className="mt-5 max-w-3xl text-sm leading-7 text-black/60 md:text-base">目前可預約 S26 Ultra 漫遊藍手機、DJI Neo 空拍機、智慧飛行電池與 RC-N3 遙控器。適合自由行拍照、演唱會錄影或旅程空拍，選擇日期後可查看租期優惠與配送方式。</p></div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-black/8 bg-black/8">
-            <div className="bg-white p-4"><p className="text-xs text-black/40">已上架租借商品</p><p className="mt-1 text-2xl font-bold">{products.length} 項</p></div>
-            <div className="bg-white p-4"><p className="text-xs text-black/40">租期選擇</p><p className="mt-1 text-lg font-bold text-[#247253]">依日期預約</p></div>
-          </div>
+        <div className="mt-8">
+          <p className="text-sm font-bold text-[#247253]">旅遊拍攝設備租借</p>
+          <h1 className="mt-3 max-w-4xl text-3xl font-black leading-tight md:text-5xl">手機、空拍機與攝影設備租借</h1>
+          <p className="mt-5 max-w-3xl text-sm leading-7 text-black/60 md:text-base">適合自由行拍照、演唱會錄影與旅程空拍，可依需求選擇手機、空拍機及相關攝影配件。實際型號、租金、可預約日期與配送方式，請查看下方最新上架商品。</p>
         </div>
       </div>
     </section>
@@ -153,8 +148,8 @@ export default async function RentalProductsPage() {
 
     <section className="border-y border-black/8 bg-white px-4 py-11 md:px-6">
       <div className="mx-auto max-w-7xl"><h2 className="text-2xl font-bold">依旅程需求挑選租借設備</h2><div className="mt-7 grid gap-8 md:grid-cols-3">
-        <article><Smartphone className="text-[#df4d5f]" size={24} /><h3 className="mt-4 font-bold">S26 Ultra 旅遊與演唱會手機租借</h3><p className="mt-3 text-sm leading-7 text-black/55">需要望遠拍攝、夜景或錄影設備時，可查看 S26 Ultra 漫遊藍手機的商品說明、每日價格與可預約日期，並在使用前完成設備測試。</p></article>
-        <article><Plane className="text-[#247253]" size={24} /><h3 className="mt-4 font-bold">DJI Neo 空拍機與配件租借</h3><p className="mt-3 text-sm leading-7 text-black/55">目前包含 DJI Neo 空拍機、智慧飛行電池與 RC-N3 遙控器。租借前請確認相容設備、目的地飛行規定與攜帶限制。</p></article>
+        <article><Smartphone className="text-[#df4d5f]" size={24} /><h3 className="mt-4 font-bold">旅遊與演唱會手機租借</h3><p className="mt-3 text-sm leading-7 text-black/55">需要望遠拍攝、夜景或錄影設備時，可依上架機型比較商品說明、每日價格與可預約日期，並在使用前完成設備測試。</p></article>
+        <article><Plane className="text-[#247253]" size={24} /><h3 className="mt-4 font-bold">空拍機與攝影配件租借</h3><p className="mt-3 text-sm leading-7 text-black/55">空拍機、電池與遙控器等配件會依實際庫存陸續上架。租借前請確認相容設備、目的地飛行規定與攜帶限制。</p></article>
         <article><CheckCircle2 className="text-[#b98a2e]" size={24} /><h3 className="mt-4 font-bold">租期、取件與歸還</h3><p className="mt-3 text-sm leading-7 text-black/55">各商品可設定不同階梯價格與免運條件。選擇日期後系統會顯示租金，宅配或面交方式則以結帳頁當下資訊為準。</p></article>
       </div></div>
     </section>

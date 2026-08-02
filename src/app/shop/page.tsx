@@ -424,7 +424,7 @@ export default function PhysicalShopPage() {
 
       <section className="border-y border-black/8 bg-white px-4 py-10 md:px-6">
         <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-3">
-          <div><h2 className="text-xl font-bold">目前上架的旅遊租借設備</h2><p className="mt-3 text-sm leading-7 text-black/55">依正式上架商品整理 S26 Ultra 漫遊藍手機、DJI Neo 空拍機、智慧飛行電池與 RC-N3 遙控器，適合自由行、演唱會與攝影旅程。</p></div>
+          <div><h2 className="text-xl font-bold">旅遊與攝影設備租借</h2><p className="mt-3 text-sm leading-7 text-black/55">提供手機、空拍機與相關攝影配件等租借分類，適合自由行、演唱會及攝影旅程；實際型號會依最新上架商品更新。</p></div>
           <div><h2 className="text-lg font-bold">手機與空拍機租借</h2><p className="mt-3 text-sm leading-7 text-black/55">比較每日租金、租期優惠、可預約日期與配送方式；相關電池與遙控器也可依設備需求一併安排。</p><Link href="/shop/rental" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#247253] hover:text-[#174d38]">查看租借商品 <ArrowRight size={15} /></Link></div>
           <div><h2 className="text-lg font-bold">出國上網方案</h2><p className="mt-3 text-sm leading-7 text-black/55">出發日本可比較日本網卡、日本 eSIM 吃到飽、KDDI 與 SoftBank 網路方案；其他目的地也可依國家查看。</p><div className="mt-4 flex flex-wrap gap-4"><Link href="/esim/japan" className="text-sm font-bold text-[#df4d5f] hover:text-[#b93749]">日本網卡</Link><Link href="/esim" className="text-sm font-bold text-[#247253] hover:text-[#174d38]">全部 eSIM</Link></div></div>
         </div>
