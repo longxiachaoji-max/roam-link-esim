@@ -392,11 +392,20 @@ export default function PhysicalShopPage() {
       </header>
 
       <section className="border-b border-black/8 bg-[#dceee7]">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 px-4 py-10 md:flex-row md:items-end md:px-6">
-          <div><p className="mb-2 text-sm font-semibold text-[#247253]">一飛通全球漫遊 FirstRoamLink</p><h1 className="text-3xl font-bold md:text-4xl">一飛通商城</h1><p className="mt-3 max-w-xl text-sm leading-6 text-black/55">目前提供旅遊手機、空拍機與攝影配件租借，付款完成後由專人安排宅配或預約面交。</p></div>
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-4 py-10 md:flex-row md:items-end md:px-6">
+          <div className="max-w-3xl">
+            <p className="mb-2 text-sm font-semibold text-[#247253]">一飛通商城 FirstRoamLink</p>
+            <h1 className="text-3xl font-bold leading-tight md:text-4xl">【一飛通全球漫遊】出國上網 × 影音裝備一站式租借</h1>
+            <p className="mt-4 text-sm leading-6 text-black/60">專為旅遊與紀錄生活打造，提供全方位便利服務：</p>
+            <ul className="mt-2 space-y-1 text-sm leading-6 text-black/60">
+              <li>・演唱會神機與旗艦手機租借，清晰捕捉精彩瞬間</li>
+              <li>・空拍機與專業攝影配件，紀錄絕美航拍與旅遊大片</li>
+              <li>・全球漫遊上網與旅遊周邊商品</li>
+            </ul>
+          </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link href="/shop/rental" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#172028] px-4 font-semibold text-white hover:bg-[#283541]"><CalendarDays size={17} />租借商品專區</Link>
-            <span className="inline-flex items-center gap-2 text-black/50"><Package size={18} />台灣快速出貨・安心配送</span>
+            <span className="inline-flex max-w-sm items-start gap-2 leading-6 text-black/55"><Package className="mt-0.5 shrink-0" size={18} />快速發貨：完成付款後，即刻安排宅配寄送或專人預約面交！</span>
           </div>
         </div>
       </section>
