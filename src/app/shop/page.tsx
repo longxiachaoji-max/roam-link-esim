@@ -396,7 +396,7 @@ export default function PhysicalShopPage() {
           <div><p className="mb-2 text-sm font-semibold text-[#247253]">一飛通全球漫遊 FirstRoamLink</p><h1 className="text-3xl font-bold md:text-4xl">一飛通商城</h1><p className="mt-3 max-w-xl text-sm leading-6 text-black/55">目前提供旅遊手機、空拍機與攝影配件租借，付款完成後由專人安排宅配或預約面交。</p></div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link href="/shop/rental" className="inline-flex h-10 items-center gap-2 rounded-md bg-[#172028] px-4 font-semibold text-white hover:bg-[#283541]"><CalendarDays size={17} />租借商品專區</Link>
-            <span className="inline-flex items-center gap-2 text-black/50"><Package size={18} />台灣寄送 · 訂單進度由後台處理</span>
+            <span className="inline-flex items-center gap-2 text-black/50"><Package size={18} />台灣快速出貨・安心配送</span>
           </div>
         </div>
       </section>
