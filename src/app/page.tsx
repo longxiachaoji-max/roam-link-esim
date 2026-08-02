@@ -821,6 +821,22 @@ export default function Home() {
                 )
               ))}
             </div>
+            <a
+              href="https://lin.ee/Td0EgHE"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="加入一飛通 LINE 好友"
+              className="mt-4 inline-flex min-h-11 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#06c755]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- LINE serves the official localized button. */}
+              <img
+                src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png"
+                alt="加入 LINE 好友"
+                width="116"
+                height="36"
+                className="h-9 w-auto"
+              />
+            </a>
           </div>
         </div>
       </footer>
