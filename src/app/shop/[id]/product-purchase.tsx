@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, ShoppingBag } from 'lucide-react';
+import { Check, MessageCircle, ShoppingBag } from 'lucide-react';
 import type { PhysicalProduct } from '@/lib/physical-store';
 import {
   mergePhysicalCartSnapshots,
@@ -116,17 +116,11 @@ export default function ProductPurchase({ product }: { product: PhysicalProduct 
           href="https://lin.ee/Td0EgHE"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="加入一飛通 LINE 好友"
-          className="mt-3 inline-flex min-h-11 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#06c755]"
+          aria-label="透過 LINE 聯繫客服"
+          className="mt-3 inline-flex h-11 items-center gap-2 rounded-md bg-[#06c755] px-4 text-sm font-bold text-white hover:bg-[#05b84e] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#06c755]"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- LINE serves the official localized button. */}
-          <img
-            src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png"
-            alt="加入 LINE 好友"
-            width="116"
-            height="36"
-            className="h-9 w-auto"
-          />
+          <MessageCircle size={18} />
+          聯繫客服
         </a>
       </div>
     </>}
