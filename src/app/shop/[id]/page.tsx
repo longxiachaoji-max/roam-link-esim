@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { getPhysicalStoreAdmin, normalizePhysicalProduct, PHYSICAL_PRODUCT_CATEGORIES } from '@/lib/physical-store';
 import { serializeJsonLd } from '@/lib/json-ld';
@@ -78,10 +78,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
     <header className="border-b border-black/8 bg-white"><div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6"><Link href="/shop" className="font-bold leading-tight"><span className="block text-xs text-black/55">一飛通全球漫遊</span><span className="block text-base text-[#df4d5f]">FirstRoamLink</span></Link><Link href="/" className="text-sm text-black/50 hover:text-black">eSIM 方案</Link></div></header>
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-10"><Link href={categoryHref} className="mb-6 inline-flex items-center gap-2 text-sm text-black/50 hover:text-black"><ArrowLeft size={16} /> {categoryBackLabel}</Link>
-      {product.category === 'rental' && <div className="mb-6 flex items-start gap-3 rounded-md border border-[#06c755]/25 bg-[#eafaf0] px-4 py-3 text-sm leading-6 text-[#174d38]">
-        <MessageCircle className="mt-0.5 shrink-0 text-[#06a944]" size={18} />
-        <p>如需面交，請先<a href="https://lin.ee/Td0EgHE" target="_blank" rel="noopener noreferrer" className="mx-1 font-bold underline decoration-[#06a944]/40 underline-offset-4 hover:text-[#06a944]">聯繫客服</a>預約時間後再下單。</p>
-      </div>}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,.9fr)]">
         <ProductGallery images={product.images} productName={product.name} />
         <div><Link href={categoryHref} className="mb-3 inline-block text-sm font-semibold text-[#247253] hover:text-[#174d38]">{categoryLabel}</Link><h1 className="text-3xl font-bold leading-tight">{product.name}</h1>{product.summary && <p className="mt-4 leading-7 text-black/55">{product.summary}</p>}<ProductPurchase product={product} />
