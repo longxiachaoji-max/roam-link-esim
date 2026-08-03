@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
+import { getHiddenSiteConfigComments, stripHiddenSiteConfig } from '@/lib/site-settings-hidden-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,20 +9,14 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const HIDDEN_CONFIG_PATTERN = /\n?(<!--(?:PRODUCT_SORT_CONFIG|NOTIFICATION_SETTINGS|CONTACT_INFO|TRAFFIC_ANALYTICS|REFERRAL_CONFIG|PAYMENT_LIMITS|MICROESIM_FAVORITES):[\s\S]*?-->)\n?/g;
-
-function stripSortConfig(usageGuide: string | null) {
-  return (usageGuide || '').replace(HIDDEN_CONFIG_PATTERN, '').trim();
-}
-
-function getHiddenConfigComments(usageGuide: string | null) {
-  return Array.from((usageGuide || '').matchAll(HIDDEN_CONFIG_PATTERN)).map(match => match[1]).filter(Boolean);
-}
-
 function withExistingSortConfig(nextUsageGuide: string, currentUsageGuide: string | null) {
-  const hiddenConfigComments = getHiddenConfigComments(currentUsageGuide);
-  const cleanGuide = stripSortConfig(nextUsageGuide);
+  const hiddenConfigComments = getHiddenSiteConfigComments(currentUsageGuide);
+  const cleanGuide = stripHiddenSiteConfig(nextUsageGuide);
   return `${cleanGuide}${hiddenConfigComments.length ? `${cleanGuide ? '\n\n' : ''}${hiddenConfigComments.join('\n\n')}` : ''}`;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '網站設定操作失敗';
 }
 
 // GET - 取得網站設定
@@ -42,11 +37,11 @@ export async function GET(request: Request) {
     return NextResponse.json({
       settings: {
         ...data,
-        usage_guide: stripSortConfig(data.usage_guide)
+        usage_guide: stripHiddenSiteConfig(data.usage_guide)
       }
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -58,7 +53,7 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { hero_badge, hero_title, hero_subtitle, section_title, usage_guide } = body;
 
-    const updateData: any = { updated_at: new Date().toISOString() };
+    const updateData: Record<string, string> = { updated_at: new Date().toISOString() };
     if (hero_badge !== undefined) updateData.hero_badge = hero_badge;
     if (hero_title !== undefined) updateData.hero_title = hero_title;
     if (hero_subtitle !== undefined) updateData.hero_subtitle = hero_subtitle;
@@ -83,7 +78,7 @@ export async function PUT(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

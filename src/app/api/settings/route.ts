@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { stripHiddenSiteConfig } from '@/lib/site-settings-hidden-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,7 +8,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const HIDDEN_CONFIG_PATTERN = /\n?<!--(?:PRODUCT_SORT_CONFIG|NOTIFICATION_SETTINGS|CONTACT_INFO|TRAFFIC_ANALYTICS|REFERRAL_CONFIG|PAYMENT_LIMITS):[\s\S]*?-->\n?/g;
 const CONTACT_INFO_PATTERN = /\n?<!--CONTACT_INFO:([\s\S]*?)-->\n?/;
 
 interface ContactInfo {
@@ -40,8 +40,8 @@ const DEFAULT_CONTACT_INFO: ContactInfo = {
   ]
 };
 
-function stripSortConfig(usageGuide: string | null) {
-  return (usageGuide || '').replace(HIDDEN_CONFIG_PATTERN, '').trim();
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '讀取網站設定失敗';
 }
 
 function parseContactInfo(usageGuide: string | null): ContactInfo {
@@ -126,11 +126,11 @@ export async function GET() {
     return NextResponse.json({
       settings: {
         ...data,
-        usage_guide: stripSortConfig(data.usage_guide),
+        usage_guide: stripHiddenSiteConfig(data.usage_guide),
         ...contactInfo
       }
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
