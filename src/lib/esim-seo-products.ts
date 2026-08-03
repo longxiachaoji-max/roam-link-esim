@@ -1,6 +1,7 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import type { EsimDestination } from '@/lib/esim-destinations';
+import { compareEsimPlanOrder } from '@/lib/esim-plan-sort';
 
 export interface EsimSeoPlan {
   id: string;
@@ -111,7 +112,7 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
         description: options.find(option => option.description)?.description || ''
       };
     })
-    .sort((a, b) => a.lowestPrice - b.lowestPrice || a.dataAmount.localeCompare(b.dataAmount, 'zh-Hant'));
+    .sort((a, b) => compareEsimPlanOrder(a.dataAmount, b.dataAmount));
 
   const searchablePlanText = normalized
     .map(plan => `${plan.name} ${plan.dataAmount} ${plan.description}`)

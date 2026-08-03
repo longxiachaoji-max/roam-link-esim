@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { compareEsimPlanOrder, compareEsimPlanPriority } from '@/lib/esim-plan-sort';
 
 export const dynamic = 'force-dynamic';
 
@@ -171,10 +172,12 @@ export async function GET() {
           isHiddenGem: (plan as any).isHiddenGem || false,
           options: plan.options.sort((a, b) => a.days - b.days)
         })).sort((a, b) => {
+          const priority = compareEsimPlanPriority(a.data, b.data);
+          if (priority !== 0) return priority;
           const planA = getSortIndex(sortConfig.plans, `${g.country}|${a.data}`);
           const planB = getSortIndex(sortConfig.plans, `${g.country}|${b.data}`);
           if (planA !== planB) return planA - planB;
-          return a.data.localeCompare(b.data, 'zh-Hant');
+          return compareEsimPlanOrder(a.data, b.data);
         })
       }))
       .sort((a, b) => {

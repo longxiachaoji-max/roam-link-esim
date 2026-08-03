@@ -1,6 +1,7 @@
 'use client';
 
 import { adminFetch } from '@/lib/admin-fetch';
+import { compareEsimPlanOrder } from '@/lib/esim-plan-sort';
 
 import { useState, useEffect, useRef } from 'react';
 import { CheckSquare, ChevronDown, ChevronUp, ClipboardList, GripVertical, Plus, RefreshCw, Replace, RotateCcw, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
@@ -236,7 +237,12 @@ export default function ProductsPage() {
     products
       .filter(product => product.country && product.data_amount)
       .map(product => `${product.country}|${product.data_amount}`)
-  ));
+  )).sort((left, right) => {
+    const [leftCountry, ...leftPlan] = left.split('|');
+    const [rightCountry, ...rightPlan] = right.split('|');
+    if (leftCountry !== rightCountry) return leftCountry.localeCompare(rightCountry, 'zh-Hant');
+    return compareEsimPlanOrder(leftPlan.join('|'), rightPlan.join('|'));
+  });
 
   const parseBatchText = (text: string) => {
     const lines = text.trim().split('\n').filter(l => l.trim());
@@ -1202,7 +1208,7 @@ export default function ProductsPage() {
               {/* Country Content */}
               {!collapsedGroups.has(country) && (
                 <div className="divide-y divide-white/5">
-                  {Object.entries(byData).map(([dataAmount, dataProducts]) => {
+                  {Object.entries(byData).sort(([left], [right]) => compareEsimPlanOrder(left, right)).map(([dataAmount, dataProducts]) => {
                     const dataIds = dataProducts.map(product => product.id);
                     const selectedInData = dataIds.filter(id => selectedProductIds.has(id)).length;
                     return (
@@ -1745,7 +1751,7 @@ export default function ProductsPage() {
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-xl font-bold text-white">前台商品排序</h2>
-                <p className="text-xs text-white/40 mt-1">控制前台國家與同國家內方案的顯示順序，未列入的項目會排在最後</p>
+                <p className="text-xs text-white/40 mt-1">國家可自訂順序；方案種類與流量大小由系統自動排列</p>
               </div>
               <button onClick={() => setIsSortOpen(false)} className="text-white/50 hover:text-white transition-colors">
                 <X className="w-6 h-6" />
@@ -1762,8 +1768,8 @@ export default function ProductsPage() {
             )}
 
             <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-white/50">
-              <p>拖曳項目可以調整順序，也可以用右側箭頭微調。</p>
-              <p className="mt-1">同一方案底下的 3天、5天、7天仍會自動照天數排列；未列入的新增項目會接在已設定排序後面。</p>
+              <p>國家可拖曳調整；方案固定依不限速吃到飽、限速吃到飽、計日型、計量型排列。</p>
+              <p className="mt-1">計日型與計量型會依用量由高至低；相同種類與用量才採用拖曳順序。新方案會自動套用規則，天數由短至長。</p>
             </div>
 
             {sortResult && (

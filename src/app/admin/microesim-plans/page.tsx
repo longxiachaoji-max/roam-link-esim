@@ -1,6 +1,7 @@
 'use client';
 
 import { adminFetch } from '@/lib/admin-fetch';
+import { compareEsimPlanOrder } from '@/lib/esim-plan-sort';
 
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Check, DownloadCloud, Filter, Loader2, Search, Star, UploadCloud } from 'lucide-react';
@@ -316,7 +317,11 @@ export default function MicroesimPlansPage() {
       ].join(' ').toLowerCase();
       return keywords.every(keyword => text.includes(keyword));
     });
-    if (sortField === 'default') return filtered;
+    if (sortField === 'default') return [...filtered].sort((a, b) =>
+      compareEsimPlanOrder(a.data_amount, b.data_amount)
+      || a.validity_days - b.validity_days
+      || a.name.localeCompare(b.name, 'zh-Hant', { numeric: true })
+    );
     return [...filtered].sort((a, b) => {
       const result = compareSortValues(getSortValue(a, sortField), getSortValue(b, sortField));
       return sortDirection === 'asc' ? result : -result;

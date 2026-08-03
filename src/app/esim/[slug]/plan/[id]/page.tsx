@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, Clock3, Globe2, ShoppingCart, Wifi } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, ShoppingCart, Wifi } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
   getEsimDestination,
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
-import { getEsimPlanDetail } from '@/lib/esim-seo-products';
+import { getEsimDestinationPlanSummary, getEsimPlanDetail } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
 import PlanPurchase from './plan-purchase';
 
@@ -52,6 +52,9 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
   const result = await loadPlan(params);
   if (!result) notFound();
   const { destination, plan } = result;
+  const destinationSummary = await getEsimDestinationPlanSummary(destination);
+  const relatedPlans = destinationSummary.plans
+    .filter(candidate => candidate.dataAmount !== plan.dataAmount);
   const destinationHref = getEsimDestinationHref(destination);
   const canonicalUrl = `https://firstesim.space/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(plan.canonicalId)}`;
   const productData = {
@@ -124,6 +127,23 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
           <div className="border-t border-white/10 pt-5"><h3 className="font-bold text-[#56d5ea]">購買與安裝提醒</h3><div className="mt-3 space-y-3 text-sm leading-6 text-white/55"><p className="flex gap-2"><CheckCircle2 className="mt-1 shrink-0 text-[#56d5ea]" size={15} />購買前確認手機支援 eSIM，且未受電信商鎖定。</p><p className="flex gap-2"><CheckCircle2 className="mt-1 shrink-0 text-[#56d5ea]" size={15} />請於啟用日前或旅程出發前，在穩定網路環境完成安裝。</p><p className="flex gap-2"><CheckCircle2 className="mt-1 shrink-0 text-[#56d5ea]" size={15} />熱點分享、計日方式與其他限制，以方案說明為準。</p></div></div>
         </div>
       </section>
+
+      {relatedPlans.length > 0 && <section className="border-t border-white/10 py-11" aria-labelledby="related-heading">
+        <p className="text-xs font-bold text-[#56d5ea]">同國家方案</p>
+        <h2 id="related-heading" className="mt-2 text-2xl font-bold">其他{destination.shortName} eSIM 方案</h2>
+        <p className="mt-2 text-sm text-white/40">依不限速吃到飽、限速吃到飽、計日型與計量型排序。</p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {relatedPlans.map(candidate => <Link
+            key={candidate.id}
+            href={`/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(candidate.id)}`}
+            className="group rounded-md border border-white/10 bg-[#181826] p-4 hover:border-[#56d5ea]/45"
+          >
+            <h3 className="font-bold leading-6">{candidate.dataAmount}</h3>
+            <p className="mt-3 text-xs leading-5 text-white/45">{candidate.availableDays.map(days => `${days} 天`).join('、')}</p>
+            <div className="mt-4 flex items-center justify-between gap-3"><span className="font-bold text-[#f5bd61]">NT${candidate.lowestPrice.toLocaleString()} 起</span><ArrowRight className="text-[#56d5ea] group-hover:text-white" size={15} /></div>
+          </Link>)}
+        </div>
+      </section>}
 
       <Link href={destinationHref} className="inline-flex items-center gap-2 text-sm font-bold text-white/50 hover:text-white"><ArrowLeft size={15} />返回{destination.name}方案</Link>
     </div>
