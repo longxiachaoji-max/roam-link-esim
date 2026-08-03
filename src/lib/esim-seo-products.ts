@@ -12,12 +12,29 @@ export interface EsimSeoPlan {
   description: string;
 }
 
+export interface EsimSeoPlanGroup {
+  id: string;
+  country: string;
+  dataAmount: string;
+  availableDays: number[];
+  lowestPrice: number;
+  description: string;
+}
+
+export interface EsimPlanDetail {
+  canonicalId: string;
+  country: string;
+  dataAmount: string;
+  description: string;
+  options: EsimSeoPlan[];
+}
+
 export interface EsimDestinationPlanSummary {
   planCount: number;
   lowestPrice: number | null;
   availableDays: number[];
   featureLabels: string[];
-  plans: EsimSeoPlan[];
+  plans: EsimSeoPlanGroup[];
 }
 
 export async function getActiveEsimCountries() {
@@ -73,15 +90,28 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
     description: String(row.description || '').trim()
   })).filter(plan => plan.validityDays > 0 && plan.price > 0);
 
-  const representativePlans: EsimSeoPlan[] = [];
-  const seen = new Set<string>();
+  const groupedPlans = new Map<string, EsimSeoPlan[]>();
   for (const plan of normalized) {
-    const key = `${plan.dataAmount}|${plan.validityDays}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    representativePlans.push(plan);
-    if (representativePlans.length >= 12) break;
+    const group = groupedPlans.get(plan.dataAmount) || [];
+    group.push(plan);
+    groupedPlans.set(plan.dataAmount, group);
   }
+
+  const representativePlans = [...groupedPlans.values()]
+    .map(options => {
+      const canonicalOption = [...options].sort((a, b) =>
+        a.validityDays - b.validityDays || a.price - b.price || a.id.localeCompare(b.id)
+      )[0];
+      return {
+        id: canonicalOption.id,
+        country: canonicalOption.country,
+        dataAmount: canonicalOption.dataAmount,
+        availableDays: [...new Set(options.map(option => option.validityDays))].sort((a, b) => a - b),
+        lowestPrice: Math.min(...options.map(option => option.price)),
+        description: options.find(option => option.description)?.description || ''
+      };
+    })
+    .sort((a, b) => a.lowestPrice - b.lowestPrice || a.dataAmount.localeCompare(b.dataAmount, 'zh-Hant'));
 
   const searchablePlanText = normalized
     .map(plan => `${plan.name} ${plan.dataAmount} ${plan.description}`)
@@ -100,4 +130,91 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
     featureLabels,
     plans: representativePlans
   };
+}
+
+export async function getEsimPlanDetail(productId: string, destination: EsimDestination): Promise<EsimPlanDetail | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!url || !serviceRoleKey) return null;
+
+  const supabase = createClient(url, serviceRoleKey);
+  const { data: selected, error: selectedError } = await supabase
+    .from('products')
+    .select('id, name, country, data_amount, validity_days, price, description')
+    .eq('id', productId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (selectedError || !selected || !destination.countries.includes(String(selected.country || ''))) return null;
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, country, data_amount, validity_days, price, description')
+    .eq('is_active', true)
+    .eq('country', selected.country)
+    .eq('data_amount', selected.data_amount)
+    .order('validity_days', { ascending: true })
+    .order('price', { ascending: true });
+
+  if (error || !data?.length) return null;
+
+  const normalizedOptions = data.map(row => ({
+    id: String(row.id),
+    name: String(row.name || ''),
+    country: String(row.country || ''),
+    dataAmount: String(row.data_amount || '標準方案'),
+    validityDays: Number(row.validity_days || 0),
+    price: Number(row.price || 0),
+    description: String(row.description || '').trim()
+  })).filter(option => option.validityDays > 0 && option.price > 0);
+
+  const seenDays = new Set<number>();
+  const options = normalizedOptions.filter(option => {
+    if (seenDays.has(option.validityDays)) return false;
+    seenDays.add(option.validityDays);
+    return true;
+  });
+
+  if (!options.length) return null;
+
+  return {
+    canonicalId: options[0].id,
+    country: options[0].country,
+    dataAmount: options[0].dataAmount,
+    description: options.find(option => option.description)?.description || '',
+    options
+  };
+}
+
+export async function getActiveEsimPlanSitemapEntries() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!url || !serviceRoleKey) return [];
+
+  const supabase = createClient(url, serviceRoleKey);
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, country, data_amount, validity_days, price')
+    .eq('is_active', true)
+    .order('validity_days', { ascending: true })
+    .order('price', { ascending: true })
+    .limit(5000);
+
+  if (error || !data) return [];
+
+  const groups = new Map<string, { id: string; country: string }>();
+  for (const row of data) {
+    const country = String(row.country || '').trim();
+    const dataAmount = String(row.data_amount || '').trim();
+    if (!country || !dataAmount) continue;
+    const key = `${country}\u0000${dataAmount}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: String(row.id),
+        country
+      });
+    }
+  }
+
+  return [...groups.values()];
 }

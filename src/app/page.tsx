@@ -84,8 +84,11 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'plans' | 'guide'>('plans');
 
   useEffect(() => {
-    const requestedCountry = new URLSearchParams(window.location.search).get('country');
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedCountry = searchParams.get('country');
     if (requestedCountry) setSelectedCountry(requestedCountry);
+    if (searchParams.get('cart') === 'open') setIsCartOpen(true);
+    if (searchParams.get('checkout') === 'open') setIsCheckoutOpen(true);
     trackPageView('roamlink_page_view');
     setIsApplePayAvailable('ApplePaySession' in window);
 

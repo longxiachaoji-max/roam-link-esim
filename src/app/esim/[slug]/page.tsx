@@ -37,6 +37,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
+function getPlanHref(destinationSlug: string, productId: string) {
+  return `/esim/${encodeURIComponent(destinationSlug)}/plan/${encodeURIComponent(productId)}`;
+}
+
 function planStructuredData(destination: NonNullable<ReturnType<typeof getEsimDestination>>, plans: Awaited<ReturnType<typeof getEsimDestinationPlanSummary>>['plans']) {
   return {
     '@context': 'https://schema.org',
@@ -47,16 +51,17 @@ function planStructuredData(destination: NonNullable<ReturnType<typeof getEsimDe
       position: index + 1,
       item: {
         '@type': 'Product',
-        name: `${destination.shortName} ${plan.dataAmount} ${plan.validityDays} 天 eSIM`,
+        name: `${destination.shortName} ${plan.dataAmount} eSIM`,
         description: plan.description || destination.description,
         category: 'Travel eSIM',
         brand: { '@type': 'Brand', name: '一飛通全球漫遊 FirstRoamLink' },
         offers: {
-          '@type': 'Offer',
+          '@type': 'AggregateOffer',
           priceCurrency: 'TWD',
-          price: plan.price,
+          lowPrice: plan.lowestPrice,
+          offerCount: plan.availableDays.length,
           availability: 'https://schema.org/InStock',
-          url: `https://firstesim.space/?country=${encodeURIComponent(destination.countries[0])}#products`
+          url: `https://firstesim.space${getPlanHref(destination.slug, plan.id)}`
         }
       }
     }))
@@ -123,7 +128,7 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
             <div className="mb-4 text-4xl" aria-hidden="true">{destination.flag}</div>
             <h1 className="max-w-4xl text-3xl font-black leading-tight md:text-5xl">{destination.title}</h1>
             <p className="mt-5 max-w-3xl text-sm leading-7 text-white/60 md:text-base">{destination.intro}</p>
-            <Link href={shopHref} className="mt-7 inline-flex h-11 items-center gap-2 rounded-md bg-[#ff5a69] px-5 text-sm font-bold text-white hover:bg-[#ff7180]">查看上架方案與價格 <ArrowRight size={16} /></Link>
+            <Link href="#plans-heading" className="mt-7 inline-flex h-11 items-center gap-2 rounded-md bg-[#ff5a69] px-5 text-sm font-bold text-white hover:bg-[#ff7180]">查看上架方案與價格 <ArrowRight size={16} /></Link>
           </div>
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-white/10 bg-white/10 md:grid-cols-1">
             <div className="bg-[#171724] p-4"><dt className="text-xs text-white/40">目前上架</dt><dd className="mt-1 text-xl font-bold">{summary.planCount > 0 ? `${summary.planCount} 款` : '準備中'}</dd></div>
@@ -146,14 +151,17 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
         ) : (
           <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {summary.plans.map(plan => (
-              <article key={plan.id} className="rounded-md border border-white/10 bg-[#181826] p-5">
-                <p className="text-xs font-semibold text-[#56d5ea]">{plan.country}</p>
-                <h3 className="mt-2 font-bold leading-6">{plan.dataAmount}</h3>
-                <div className="mt-4 flex items-end justify-between gap-3">
-                  <span className="inline-flex items-center gap-1.5 text-sm text-white/50"><CalendarDays size={14} />{plan.validityDays} 天</span>
-                  <span className="font-bold text-[#f5bd61]">NT${plan.price.toLocaleString()}</span>
-                </div>
-                {plan.description && <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/40">{plan.description}</p>}
+              <article key={plan.id} className="group rounded-md border border-white/10 bg-[#181826] p-5 transition-colors hover:border-[#56d5ea]/45">
+                <Link href={getPlanHref(destination.slug, plan.id)} className="block">
+                  <p className="text-xs font-semibold text-[#56d5ea]">{plan.country}</p>
+                  <h3 className="mt-2 font-bold leading-6">{plan.dataAmount}</h3>
+                  <div className="mt-4 flex items-end justify-between gap-3">
+                    <span className="inline-flex items-center gap-1.5 text-sm text-white/50"><CalendarDays size={14} />{plan.availableDays.map(days => `${days} 天`).join('、')}</span>
+                    <span className="shrink-0 font-bold text-[#f5bd61]">NT${plan.lowestPrice.toLocaleString()} 起</span>
+                  </div>
+                  {plan.description && <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/40">{plan.description}</p>}
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-[#56d5ea] group-hover:text-white">查看方案與選擇使用天數 <ArrowRight size={13} /></span>
+                </Link>
               </article>
             ))}
           </div>

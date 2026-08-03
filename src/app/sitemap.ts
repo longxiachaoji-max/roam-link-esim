@@ -5,14 +5,15 @@ import {
   getEsimDestinationForCountry,
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
-import { getActiveEsimCountries } from '@/lib/esim-seo-products';
+import { getActiveEsimCountries, getActiveEsimPlanSitemapEntries } from '@/lib/esim-seo-products';
 import { getActivePhysicalProductSitemapEntries } from '@/lib/physical-store-seo';
 
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [activeCountries, physicalProducts] = await Promise.all([
+  const [activeCountries, esimPlans, physicalProducts] = await Promise.all([
     getActiveEsimCountries(),
+    getActiveEsimPlanSitemapEntries(),
     getActivePhysicalProductSitemapEntries()
   ]);
   const destinations = [...ESIM_DESTINATIONS];
@@ -22,6 +23,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (automaticDestination) destinations.push(automaticDestination);
   }
   const destinationUrls = [...new Set(destinations.map(destination => getEsimDestinationHref(destination)))];
+  const planUrls = esimPlans.flatMap(plan => {
+    const destination = getEsimDestinationForCountry(plan.country) || createAutomaticEsimDestination(plan.country);
+    return destination
+      ? [{
+          url: `https://firstesim.space/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(plan.id)}`
+        }]
+      : [];
+  });
   const lastModified = new Date();
 
   return [
@@ -42,6 +51,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified,
       changeFrequency: 'daily' as const,
       priority: 0.8
+    })),
+    ...planUrls.map(plan => ({
+      url: plan.url,
+      lastModified,
+      changeFrequency: 'weekly' as const,
+      priority: 0.75
     })),
     {
       url: 'https://firstesim.space/shop',
