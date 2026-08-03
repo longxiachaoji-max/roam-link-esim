@@ -7,6 +7,7 @@ import {
   getEsimDestination,
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
+import { buildEsimPlanSeo } from '@/lib/esim-plan-seo';
 import { getEsimDestinationPlanSummary, getEsimPlanDetail } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
 import PlanPurchase from './plan-purchase';
@@ -30,18 +31,23 @@ export async function generateMetadata({ params }: PlanPageProps): Promise<Metad
   const result = await loadPlan(params);
   if (!result) return { title: '找不到 eSIM 方案' };
   const { destination, plan } = result;
-  const title = `${destination.shortName} ${plan.dataAmount} eSIM｜選擇使用天數`;
-  const description = plan.description || `查看 ${destination.shortName} ${plan.dataAmount} eSIM 的使用天數、價格與購買說明。`;
+  const seo = buildEsimPlanSeo({
+    destinationName: destination.shortName,
+    dataAmount: plan.dataAmount,
+    description: plan.description,
+    options: plan.options
+  });
   const canonicalPath = `/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(plan.canonicalId)}`;
 
   return {
-    title,
-    description,
+    title: seo.title,
+    description: seo.description,
+    keywords: seo.keywords,
     alternates: { canonical: canonicalPath },
     openGraph: {
       type: 'website',
-      title,
-      description,
+      title: seo.title,
+      description: seo.description,
       url: `https://firstesim.space${canonicalPath}`,
       siteName: '一飛通全球漫遊 FirstRoamLink'
     }
@@ -53,6 +59,12 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
   if (!result) notFound();
   const { destination, plan } = result;
   const destinationSummary = await getEsimDestinationPlanSummary(destination);
+  const seo = buildEsimPlanSeo({
+    destinationName: destination.shortName,
+    dataAmount: plan.dataAmount,
+    description: plan.description,
+    options: plan.options
+  });
   const relatedPlans = destinationSummary.plans
     .filter(candidate => candidate.dataAmount !== plan.dataAmount);
   const destinationHref = getEsimDestinationHref(destination);
@@ -61,7 +73,7 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: `${destination.shortName} ${plan.dataAmount} eSIM`,
-    description: plan.description || destination.description,
+    description: seo.description,
     category: 'Travel eSIM',
     brand: { '@type': 'Brand', name: '一飛通全球漫遊 FirstRoamLink' },
     offers: plan.options.map(option => ({
@@ -108,7 +120,7 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
           <div className="text-4xl" aria-hidden="true">{destination.flag}</div>
           <p className="mt-5 text-sm font-bold text-[#56d5ea]">{destination.name}</p>
           <h1 className="mt-2 max-w-3xl text-3xl font-black leading-tight md:text-5xl">{plan.dataAmount}</h1>
-          <p className="mt-5 max-w-3xl text-sm leading-7 text-white/60 md:text-base">{plan.description || `適合前往${destination.shortName}旅遊或出差使用，可依完整行程選擇合適的使用天數。`}</p>
+          <p className="mt-5 max-w-3xl text-sm leading-7 text-white/60 md:text-base">{seo.description}</p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             <div className="flex gap-3"><Globe2 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">適用地區</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.country}</p></div></div>
