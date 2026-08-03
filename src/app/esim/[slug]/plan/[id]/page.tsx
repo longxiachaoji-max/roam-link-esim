@@ -134,8 +134,8 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
 
       <section className="py-11" aria-labelledby="details-heading">
         <h2 id="details-heading" className="text-2xl font-bold">方案詳細介紹</h2>
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <div className="border-t border-white/10 pt-5"><h3 className="font-bold text-[#56d5ea]">方案說明</h3><p className="mt-3 whitespace-pre-line text-sm leading-7 text-white/55">{plan.description || '此方案詳細說明整理中，購買前請依頁面顯示的流量規格與使用天數選擇。'}</p></div>
+        <div className={`mt-6 grid gap-6 ${plan.description ? 'md:grid-cols-2' : ''}`}>
+          {plan.description && <div className="border-t border-white/10 pt-5"><h3 className="font-bold text-[#56d5ea]">方案說明</h3><p className="mt-3 whitespace-pre-line text-sm leading-7 text-white/55">{plan.description}</p></div>}
           <div className="border-t border-white/10 pt-5"><h3 className="font-bold text-[#56d5ea]">購買與安裝提醒</h3><div className="mt-3 space-y-3 text-sm leading-6 text-white/55"><p className="flex gap-2"><CheckCircle2 className="mt-1 shrink-0 text-[#56d5ea]" size={15} />購買前確認手機支援 eSIM，且未受電信商鎖定。</p><p className="flex gap-2"><CheckCircle2 className="mt-1 shrink-0 text-[#56d5ea]" size={15} />請於啟用日前或旅程出發前，在穩定網路環境完成安裝。</p><p className="flex gap-2"><CheckCircle2 className="mt-1 shrink-0 text-[#56d5ea]" size={15} />熱點分享、計日方式與其他限制，以方案說明為準。</p></div></div>
         </div>
       </section>

@@ -37,7 +37,8 @@ export function buildEsimPlanSeo({
 }: EsimPlanSeoInput) {
   const destination = compactText(destinationName);
   const specification = compactText(dataAmount) || '行動上網';
-  const publicNote = compactText(description);
+  const rawPublicNote = compactText(description);
+  const publicNote = rawPublicNote === '熱點依當地電信規則' ? '' : rawPublicNote;
   const availableDays = formatAvailableDays(options);
   const prices = options.map(option => option.price).filter(value => value > 0);
   const lowestPrice = prices.length ? Math.min(...prices) : null;

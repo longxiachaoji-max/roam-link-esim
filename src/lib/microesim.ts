@@ -493,7 +493,7 @@ function getHotspotSharing(plan: MicroesimPlan, noHotspot: boolean) {
   const text = `${plan.channel_dataplan_name} ${plan.special_desc || ''}`.toLowerCase();
   const hotspotMatch = text.match(/hotspot[^0-9]*(\d+(?:\.\d+)?)\s*(gb|mb)/i);
   if (hotspotMatch) return `熱點分享${hotspotMatch[1]}${hotspotMatch[2].toUpperCase()}`;
-  return '熱點依當地電信規則';
+  return '';
 }
 
 function convertCostToTwd(price: number, currency: string, rates: { hkd: number; usd: number }) {
