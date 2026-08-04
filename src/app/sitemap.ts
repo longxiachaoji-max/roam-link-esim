@@ -10,6 +10,11 @@ import { getActivePhysicalProductSitemapEntries } from '@/lib/physical-store-seo
 
 export const revalidate = 3600;
 
+function latestModified(values: Array<string | null | undefined>) {
+  const latest = values.filter((value): value is string => Boolean(value)).sort().at(-1);
+  return latest ? new Date(latest) : undefined;
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [activeCountries, esimPlans, physicalProducts] = await Promise.all([
     getActiveEsimCountries(),
@@ -22,57 +27,68 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const automaticDestination = createAutomaticEsimDestination(country);
     if (automaticDestination) destinations.push(automaticDestination);
   }
-  const destinationUrls = [...new Set(destinations.map(destination => getEsimDestinationHref(destination)))];
+  const destinationByPath = new Map(
+    destinations.map(destination => [getEsimDestinationHref(destination), destination])
+  );
   const planUrls = esimPlans.flatMap(plan => {
     const destination = getEsimDestinationForCountry(plan.country) || createAutomaticEsimDestination(plan.country);
     return destination
       ? [{
-          url: `https://firstesim.space/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(plan.id)}`
+          url: `https://firstesim.space/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(plan.id)}`,
+          destinationPath: getEsimDestinationHref(destination),
+          updatedAt: plan.updatedAt
         }]
       : [];
   });
-  const lastModified = new Date();
+  const latestEsimUpdate = latestModified(esimPlans.map(plan => plan.updatedAt));
+  const latestPhysicalUpdate = latestModified(physicalProducts.map(product => product.updatedAt));
+  const latestSiteUpdate = latestModified([
+    latestEsimUpdate?.toISOString(),
+    latestPhysicalUpdate?.toISOString()
+  ]);
 
   return [
     {
       url: 'https://firstesim.space',
-      lastModified,
+      lastModified: latestSiteUpdate,
       changeFrequency: 'daily',
       priority: 1
     },
     {
       url: 'https://firstesim.space/esim',
-      lastModified,
+      lastModified: latestEsimUpdate,
       changeFrequency: 'daily',
       priority: 0.9
     },
-    ...destinationUrls.map(path => ({
+    ...[...destinationByPath.keys()].map(path => ({
       url: `https://firstesim.space${path}`,
-      lastModified,
+      lastModified: latestModified(
+        planUrls.filter(plan => plan.destinationPath === path).map(plan => plan.updatedAt)
+      ),
       changeFrequency: 'daily' as const,
       priority: 0.8
     })),
     ...planUrls.map(plan => ({
       url: plan.url,
-      lastModified,
+      lastModified: plan.updatedAt ? new Date(plan.updatedAt) : undefined,
       changeFrequency: 'weekly' as const,
       priority: 0.75
     })),
     {
       url: 'https://firstesim.space/shop',
-      lastModified,
+      lastModified: latestPhysicalUpdate,
       changeFrequency: 'daily',
       priority: 0.8
     },
     {
       url: 'https://firstesim.space/shop/rental',
-      lastModified,
+      lastModified: latestPhysicalUpdate,
       changeFrequency: 'daily',
       priority: 0.85
     },
     ...physicalProducts.map(product => ({
       url: `https://firstesim.space/shop/${encodeURIComponent(product.id)}`,
-      lastModified: product.updatedAt ? new Date(product.updatedAt) : lastModified,
+      lastModified: product.updatedAt ? new Date(product.updatedAt) : undefined,
       changeFrequency: 'weekly' as const,
       priority: product.category === 'rental' ? 0.8 : 0.7
     }))

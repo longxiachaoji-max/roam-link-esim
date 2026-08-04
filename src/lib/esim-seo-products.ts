@@ -38,6 +38,12 @@ export interface EsimDestinationPlanSummary {
   plans: EsimSeoPlanGroup[];
 }
 
+export interface EsimPlanSitemapEntry {
+  id: string;
+  country: string;
+  updatedAt: string | null;
+}
+
 export async function getActiveEsimCountries() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -187,7 +193,7 @@ export async function getEsimPlanDetail(productId: string, destination: EsimDest
   };
 }
 
-export async function getActiveEsimPlanSitemapEntries() {
+export async function getActiveEsimPlanSitemapEntries(): Promise<EsimPlanSitemapEntry[]> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   if (!url || !serviceRoleKey) return [];
@@ -195,7 +201,7 @@ export async function getActiveEsimPlanSitemapEntries() {
   const supabase = createClient(url, serviceRoleKey);
   const { data, error } = await supabase
     .from('products')
-    .select('id, country, data_amount, validity_days, price')
+    .select('id, country, data_amount, validity_days, price, updated_at')
     .eq('is_active', true)
     .order('validity_days', { ascending: true })
     .order('price', { ascending: true })
@@ -203,17 +209,22 @@ export async function getActiveEsimPlanSitemapEntries() {
 
   if (error || !data) return [];
 
-  const groups = new Map<string, { id: string; country: string }>();
+  const groups = new Map<string, EsimPlanSitemapEntry>();
   for (const row of data) {
     const country = String(row.country || '').trim();
     const dataAmount = String(row.data_amount || '').trim();
     if (!country || !dataAmount) continue;
     const key = `${country}\u0000${dataAmount}`;
-    if (!groups.has(key)) {
+    const updatedAt = row.updated_at ? String(row.updated_at) : null;
+    const existing = groups.get(key);
+    if (!existing) {
       groups.set(key, {
         id: String(row.id),
-        country
+        country,
+        updatedAt
       });
+    } else if (updatedAt && (!existing.updatedAt || updatedAt > existing.updatedAt)) {
+      existing.updatedAt = updatedAt;
     }
   }
 
