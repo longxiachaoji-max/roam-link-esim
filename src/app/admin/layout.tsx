@@ -47,6 +47,7 @@ export default function AdminLayout({
     { name: '流量統計', href: '/admin/analytics' },
     { name: '資源監控', href: '/admin/resource-monitor' },
     { name: '訂單管理', href: '/admin/orders' },
+    { name: '商品評論', href: '/admin/reviews' },
     { name: '商品管理', href: '/admin/products' },
     { name: '實體商品管理', href: '/admin/physical-products' },
     { name: '實體商品訂單', href: '/admin/physical-orders' },

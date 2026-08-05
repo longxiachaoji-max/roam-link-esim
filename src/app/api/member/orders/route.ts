@@ -25,6 +25,7 @@ interface MemberInventoryResult extends Record<string, unknown> {
 interface MemberOrderItemResult extends Record<string, unknown> {
   products: MemberProductResult | MemberProductResult[] | null;
   e_sim_inventory: MemberInventoryResult | MemberInventoryResult[] | null;
+  product_reviews: Record<string, unknown> | Record<string, unknown>[] | null;
 }
 
 interface MemberOrderResult extends Record<string, unknown> {
@@ -73,6 +74,15 @@ export async function GET(request: Request) {
           supplier_status,
           supplier_last_checked_at,
           supplier_error,
+          product_reviews (
+            id,
+            rating,
+            smoothness_rating,
+            comment,
+            is_visible,
+            created_at,
+            updated_at
+          ),
           products ( id, name, country, data_amount, validity_days, supplier, supplier_raw ),
           e_sim_inventory (
             id,
@@ -101,6 +111,7 @@ export async function GET(request: Request) {
       order_items: (order.order_items || []).map(item => {
         const product = Array.isArray(item.products) ? item.products[0] : item.products;
         const inventory = Array.isArray(item.e_sim_inventory) ? item.e_sim_inventory[0] : item.e_sim_inventory;
+        const review = Array.isArray(item.product_reviews) ? item.product_reviews[0] : item.product_reviews;
         const installationDeadline = inventory?.expiry_date
           || getMicroesimInstallationDeadline(product, null, order.created_at)
           || null;
@@ -115,6 +126,7 @@ export async function GET(request: Request) {
         return {
           ...item,
           products: publicProduct,
+          review: review || null,
           e_sim_inventory: inventory ? {
             ...inventory,
             installation_deadline: installationDeadline

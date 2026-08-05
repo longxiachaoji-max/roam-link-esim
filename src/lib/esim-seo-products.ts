@@ -45,6 +45,21 @@ export interface EsimPlanSitemapEntry {
   updatedAt: string | null;
 }
 
+export interface PublicEsimReview {
+  id: string;
+  rating: number;
+  smoothnessRating: number;
+  comment: string;
+  createdAt: string;
+}
+
+export interface PublicEsimReviewSummary {
+  averageRating: number;
+  averageSmoothness: number;
+  reviewCount: number;
+  reviews: PublicEsimReview[];
+}
+
 export async function getActiveEsimCountries() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -192,6 +207,43 @@ export async function getEsimPlanDetail(productId: string, destination: EsimDest
     dataAmount: options[0].dataAmount,
     description: options.find(option => option.description)?.description || '',
     options
+  };
+}
+
+export async function getPublicEsimPlanReviews(productIds: string[]): Promise<PublicEsimReviewSummary> {
+  const empty = { averageRating: 0, averageSmoothness: 0, reviewCount: 0, reviews: [] };
+  const ids = [...new Set(productIds.filter(Boolean))];
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!ids.length || !url || !serviceRoleKey) return empty;
+
+  const supabase = createClient(url, serviceRoleKey);
+  const { data, error } = await supabase
+    .from('product_reviews')
+    .select('id, rating, smoothness_rating, comment, created_at')
+    .in('product_id', ids)
+    .eq('is_visible', true)
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (error || !data) {
+    console.error('Public eSIM reviews failed:', error?.message || 'No data');
+    return empty;
+  }
+
+  const allReviews = data.map(review => ({
+    id: String(review.id),
+    rating: Number(review.rating),
+    smoothnessRating: Number(review.smoothness_rating),
+    comment: String(review.comment || '').trim(),
+    createdAt: String(review.created_at)
+  })).filter(review => review.rating >= 1 && review.rating <= 5 && review.comment.length > 0);
+  if (!allReviews.length) return empty;
+
+  return {
+    averageRating: allReviews.reduce((sum, review) => sum + review.rating, 0) / allReviews.length,
+    averageSmoothness: allReviews.reduce((sum, review) => sum + review.smoothnessRating, 0) / allReviews.length,
+    reviewCount: allReviews.length,
+    reviews: allReviews.slice(0, 12)
   };
 }
 

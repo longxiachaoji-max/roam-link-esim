@@ -2,13 +2,42 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3 } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 import PhysicalOrdersPanel from './physical-orders-panel';
+
+interface MemberReview {
+  id: string;
+  rating: number;
+  smoothness_rating: number;
+  comment: string;
+  is_visible: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ReviewTarget {
+  orderItemId: string;
+  productName: string;
+  country: string;
+  review: MemberReview | null;
+}
+
+interface ReviewableOrderItem {
+  id: string;
+  products?: { name?: string; country?: string } | null;
+  review?: MemberReview | null;
+}
+
+function ReviewStars({ value, onChange, label }: { value: number; onChange: (value: number) => void; label: string }) {
+  return <div className="flex items-center gap-2" role="group" aria-label={label}>
+    {[1, 2, 3, 4, 5].map(star => <button key={star} type="button" onClick={() => onChange(star)} aria-label={`${star} 星`} className="grid h-10 w-10 place-items-center rounded-md text-amber-300 hover:bg-amber-300/10 focus:outline-none focus:ring-2 focus:ring-amber-300/50"><Star size={26} fill={star <= value ? 'currentColor' : 'none'} className={star <= value ? '' : 'text-white/20'} /></button>)}
+  </div>;
+}
 
 export default function MemberCenter() {
   const [user, setUser] = useState<any>(null);
@@ -33,6 +62,11 @@ export default function MemberCenter() {
   const [usageLoadingId, setUsageLoadingId] = useState<string | null>(null);
   const [purchaseReminderOpen, setPurchaseReminderOpen] = useState(false);
   const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'qr'; lpa: string } | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [smoothnessRating, setSmoothnessRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSaving, setReviewSaving] = useState(false);
 
   // Credit card topup
   const [isTopupOpen, setIsTopupOpen] = useState(false);
@@ -307,6 +341,54 @@ export default function MemberCenter() {
       showToast('❌ ' + (err?.message || '查詢用量失敗'));
     } finally {
       setUsageLoadingId(null);
+    }
+  };
+
+  const openReview = (item: ReviewableOrderItem) => {
+    const review = item.review || null;
+    setReviewTarget({
+      orderItemId: item.id,
+      productName: item.products?.name || 'eSIM 方案',
+      country: item.products?.country || '旅遊地區',
+      review
+    });
+    setReviewRating(review?.rating || 0);
+    setSmoothnessRating(review?.smoothness_rating || 0);
+    setReviewComment(review?.comment || '');
+  };
+
+  const submitReview = async () => {
+    if (!reviewTarget || reviewSaving) return;
+    if (!reviewRating || !smoothnessRating) {
+      showToast('請完成星級與使用順暢度評分');
+      return;
+    }
+    if (reviewComment.trim().length < 2) {
+      showToast('請留下至少 2 個字的使用心得');
+      return;
+    }
+
+    setReviewSaving(true);
+    try {
+      const response = await authenticatedFetch('/api/member/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderItemId: reviewTarget.orderItemId,
+          rating: reviewRating,
+          smoothnessRating,
+          comment: reviewComment.trim()
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '評價送出失敗');
+      setReviewTarget(null);
+      showToast(reviewTarget.review ? '評價已更新，謝謝您的回饋' : '謝謝您留下真實使用體驗');
+      if (user?.email) await fetchOrders(user.email);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '評價送出失敗');
+    } finally {
+      setReviewSaving(false);
     }
   };
 
@@ -821,6 +903,17 @@ export default function MemberCenter() {
                   </div>
                 )}
 
+                {!deleted && order.order_status === 'COMPLETED' && (
+                  <button
+                    type="button"
+                    onClick={() => openReview(item)}
+                    className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-300/8 py-2.5 text-xs font-bold text-amber-100 transition-colors hover:bg-amber-300/15"
+                  >
+                    {item.review ? <Star size={15} fill="currentColor" /> : <MessageSquareText size={15} />}
+                    {item.review ? `已評價 ${item.review.rating} 星 · 查看或修改` : '留下使用評價'}
+                  </button>
+                )}
+
                 {/* Delete button */}
                 {!deleted && (
                   <button
@@ -872,6 +965,32 @@ export default function MemberCenter() {
               <button type="button" onClick={() => setInstallConfirmation(null)} className="h-12 rounded-md border border-white/15 text-sm font-bold text-white/65 hover:bg-white/5">稍後安裝</button>
               <button type="button" onClick={continueInstallation} className="h-12 rounded-md bg-cyan text-sm font-bold text-[#071317] hover:bg-cyan/90">已確認，繼續</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {reviewTarget && (
+        <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-black/80 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-md border border-white/10 bg-[#1A1A2E] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-semibold text-amber-200/70">{reviewTarget.country}使用體驗</p><h3 className="mt-1 text-xl font-bold">{reviewTarget.review ? '查看或修改評價' : '感謝您的使用'}</h3></div>
+              <button type="button" onClick={() => setReviewTarget(null)} title="關閉" className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-white/45 hover:bg-white/5 hover:text-white"><X size={19} /></button>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-white/60">為持續提升產品品質，邀請您留下真實的使用體驗。您的回饋會幫助我們持續進步，也能協助其他旅客選擇合適的方案。</p>
+            <p className="mt-3 truncate rounded-md bg-white/5 px-3 py-2 text-xs text-white/45">{reviewTarget.productName}</p>
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between"><label className="text-sm font-bold">整體星級</label><span className="text-xs text-white/40">{reviewRating ? `${reviewRating} / 5` : '請評分'}</span></div>
+              <ReviewStars value={reviewRating} onChange={setReviewRating} label="整體星級" />
+            </div>
+            <div className="mt-5">
+              <div className="flex items-center justify-between"><label className="text-sm font-bold">{reviewTarget.country}使用順暢度</label><span className="text-xs text-cyan-200/70">{['', '不順暢', '偶有中斷', '普通', '順暢', '非常順暢'][smoothnessRating] || '請評分'}</span></div>
+              <ReviewStars value={smoothnessRating} onChange={setSmoothnessRating} label={`${reviewTarget.country}使用順暢度`} />
+            </div>
+            <label className="mt-5 block text-sm font-bold">使用心得<textarea value={reviewComment} onChange={event => setReviewComment(event.target.value.slice(0, 1000))} rows={5} placeholder="例如：在東京與大阪使用都很順暢，地圖和影片載入速度穩定。" className="mt-2 w-full resize-none rounded-md border border-white/10 bg-[#0d0d1a] p-3 text-sm font-normal leading-6 text-white outline-none placeholder:text-white/25 focus:border-cyan/40" /></label>
+            <div className="mt-1 text-right text-xs text-white/30">{reviewComment.length} / 1000</div>
+            <p className="mt-3 text-xs leading-5 text-white/35">送出後，星級與留言可能以「已購買會員」名義顯示於商品頁；不會公開您的 Email。</p>
+            <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setReviewTarget(null)} className="h-11 rounded-md border border-white/15 text-sm font-bold text-white/60 hover:bg-white/5">取消</button><button type="button" onClick={() => void submitReview()} disabled={reviewSaving} className="h-11 rounded-md bg-[#F05A28] text-sm font-bold text-white hover:bg-[#d94f22] disabled:opacity-45">{reviewSaving ? '送出中...' : reviewTarget.review ? '儲存修改' : '送出評價'}</button></div>
           </div>
         </div>
       )}

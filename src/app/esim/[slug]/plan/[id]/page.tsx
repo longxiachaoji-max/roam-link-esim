@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, ShoppingCart, Wifi } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, ShoppingCart, Star, Wifi } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
@@ -8,7 +8,7 @@ import {
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
 import { buildEsimPlanSeo } from '@/lib/esim-plan-seo';
-import { getEsimDestinationPlanSummary, getEsimPlanDetail } from '@/lib/esim-seo-products';
+import { getEsimDestinationPlanSummary, getEsimPlanDetail, getPublicEsimPlanReviews } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
 import PlanPurchase from './plan-purchase';
 
@@ -58,7 +58,10 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
   const result = await loadPlan(params);
   if (!result) notFound();
   const { destination, plan } = result;
-  const destinationSummary = await getEsimDestinationPlanSummary(destination);
+  const [destinationSummary, reviewSummary] = await Promise.all([
+    getEsimDestinationPlanSummary(destination),
+    getPublicEsimPlanReviews(plan.options.map(option => option.id))
+  ]);
   const seo = buildEsimPlanSeo({
     destinationName: destination.shortName,
     dataAmount: plan.dataAmount,
@@ -76,6 +79,15 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
     description: seo.description,
     category: 'Travel eSIM',
     brand: { '@type': 'Brand', name: '一飛通全球漫遊 FirstRoamLink' },
+    ...(reviewSummary.reviewCount > 0 ? {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: Number(reviewSummary.averageRating.toFixed(1)),
+        reviewCount: reviewSummary.reviewCount,
+        bestRating: 5,
+        worstRating: 1
+      }
+    } : {}),
     offers: plan.options.map(option => ({
       '@type': 'Offer',
       name: `${option.validityDays} 天`,
@@ -131,6 +143,21 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
 
         <PlanPurchase flag={destination.flag} options={plan.options} />
       </section>
+
+      {reviewSummary.reviewCount > 0 && <section className="border-t border-white/10 py-11" aria-labelledby="reviews-heading">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div><p className="text-xs font-bold text-[#56d5ea]">已購買會員真實回饋</p><h2 id="reviews-heading" className="mt-2 text-2xl font-bold">方案使用評價</h2></div>
+          <div className="flex items-center gap-3"><span className="text-3xl font-black text-[#f5bd61]">{reviewSummary.averageRating.toFixed(1)}</span><div><div className="flex gap-0.5 text-[#f5bd61]">{[1, 2, 3, 4, 5].map(star => <Star key={star} size={16} fill={star <= Math.round(reviewSummary.averageRating) ? 'currentColor' : 'none'} />)}</div><p className="mt-1 text-xs text-white/40">共 {reviewSummary.reviewCount} 則 · 順暢度 {reviewSummary.averageSmoothness.toFixed(1)}</p></div></div>
+        </div>
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          {reviewSummary.reviews.map(review => <article key={review.id} className="rounded-md border border-white/10 bg-[#181826] p-4">
+            <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-white/55">已購買會員</span><span className="text-xs text-white/30">{new Date(review.createdAt).toLocaleDateString('zh-TW')}</span></div>
+            <div className="mt-3 flex gap-0.5 text-[#f5bd61]">{[1, 2, 3, 4, 5].map(star => <Star key={star} size={14} fill={star <= review.rating ? 'currentColor' : 'none'} />)}</div>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-white/60">{review.comment}</p>
+            <p className="mt-3 text-xs text-[#56d5ea]/70">當地使用順暢度 {review.smoothnessRating} / 5</p>
+          </article>)}
+        </div>
+      </section>}
 
       <section className="py-11" aria-labelledby="details-heading">
         <h2 id="details-heading" className="text-2xl font-bold">方案詳細介紹</h2>
