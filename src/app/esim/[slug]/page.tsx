@@ -59,6 +59,7 @@ function planStructuredData(destination: NonNullable<ReturnType<typeof getEsimDe
           '@type': 'AggregateOffer',
           priceCurrency: 'TWD',
           lowPrice: plan.lowestPrice,
+          highPrice: plan.highestPrice,
           offerCount: plan.availableDays.length,
           availability: 'https://schema.org/InStock',
           url: `https://firstesim.space${getPlanHref(destination.slug, plan.id)}`

@@ -19,6 +19,7 @@ export interface EsimSeoPlanGroup {
   dataAmount: string;
   availableDays: number[];
   lowestPrice: number;
+  highestPrice: number;
   description: string;
 }
 
@@ -115,6 +116,7 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
         dataAmount: canonicalOption.dataAmount,
         availableDays: [...new Set(options.map(option => option.validityDays))].sort((a, b) => a - b),
         lowestPrice: Math.min(...options.map(option => option.price)),
+        highestPrice: Math.max(...options.map(option => option.price)),
         description: options.find(option => option.description)?.description || ''
       };
     })
