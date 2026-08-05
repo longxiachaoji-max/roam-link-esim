@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Star } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { getPhysicalStoreAdmin, normalizePhysicalProduct, PHYSICAL_PRODUCT_CATEGORIES } from '@/lib/physical-store';
 import { serializeJsonLd } from '@/lib/json-ld';
+import { getPublicPhysicalProductReviews } from '@/lib/physical-product-reviews';
 import ProductPurchase from './product-purchase';
 import ProductGallery from './product-gallery';
 
@@ -49,6 +50,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const product = await getProduct(id);
   if (!product) notFound();
+  const reviewSummary = await getPublicPhysicalProductReviews(product.id);
   const categoryLabel = PHYSICAL_PRODUCT_CATEGORIES[product.category];
   const categoryHref = product.category === 'rental' ? '/shop/rental' : '/shop';
   const categoryBackLabel = product.category === 'rental' ? '返回租借商品專區' : '返回一飛通商城';
@@ -71,6 +73,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     '@context': 'https://schema.org', '@type': 'Product', name: product.name,
     description: product.summary || product.description || '', image: product.images,
     category: categoryLabel,
+    ...(reviewSummary.reviewCount > 0 ? {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: Number(reviewSummary.averageRating.toFixed(1)),
+        reviewCount: reviewSummary.reviewCount,
+        bestRating: 5,
+        worstRating: 1
+      }
+    } : {}),
     offers: offer
   };
 
@@ -84,6 +95,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <div className="mt-8 border-t border-black/10 pt-7"><h2 className="font-bold">商品詳細說明</h2><div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-black/60">{product.description || '商品規格整理中，如需確認請聯絡客服。'}</div></div>{product.category === 'rental' && product.rental_terms && <div className="mt-7 border-t border-black/10 pt-7"><h2 className="font-bold">租借與歸還</h2><div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-black/60">{product.rental_terms}</div></div>}
         </div>
       </div>
+      {reviewSummary.reviewCount > 0 && <section className="mt-12 border-t border-black/10 py-10" aria-labelledby="physical-reviews-heading">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div><p className="text-xs font-bold text-[#247253]">已購買會員真實回饋</p><h2 id="physical-reviews-heading" className="mt-2 text-2xl font-bold">商品使用評價</h2></div>
+          <div className="flex items-center gap-3"><span className="text-3xl font-black text-[#d8891c]">{reviewSummary.averageRating.toFixed(1)}</span><div><div className="flex gap-0.5 text-[#d8891c]">{[1, 2, 3, 4, 5].map(star => <Star key={star} size={16} fill={star <= Math.round(reviewSummary.averageRating) ? 'currentColor' : 'none'} />)}</div><p className="mt-1 text-xs text-black/40">共 {reviewSummary.reviewCount} 則評價</p></div></div>
+        </div>
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          {reviewSummary.reviews.map(review => <article key={review.id} className="rounded-md border border-black/10 bg-white p-4">
+            <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-black/55">已購買會員</span><span className="text-xs text-black/35">{new Date(review.createdAt).toLocaleDateString('zh-TW')}</span></div>
+            <div className="mt-3 flex gap-0.5 text-[#d8891c]">{[1, 2, 3, 4, 5].map(star => <Star key={star} size={14} fill={star <= review.rating ? 'currentColor' : 'none'} />)}</div>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-black/60">{review.comment}</p>
+          </article>)}
+        </div>
+      </section>}
     </div>
   </main>;
 }

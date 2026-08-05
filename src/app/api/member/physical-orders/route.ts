@@ -29,15 +29,23 @@ export async function GET(request: Request) {
         postal_code, shipping_address, shipping_note, delivery_method, subtotal, shipping_fee, total_amount,
         payment_method, payment_status, order_status,
         physical_order_items (
-          id, product_name, product_image, quantity, unit_price,
-          rental_start_date, rental_end_date, rental_days, rental_daily_rate
+          id, product_id, product_name, product_image, quantity, unit_price,
+          rental_start_date, rental_end_date, rental_days, rental_daily_rate,
+          physical_product_reviews ( id, rating, comment, is_visible, created_at, updated_at )
         )
       `)
       .eq('customer_id', customer.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
 
-    const visibleOrders = (data || []).filter(order => isPhysicalOrderVisibleToMember(order));
+    const visibleOrders = (data || []).filter(order => isPhysicalOrderVisibleToMember(order)).map(order => ({
+      ...order,
+      physical_order_items: (order.physical_order_items || []).map(item => ({
+        ...item,
+        review: Array.isArray(item.physical_product_reviews) ? item.physical_product_reviews[0] || null : item.physical_product_reviews || null,
+        physical_product_reviews: undefined
+      }))
+    }));
 
     return NextResponse.json({ orders: visibleOrders }, {
       headers: { 'Cache-Control': 'private, no-store, max-age=0' }

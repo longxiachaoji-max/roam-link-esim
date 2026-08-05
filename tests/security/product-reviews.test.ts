@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isVerifiedReviewPurchase, parseProductReviewInput } from '../../src/lib/product-reviews.ts';
+import { isVerifiedReviewPurchase, parsePhysicalProductReviewInput, parseProductReviewInput } from '../../src/lib/product-reviews.ts';
 
 test('accepts complete review input and trims the comment', () => {
   assert.deepEqual(parseProductReviewInput({ rating: 5, smoothnessRating: 4, comment: '  日本使用順暢  ' }), {
@@ -25,4 +25,9 @@ test('only accepts a paid, completed purchase owned by the member', () => {
   assert.equal(isVerifiedReviewPurchase({ ...valid, paymentStatus: 'PENDING' }), false);
   assert.equal(isVerifiedReviewPurchase({ ...valid, orderStatus: 'PENDING' }), false);
   assert.equal(isVerifiedReviewPurchase({ ...valid, productId: null }), false);
+});
+
+test('validates physical product ratings without requiring a network score', () => {
+  assert.deepEqual(parsePhysicalProductReviewInput({ rating: 4, comment: '商品狀況良好' }), { rating: 4, comment: '商品狀況良好' });
+  assert.equal(parsePhysicalProductReviewInput({ rating: 0, comment: '商品狀況良好' }), null);
 });
