@@ -37,6 +37,9 @@ export function normalizeHomeCarousel(value: unknown): HomeCarouselItem[] {
         storage_path: String(source.storage_path || '').trim().slice(0, 500),
         alt_text: String(source.alt_text || '一飛通最新活動').trim().slice(0, 120),
         link_url: safeLinkUrl(source.link_url),
+        duration_seconds: Number.isFinite(Number(source.duration_seconds))
+          ? Math.min(120, Math.max(3, Math.round(Number(source.duration_seconds))))
+          : 10,
         is_active: source.is_active !== false
       };
     })

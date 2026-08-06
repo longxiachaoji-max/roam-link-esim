@@ -5,6 +5,7 @@ import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  Clock3,
   GripVertical,
   ImagePlus,
   Link2,
@@ -138,6 +139,7 @@ export default function SettingsPage() {
           storage_path: result.path,
           alt_text: file.name.replace(/\.[^.]+$/, '') || '一飛通最新活動',
           link_url: '',
+          duration_seconds: 10,
           is_active: true
         });
       }
@@ -202,7 +204,7 @@ export default function SettingsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 p-5">
           <div>
             <h2 className="font-bold text-white">首頁廣告輪播</h2>
-            <p className="mt-1 text-sm text-white/45">最多 8 張，建議 1600 × 900（16:9）；圖片會自動壓縮並每 5 秒輪播。</p>
+            <p className="mt-1 text-sm text-white/45">最多 8 張，建議 1600 × 900（16:9）；每張圖片可個別設定停留時間，預設 10 秒。</p>
           </div>
           <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-cyan/40 bg-cyan/10 px-4 text-sm font-bold text-cyan hover:bg-cyan/20">
             {isUploading ? <Upload className="animate-pulse" size={17} /> : <ImagePlus size={17} />}
@@ -282,6 +284,20 @@ export default function SettingsPage() {
                       onChange={event => updateBanner(index, { link_url: event.target.value })}
                       className="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan"
                       placeholder="例如：/esim/japan"
+                    />
+                  </label>
+                  <label className="grid max-w-40 gap-1 text-xs text-white/50">
+                    <span className="inline-flex items-center gap-1"><Clock3 size={13} />停留秒數</span>
+                    <input
+                      type="number"
+                      min={3}
+                      max={120}
+                      step={1}
+                      value={banner.duration_seconds}
+                      onChange={event => updateBanner(index, {
+                        duration_seconds: Math.min(120, Math.max(3, Number(event.target.value) || 10))
+                      })}
+                      className="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan"
                     />
                   </label>
                 </div>

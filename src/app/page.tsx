@@ -151,12 +151,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (activeCarousel.length <= 1) return;
-    const timer = window.setInterval(() => {
+    if (activeCarousel.length <= 1 || !currentCarouselBanner) return;
+    const timer = window.setTimeout(() => {
       setCarouselIndex(current => (current + 1) % activeCarousel.length);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [activeCarousel.length]);
+    }, currentCarouselBanner.duration_seconds * 1000);
+    return () => window.clearTimeout(timer);
+  }, [activeCarousel.length, currentCarouselBanner]);
 
   useEffect(() => {
     try {

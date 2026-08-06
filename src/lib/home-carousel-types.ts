@@ -6,5 +6,6 @@ export interface HomeCarouselItem {
   storage_path: string;
   alt_text: string;
   link_url: string;
+  duration_seconds: number;
   is_active: boolean;
 }
