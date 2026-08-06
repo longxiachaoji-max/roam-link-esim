@@ -654,44 +654,51 @@ export default function Home() {
         <section className="w-full pb-10 sm:pb-14">
           <h1 className="sr-only">{siteSettings.hero_title}</h1>
           <div className="relative aspect-video w-full overflow-hidden bg-[#080812]">
-            {currentCarouselBanner.link_url ? (
-              <a href={currentCarouselBanner.link_url} className="absolute inset-0 block">
-                <Image
-                  key={currentCarouselBanner.id}
-                  src={currentCarouselBanner.image_url}
-                  alt={currentCarouselBanner.alt_text}
-                  fill
-                  priority
-                  sizes="100vw"
-                  className="object-cover"
-                />
-              </a>
-            ) : (
-              <Image
-                key={currentCarouselBanner.id}
-                src={currentCarouselBanner.image_url}
-                alt={currentCarouselBanner.alt_text}
-                fill
-                priority
-                sizes="100vw"
-                className="object-cover"
-              />
-            )}
-
-            {activeCarousel.length > 1 && (
-              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/55 px-3 py-2 backdrop-blur-sm">
-                {activeCarousel.map((banner, index) => (
-                  <button
-                    key={banner.id}
-                    type="button"
-                    onClick={() => setCarouselIndex(index)}
-                    aria-label={`顯示第 ${index + 1} 張廣告`}
-                    className={`h-2.5 w-2.5 rounded-full transition-colors ${index === carouselIndex % activeCarousel.length ? 'bg-coral' : 'bg-white/45 hover:bg-white/75'}`}
-                  />
-                ))}
-              </div>
-            )}
+            <div
+              className="flex h-full transition-transform duration-500 ease-out"
+              style={{ transform: `translateX(-${(carouselIndex % activeCarousel.length) * 100}%)` }}
+            >
+              {activeCarousel.map((banner, index) => (
+                <div key={banner.id} className="relative h-full w-full shrink-0">
+                  {banner.link_url ? (
+                    <a href={banner.link_url} className="absolute inset-0 block">
+                      <Image
+                        src={banner.image_url}
+                        alt={banner.alt_text}
+                        fill
+                        priority={index === 0}
+                        sizes="100vw"
+                        className="object-cover"
+                      />
+                    </a>
+                  ) : (
+                    <Image
+                      src={banner.image_url}
+                      alt={banner.alt_text}
+                      fill
+                      priority={index === 0}
+                      sizes="100vw"
+                      className="object-cover"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
+
+          {activeCarousel.length > 1 && (
+            <div className="flex h-10 items-center justify-center gap-2 bg-[#080812]">
+              {activeCarousel.map((banner, index) => (
+                <button
+                  key={banner.id}
+                  type="button"
+                  onClick={() => setCarouselIndex(index)}
+                  aria-label={`顯示第 ${index + 1} 張廣告`}
+                  className={`h-2.5 w-2.5 rounded-full transition-colors ${index === carouselIndex % activeCarousel.length ? 'bg-coral' : 'bg-white/35 hover:bg-white/70'}`}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : (
         <section className="px-6 pb-16 pt-20 text-center">
