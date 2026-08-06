@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { parseHomeCarousel } from '@/lib/home-carousel';
 import { stripHiddenSiteConfig } from '@/lib/site-settings-hidden-config';
 
 export const dynamic = 'force-dynamic';
@@ -116,17 +117,20 @@ export async function GET() {
           hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
           section_title: '熱門目的地',
           usage_guide: '',
+          home_carousel: [],
           ...DEFAULT_CONTACT_INFO
         }
       });
     }
 
     const contactInfo = parseContactInfo(data.usage_guide);
+    const homeCarousel = parseHomeCarousel(data.usage_guide);
 
     return NextResponse.json({
       settings: {
         ...data,
         usage_guide: stripHiddenSiteConfig(data.usage_guide),
+        home_carousel: homeCarousel,
         ...contactInfo
       }
     });

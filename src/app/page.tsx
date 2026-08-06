@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User, Wifi, MapPin, Send } from "lucide-react";
+import Image from "next/image";
+import { Barcode, ChevronLeft, ChevronRight, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
@@ -10,9 +11,25 @@ import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
 import { ESIM_DESTINATIONS, getEsimDestinationHref } from '@/lib/esim-destinations';
+import type { HomeCarouselItem } from '@/lib/home-carousel-types';
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
+
+interface PublicSiteSettings {
+  hero_badge: string;
+  hero_title: string;
+  hero_subtitle: string;
+  section_title: string;
+  usage_guide: string;
+  home_carousel: HomeCarouselItem[];
+  contact_title: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_note: string;
+  contact_items: Array<{ id: string; label: string; value: string; href: string }>;
+}
+
 const shortenHotspotText = (value?: string) => {
   const text = (value || '').trim();
   if (!text) return '';
@@ -43,6 +60,7 @@ export default function Home() {
   const [destinationRequest, setDestinationRequest] = useState('');
   const [destinationRequestState, setDestinationRequestState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [destinationRequestMessage, setDestinationRequestMessage] = useState('');
+  const [carouselIndex, setCarouselIndex] = useState(0);
   
   // 模擬登入狀態
   const [user, setUser] = useState<any>(null);
@@ -63,12 +81,13 @@ export default function Home() {
   const [selectedDays, setSelectedDays] = useState<Record<string, number>>({});
 
   // 網站標語設定
-  const [siteSettings, setSiteSettings] = useState({
+  const [siteSettings, setSiteSettings] = useState<PublicSiteSettings>({
     hero_badge: '一飛通全球漫遊 · 2026 全新上線',
     hero_title: '隨時隨地，全球無縫連線',
     hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
     section_title: '熱門目的地',
     usage_guide: '',
+    home_carousel: [],
     contact_title: '聯絡資訊',
     contact_email: 'roamlinktw@gmail.com',
     contact_phone: '',
@@ -85,6 +104,13 @@ export default function Home() {
 
   // 分頁切換
   const [activeTab, setActiveTab] = useState<'plans' | 'guide'>('plans');
+  const activeCarousel = useMemo(
+    () => siteSettings.home_carousel.filter(item => item.is_active && item.image_url),
+    [siteSettings.home_carousel]
+  );
+  const currentCarouselBanner = activeCarousel.length > 0
+    ? activeCarousel[carouselIndex % activeCarousel.length]
+    : null;
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -97,7 +123,13 @@ export default function Home() {
 
     // 載入網站設定
     fetch('/api/settings').then(r => r.json()).then(json => {
-      if (json.settings) setSiteSettings(json.settings);
+      if (json.settings) {
+        setSiteSettings(current => ({
+          ...current,
+          ...json.settings,
+          home_carousel: Array.isArray(json.settings.home_carousel) ? json.settings.home_carousel : []
+        }));
+      }
     }).catch(() => {});
 
     const fetchProducts = async () => {
@@ -117,6 +149,14 @@ export default function Home() {
     };
     fetchProducts();
   }, []);
+
+  useEffect(() => {
+    if (activeCarousel.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setCarouselIndex(current => (current + 1) % activeCarousel.length);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [activeCarousel.length]);
 
   useEffect(() => {
     try {
@@ -609,18 +649,81 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* 首頁區塊 */}
-      <section className="text-center pt-20 pb-16 px-6">
-        <div className="inline-block bg-yellow/15 border border-yellow text-yellow px-4 py-1.5 rounded-full text-sm font-bold mb-6 animate-fade-in-up">
-                    {siteSettings.hero_badge}
-        </div>
-        <h1 className="text-4xl md:text-6xl font-black leading-tight mb-6 animate-fade-in-up animation-delay-100">
-          <span className="bg-gradient-to-br from-coral via-yellow to-cyan text-transparent bg-clip-text">{siteSettings.hero_title}</span>
-        </h1>
-        <p className="text-muted text-lg max-w-lg mx-auto mb-8 animate-fade-in-up animation-delay-200">
-          {siteSettings.hero_subtitle}
-        </p>
-      </section>
+      {/* 首頁廣告輪播；未設定圖片時保留原本的文字首頁。 */}
+      {currentCarouselBanner ? (
+        <section className="px-4 pb-10 pt-6 sm:px-6 sm:pb-14 sm:pt-10">
+          <h1 className="sr-only">{siteSettings.hero_title}</h1>
+          <div className="relative mx-auto aspect-[4/3] w-full max-w-6xl overflow-hidden rounded-md border border-white/10 bg-[#080812] shadow-[0_18px_60px_rgba(0,0,0,0.28)] sm:aspect-video">
+            {currentCarouselBanner.link_url ? (
+              <a href={currentCarouselBanner.link_url} className="absolute inset-0 block">
+                <Image
+                  key={currentCarouselBanner.id}
+                  src={currentCarouselBanner.image_url}
+                  alt={currentCarouselBanner.alt_text}
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 100vw, 1152px"
+                  className="object-contain"
+                />
+              </a>
+            ) : (
+              <Image
+                key={currentCarouselBanner.id}
+                src={currentCarouselBanner.image_url}
+                alt={currentCarouselBanner.alt_text}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 1152px"
+                className="object-contain"
+              />
+            )}
+
+            {activeCarousel.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCarouselIndex(current => (current - 1 + activeCarousel.length) % activeCarousel.length)}
+                  aria-label="上一張廣告"
+                  className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/75"
+                >
+                  <ChevronLeft size={22} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCarouselIndex(current => (current + 1) % activeCarousel.length)}
+                  aria-label="下一張廣告"
+                  className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/75"
+                >
+                  <ChevronRight size={22} />
+                </button>
+                <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/55 px-3 py-2 backdrop-blur-sm">
+                  {activeCarousel.map((banner, index) => (
+                    <button
+                      key={banner.id}
+                      type="button"
+                      onClick={() => setCarouselIndex(index)}
+                      aria-label={`顯示第 ${index + 1} 張廣告`}
+                      className={`h-2.5 w-2.5 rounded-full transition-colors ${index === carouselIndex % activeCarousel.length ? 'bg-coral' : 'bg-white/45 hover:bg-white/75'}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section className="px-6 pb-16 pt-20 text-center">
+          <div className="mb-6 inline-block rounded-full border border-yellow bg-yellow/15 px-4 py-1.5 text-sm font-bold text-yellow animate-fade-in-up">
+            {siteSettings.hero_badge}
+          </div>
+          <h1 className="mb-6 text-4xl font-black leading-tight animate-fade-in-up animation-delay-100 md:text-6xl">
+            <span className="bg-gradient-to-br from-coral via-yellow to-cyan bg-clip-text text-transparent">{siteSettings.hero_title}</span>
+          </h1>
+          <p className="mx-auto mb-8 max-w-lg text-lg text-muted animate-fade-in-up animation-delay-200">
+            {siteSettings.hero_subtitle}
+          </p>
+        </section>
+      )}
 
       {/* 商品區塊 */}
       <section id="products" className="max-w-6xl mx-auto px-6 py-16">

@@ -58,7 +58,7 @@ export default function AdminLayout({
     { name: '訂單提醒設定', href: '/admin/notifications' },
     { name: '聯絡資訊設定', href: '/admin/contact' },
     { name: '後台人員', href: '/admin/admin-users' },
-    { name: '系統設定', href: '/admin/settings' },
+    { name: '前台設定', href: '/admin/settings' },
   ];
 
   if (pathname === '/admin/login') return <>{children}</>;
