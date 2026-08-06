@@ -5,7 +5,7 @@ export type AnalyticsEventType =
 
 const VISITOR_ID_KEY = 'roamlink_analytics_visitor_id';
 
-function getVisitorId() {
+export function getAnalyticsVisitorId() {
   let visitorId = window.localStorage.getItem(VISITOR_ID_KEY);
   if (!visitorId) {
     visitorId = crypto.randomUUID();
@@ -21,7 +21,7 @@ export function trackAnalyticsEvent(eventType: AnalyticsEventType) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         eventType,
-        visitorId: getVisitorId(),
+        visitorId: getAnalyticsVisitorId(),
         sourcePath: window.location.pathname
       }),
       keepalive: true

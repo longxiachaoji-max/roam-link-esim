@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User, Wifi } from "lucide-react";
+import { LogOut, ShoppingBag, ShoppingCart, Zap, CreditCard, Barcode, X, User, Wifi, MapPin, Send } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
-import { trackPageView } from "@/lib/analytics";
+import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
 import { ESIM_DESTINATIONS, getEsimDestinationHref } from '@/lib/esim-destinations';
 
@@ -40,6 +40,9 @@ export default function Home() {
   const [checkoutCode, setCheckoutCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState<any>(null);
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
+  const [destinationRequest, setDestinationRequest] = useState('');
+  const [destinationRequestState, setDestinationRequestState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [destinationRequestMessage, setDestinationRequestMessage] = useState('');
   
   // 模擬登入狀態
   const [user, setUser] = useState<any>(null);
@@ -195,6 +198,44 @@ export default function Home() {
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
+  };
+
+  const submitDestinationRequest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (destinationRequestState === 'submitting') return;
+    const country = destinationRequest.replace(/\s+/g, ' ').trim();
+    if (country.length < 2) {
+      setDestinationRequestState('error');
+      setDestinationRequestMessage('請輸入至少 2 個字的國家或地區名稱');
+      return;
+    }
+
+    const existing = products.find(product => String(product.country || '').trim().toLocaleLowerCase('zh-TW') === country.toLocaleLowerCase('zh-TW'));
+    if (existing) {
+      setSelectedCountry(existing.country);
+      setDestinationRequestState('success');
+      setDestinationRequestMessage(`${existing.country}已有方案，已幫你移到商品列表`);
+      window.setTimeout(() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+      return;
+    }
+
+    setDestinationRequestState('submitting');
+    setDestinationRequestMessage('');
+    try {
+      const response = await fetch('/api/destination-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country, visitorId: getAnalyticsVisitorId(), website: '' })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '需求送出失敗');
+      setDestinationRequestState('success');
+      setDestinationRequestMessage(result.duplicate ? '這個需求已經記錄過，謝謝你的提醒' : '已收到需求，我們會評估新增這個目的地');
+      setDestinationRequest('');
+    } catch (error) {
+      setDestinationRequestState('error');
+      setDestinationRequestMessage(error instanceof Error ? error.message : '需求送出失敗，請稍後再試');
+    }
   };
 
   useEffect(() => {
@@ -797,6 +838,43 @@ export default function Home() {
             </div>
             <Link href="/esim" className="mt-5 inline-flex text-sm font-bold text-cyan hover:text-white">查看全部 eSIM 目的地 →</Link>
           </div>
+        </div>
+      </section>
+
+      <section className="border-b border-white/10 bg-[#0f1522] px-6 py-12" aria-labelledby="destination-request-heading">
+        <div className="mx-auto grid max-w-6xl gap-7 md:grid-cols-[minmax(0,0.8fr)_minmax(360px,1.2fr)] md:items-end">
+          <div>
+            <div className="mb-4 grid h-10 w-10 place-items-center rounded-md bg-cyan/10 text-cyan"><MapPin size={20} /></div>
+            <h2 id="destination-request-heading" className="text-2xl font-black text-white">找不到你要的國家？</h2>
+            <p className="mt-3 text-sm leading-7 text-white/50">在這邊輸入你想去的國家或地區，我們會參考需求評估新增方案。</p>
+          </div>
+          <form onSubmit={submitDestinationRequest} className="w-full">
+            <label htmlFor="destination-request" className="sr-only">想去的國家或地區</label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                id="destination-request"
+                type="text"
+                value={destinationRequest}
+                onChange={event => {
+                  setDestinationRequest(event.target.value.slice(0, 40));
+                  if (destinationRequestState !== 'submitting') {
+                    setDestinationRequestState('idle');
+                    setDestinationRequestMessage('');
+                  }
+                }}
+                maxLength={40}
+                autoComplete="off"
+                placeholder="例如：冰島、摩洛哥"
+                className="h-12 min-w-0 flex-1 rounded-md border border-white/12 bg-[#171c29] px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-cyan/60 focus:ring-2 focus:ring-cyan/15"
+              />
+              <button type="submit" disabled={destinationRequestState === 'submitting'} className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-cyan px-5 text-sm font-black text-[#07141b] hover:bg-white disabled:cursor-wait disabled:opacity-50">
+                <Send size={16} />{destinationRequestState === 'submitting' ? '送出中' : '送出需求'}
+              </button>
+            </div>
+            <p aria-live="polite" className={`mt-3 min-h-5 text-sm ${destinationRequestState === 'error' ? 'text-red-300' : destinationRequestState === 'success' ? 'text-emerald-300' : 'text-white/35'}`}>
+              {destinationRequestMessage || '不需要登入即可送出。'}
+            </p>
+          </form>
         </div>
       </section>
 
