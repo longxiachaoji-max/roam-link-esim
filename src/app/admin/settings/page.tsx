@@ -202,7 +202,7 @@ export default function SettingsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 p-5">
           <div>
             <h2 className="font-bold text-white">首頁廣告輪播</h2>
-            <p className="mt-1 text-sm text-white/45">最多 8 張，建議 1200 × 900；圖片會自動壓縮並每 5 秒輪播。</p>
+            <p className="mt-1 text-sm text-white/45">最多 8 張，建議 1600 × 900（16:9）；圖片會自動壓縮並每 5 秒輪播。</p>
           </div>
           <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-cyan/40 bg-cyan/10 px-4 text-sm font-bold text-cyan hover:bg-cyan/20">
             {isUploading ? <Upload className="animate-pulse" size={17} /> : <ImagePlus size={17} />}
@@ -220,13 +220,13 @@ export default function SettingsPage() {
 
         <div className="border-b border-white/10 bg-black/20 p-4 sm:p-6">
           {activeBanners[0] ? (
-            <div className="relative mx-auto aspect-[4/3] w-full max-w-3xl overflow-hidden rounded-md border border-white/10 bg-[#080812] sm:aspect-video">
+            <div className="relative mx-auto aspect-video w-full max-w-3xl overflow-hidden rounded-md border border-white/10 bg-[#080812]">
               <Image
                 src={activeBanners[0].image_url}
                 alt={activeBanners[0].alt_text}
                 fill
                 sizes="(max-width: 768px) 100vw, 768px"
-                className="object-contain"
+                className="object-cover"
               />
               <span className="absolute left-3 top-3 rounded bg-black/70 px-2 py-1 text-xs text-white/80">首頁預覽</span>
             </div>

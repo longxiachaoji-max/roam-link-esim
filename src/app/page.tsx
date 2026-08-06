@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Barcode, ChevronLeft, ChevronRight, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
+import { Barcode, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
@@ -651,9 +651,9 @@ export default function Home() {
 
       {/* 首頁廣告輪播；未設定圖片時保留原本的文字首頁。 */}
       {currentCarouselBanner ? (
-        <section className="px-4 pb-10 pt-6 sm:px-6 sm:pb-14 sm:pt-10">
+        <section className="w-full pb-10 sm:pb-14">
           <h1 className="sr-only">{siteSettings.hero_title}</h1>
-          <div className="relative mx-auto aspect-[4/3] w-full max-w-6xl overflow-hidden rounded-md border border-white/10 bg-[#080812] shadow-[0_18px_60px_rgba(0,0,0,0.28)] sm:aspect-video">
+          <div className="relative aspect-video w-full overflow-hidden bg-[#080812]">
             {currentCarouselBanner.link_url ? (
               <a href={currentCarouselBanner.link_url} className="absolute inset-0 block">
                 <Image
@@ -662,8 +662,8 @@ export default function Home() {
                   alt={currentCarouselBanner.alt_text}
                   fill
                   priority
-                  sizes="(max-width: 768px) 100vw, 1152px"
-                  className="object-contain"
+                  sizes="100vw"
+                  className="object-cover"
                 />
               </a>
             ) : (
@@ -673,41 +673,23 @@ export default function Home() {
                 alt={currentCarouselBanner.alt_text}
                 fill
                 priority
-                sizes="(max-width: 768px) 100vw, 1152px"
-                className="object-contain"
+                sizes="100vw"
+                className="object-cover"
               />
             )}
 
             {activeCarousel.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setCarouselIndex(current => (current - 1 + activeCarousel.length) % activeCarousel.length)}
-                  aria-label="上一張廣告"
-                  className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/75"
-                >
-                  <ChevronLeft size={22} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCarouselIndex(current => (current + 1) % activeCarousel.length)}
-                  aria-label="下一張廣告"
-                  className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/75"
-                >
-                  <ChevronRight size={22} />
-                </button>
-                <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/55 px-3 py-2 backdrop-blur-sm">
-                  {activeCarousel.map((banner, index) => (
-                    <button
-                      key={banner.id}
-                      type="button"
-                      onClick={() => setCarouselIndex(index)}
-                      aria-label={`顯示第 ${index + 1} 張廣告`}
-                      className={`h-2.5 w-2.5 rounded-full transition-colors ${index === carouselIndex % activeCarousel.length ? 'bg-coral' : 'bg-white/45 hover:bg-white/75'}`}
-                    />
-                  ))}
-                </div>
-              </>
+              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/55 px-3 py-2 backdrop-blur-sm">
+                {activeCarousel.map((banner, index) => (
+                  <button
+                    key={banner.id}
+                    type="button"
+                    onClick={() => setCarouselIndex(index)}
+                    aria-label={`顯示第 ${index + 1} 張廣告`}
+                    className={`h-2.5 w-2.5 rounded-full transition-colors ${index === carouselIndex % activeCarousel.length ? 'bg-coral' : 'bg-white/45 hover:bg-white/75'}`}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </section>
