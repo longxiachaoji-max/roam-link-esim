@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent
+} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Barcode, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
@@ -61,6 +68,13 @@ export default function Home() {
   const [destinationRequestState, setDestinationRequestState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [destinationRequestMessage, setDestinationRequestMessage] = useState('');
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [carouselDragOffset, setCarouselDragOffset] = useState(0);
+  const [isCarouselDragging, setIsCarouselDragging] = useState(false);
+  const carouselViewportRef = useRef<HTMLDivElement>(null);
+  const carouselDragStartXRef = useRef(0);
+  const carouselDragOffsetRef = useRef(0);
+  const carouselDraggingRef = useRef(false);
+  const carouselHasDraggedRef = useRef(false);
   
   // 模擬登入狀態
   const [user, setUser] = useState<any>(null);
@@ -151,12 +165,73 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (activeCarousel.length <= 1 || !currentCarouselBanner) return;
+    if (activeCarousel.length <= 1 || !currentCarouselBanner || isCarouselDragging) return;
     const timer = window.setTimeout(() => {
       setCarouselIndex(current => (current + 1) % activeCarousel.length);
     }, currentCarouselBanner.duration_seconds * 1000);
     return () => window.clearTimeout(timer);
-  }, [activeCarousel.length, currentCarouselBanner]);
+  }, [activeCarousel.length, currentCarouselBanner, isCarouselDragging]);
+
+  const handleCarouselPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (
+      activeCarousel.length <= 1
+      || !event.isPrimary
+      || (event.pointerType === 'mouse' && event.button !== 0)
+    ) return;
+
+    carouselDragStartXRef.current = event.clientX;
+    carouselDragOffsetRef.current = 0;
+    carouselDraggingRef.current = true;
+    carouselHasDraggedRef.current = false;
+    setCarouselDragOffset(0);
+    setIsCarouselDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleCarouselPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!carouselDraggingRef.current || !event.isPrimary) return;
+    const rawOffset = event.clientX - carouselDragStartXRef.current;
+    if (Math.abs(rawOffset) > 8) {
+      carouselHasDraggedRef.current = true;
+      event.preventDefault();
+    }
+
+    const currentIndex = carouselIndex % activeCarousel.length;
+    const isDraggingPastStart = currentIndex === 0 && rawOffset > 0;
+    const isDraggingPastEnd = currentIndex === activeCarousel.length - 1 && rawOffset < 0;
+    const nextOffset = isDraggingPastStart || isDraggingPastEnd ? rawOffset * 0.25 : rawOffset;
+    carouselDragOffsetRef.current = nextOffset;
+    setCarouselDragOffset(nextOffset);
+  };
+
+  const finishCarouselDrag = (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
+    if (!carouselDraggingRef.current) return;
+    const currentIndex = carouselIndex % activeCarousel.length;
+    const width = carouselViewportRef.current?.clientWidth || 1;
+    const threshold = Math.min(120, Math.max(45, width * 0.12));
+    const offset = carouselDragOffsetRef.current;
+
+    if (!cancelled && offset <= -threshold && currentIndex < activeCarousel.length - 1) {
+      setCarouselIndex(currentIndex + 1);
+    } else if (!cancelled && offset >= threshold && currentIndex > 0) {
+      setCarouselIndex(currentIndex - 1);
+    }
+
+    carouselDraggingRef.current = false;
+    carouselDragOffsetRef.current = 0;
+    setIsCarouselDragging(false);
+    setCarouselDragOffset(0);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    window.setTimeout(() => { carouselHasDraggedRef.current = false; }, 0);
+  };
+
+  const preventCarouselClickAfterDrag = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!carouselHasDraggedRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   useEffect(() => {
     try {
@@ -653,10 +728,23 @@ export default function Home() {
       {currentCarouselBanner ? (
         <section className="w-full pb-10 sm:pb-14">
           <h1 className="sr-only">{siteSettings.hero_title}</h1>
-          <div className="relative aspect-video w-full overflow-hidden bg-[#080812]">
+          <div
+            ref={carouselViewportRef}
+            onPointerDown={handleCarouselPointerDown}
+            onPointerMove={handleCarouselPointerMove}
+            onPointerUp={event => finishCarouselDrag(event)}
+            onPointerCancel={event => finishCarouselDrag(event, true)}
+            onClickCapture={preventCarouselClickAfterDrag}
+            className={`relative aspect-video w-full select-none overflow-hidden bg-[#080812] ${activeCarousel.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            style={{ touchAction: 'pan-y' }}
+          >
             <div
-              className="flex h-full transition-transform duration-500 ease-out"
-              style={{ transform: `translateX(-${(carouselIndex % activeCarousel.length) * 100}%)` }}
+              className="flex h-full"
+              style={{
+                transform: `translate3d(calc(-${(carouselIndex % activeCarousel.length) * 100}% + ${carouselDragOffset}px), 0, 0)`,
+                transition: isCarouselDragging ? 'none' : 'transform 500ms ease-out',
+                willChange: 'transform'
+              }}
             >
               {activeCarousel.map((banner, index) => (
                 <div key={banner.id} className="relative h-full w-full shrink-0">
@@ -667,6 +755,7 @@ export default function Home() {
                         alt={banner.alt_text}
                         fill
                         priority={index === 0}
+                        draggable={false}
                         sizes="100vw"
                         className="object-cover"
                       />
@@ -677,6 +766,7 @@ export default function Home() {
                       alt={banner.alt_text}
                       fill
                       priority={index === 0}
+                      draggable={false}
                       sizes="100vw"
                       className="object-cover"
                     />
