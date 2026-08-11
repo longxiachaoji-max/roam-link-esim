@@ -232,6 +232,10 @@ export default function MemberCenter() {
         })
       });
       const result = await res.json();
+      if (res.ok && paymentMethod === 'BARCODE' && result.barcodeReady && result.redirect) {
+        window.location.href = result.redirect;
+        return;
+      }
       if (!res.ok || !result.action || !result.fields) {
         throw new Error(result.error || '無法建立儲值付款');
       }

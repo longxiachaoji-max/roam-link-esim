@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Barcode, ExternalLink, FileCheck2, RefreshCw, Smartphone, Upload, WalletCards } from 'lucide-react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { compressImageForUpload } from '@/lib/client-image-compression';
+import ReactBarcode from 'react-barcode';
 
 interface BarcodeOrderItem {
   id: string;
@@ -20,6 +21,10 @@ interface BarcodeOrder {
   payment_status: string;
   order_status: string;
   ecpay_merchant_trade_no: string | null;
+  ecpay_barcode_1: string | null;
+  ecpay_barcode_2: string | null;
+  ecpay_barcode_3: string | null;
+  ecpay_barcode_expires_at: string | null;
   payment_proof_uploaded_at: string | null;
   payment_proof_url: string | null;
   manual_payment_confirmed_at: string | null;
@@ -114,6 +119,7 @@ export default function BarcodeOrdersPanel() {
           const isTopup = order.payment_method === 'ECPAY_TOPUP';
           const isPaid = order.payment_status === 'PAID';
           const productNames = order.order_items.map(item => getProduct(item)?.name).filter(Boolean);
+          const barcodeValues = [order.ecpay_barcode_1, order.ecpay_barcode_2, order.ecpay_barcode_3].filter((value): value is string => Boolean(value));
           return (
             <article key={order.id} className="rounded-md border border-white/10 bg-[#1a1a24] p-4 shadow-lg">
               <div className="flex items-start justify-between gap-3">
@@ -138,6 +144,26 @@ export default function BarcodeOrdersPanel() {
                 <span className="inline-flex items-center gap-1.5"><Barcode size={14} />綠界編號：{order.ecpay_merchant_trade_no || '-'}</span>
                 {order.payment_proof_uploaded_at && <span>收據：{new Date(order.payment_proof_uploaded_at).toLocaleString('zh-TW')}</span>}
               </div>
+
+              {!isPaid && barcodeValues.length === 3 && (
+                <div className="mt-4 border-y border-white/10 py-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div><p className="text-sm font-bold text-white/85">超商繳費條碼</p><p className="mt-1 text-xs text-white/40">請於超商櫃台依序掃描三段條碼</p></div>
+                    {order.ecpay_barcode_expires_at && <div className="shrink-0 text-right text-xs text-amber-100"><p className="text-white/35">繳費期限</p><p className="mt-1 font-bold">{new Date(order.ecpay_barcode_expires_at).toLocaleString('zh-TW')}</p></div>}
+                  </div>
+                  <div className="space-y-2 overflow-hidden bg-white px-2 py-3 text-black">
+                    {barcodeValues.map((value, index) => (
+                      <div key={value} className="overflow-x-auto border-b border-black/10 pb-2 last:border-0 last:pb-0">
+                        <div className="mx-auto w-max min-w-full text-center">
+                          <p className="mb-1 text-xs font-bold text-black/50">第 {index + 1} 段</p>
+                          <ReactBarcode value={value} format="CODE39" width={1.25} height={44} margin={0} displayValue fontSize={13} background="#ffffff" lineColor="#000000" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-amber-100/75">超商條碼為一次性繳費，請勿重複或分次繳款。</p>
+                </div>
+              )}
 
               <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {order.payment_proof_url && (

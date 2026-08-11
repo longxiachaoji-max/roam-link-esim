@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createMerchantTradeNo, formatEcpayTradeDate, generateCheckMacValue, getEcpayConfig } from '@/lib/ecpay';
+import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
 import { buildReferralRewardQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ function getSupabase() {
 
 export async function POST(request: Request) {
   let orderId = '';
+  let ecpayOrderCreated = false;
   try {
     const authorization = request.headers.get('authorization') || '';
     const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
@@ -90,7 +92,8 @@ export async function POST(request: Request) {
       await saveReferralConfig(supabase, usageGuide, config);
     }
 
-    let paymentOrigin = process.env.NEXT_PUBLIC_PAYMENT_SITE_URL || new URL(request.url).origin;
+    const configuredPaymentOrigin = process.env.NEXT_PUBLIC_PAYMENT_SITE_URL || new URL(request.url).origin;
+    let paymentOrigin = configuredPaymentOrigin;
     if (body.returnOrigin) {
       const parsedOrigin = new URL(String(body.returnOrigin));
       if (parsedOrigin.protocol === 'https:' || parsedOrigin.hostname === 'localhost') {
@@ -100,6 +103,37 @@ export async function POST(request: Request) {
     const returnPath = String(body.returnPath || '/');
     const safeReturnPath = returnPath.startsWith('/') && !returnPath.startsWith('//') ? returnPath : '/';
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
+    if (paymentMethod === 'BARCODE') {
+      const barcode = await createEcpayBackgroundBarcode({
+        merchantTradeNo,
+        amount,
+        orderId: order.id,
+        returnUrl: `${configuredPaymentOrigin}/api/ecpay/topup/notify`,
+        expireDays: 3
+      });
+      ecpayOrderCreated = true;
+      const createdAt = new Date().toISOString();
+      const { error: barcodeSaveError } = await supabase
+        .from('orders')
+        .update({
+          ecpay_trade_no: barcode.tradeNo || null,
+          ecpay_barcode_1: barcode.barcode1,
+          ecpay_barcode_2: barcode.barcode2,
+          ecpay_barcode_3: barcode.barcode3,
+          ecpay_barcode_expires_at: barcode.expiresAt,
+          ecpay_barcode_created_at: createdAt,
+          updated_at: createdAt
+        })
+        .eq('id', order.id);
+      if (barcodeSaveError) throw barcodeSaveError;
+
+      return NextResponse.json({
+        barcodeReady: true,
+        orderId: order.id,
+        redirect: `${paymentOrigin}${safeReturnPath}?payment=barcode`
+      });
+    }
+
     const fields: Record<string, string> = {
       MerchantID: merchantId,
       MerchantTradeNo: merchantTradeNo,
@@ -109,9 +143,7 @@ export async function POST(request: Request) {
       TradeDesc: 'Catch the Moment Member Topup',
       ItemName: '一飛通儲值金',
       ReturnURL: `${paymentOrigin}/api/ecpay/topup/notify`,
-      ClientBackURL: paymentMethod === 'BARCODE'
-        ? `${paymentOrigin}${safeReturnPath}?payment=barcode`
-        : `${paymentOrigin}${safeReturnPath}?payment=cancelled`,
+      ClientBackURL: `${paymentOrigin}${safeReturnPath}?payment=cancelled`,
       ChoosePayment: paymentMethod,
       EncryptType: '1',
       Language: 'CHT',
@@ -119,16 +151,12 @@ export async function POST(request: Request) {
       CustomField2: 'TOPUP',
       CustomField3: safeReturnPath
     };
-    if (paymentMethod === 'BARCODE') {
-      fields.StoreExpireDate = '3';
-    } else {
-      fields.OrderResultURL = `${paymentOrigin}/api/ecpay/topup/result`;
-    }
+    fields.OrderResultURL = `${paymentOrigin}/api/ecpay/topup/result`;
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 
     return NextResponse.json({ action: checkoutUrl, fields });
   } catch (error) {
-    if (orderId) {
+    if (orderId && !ecpayOrderCreated) {
       try {
         await getSupabase().from('orders').delete().eq('id', orderId).eq('payment_status', 'PENDING');
       } catch (cleanupError) {

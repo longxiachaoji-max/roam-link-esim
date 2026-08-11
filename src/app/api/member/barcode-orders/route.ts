@@ -51,6 +51,7 @@ export async function GET(request: Request) {
         id, order_number, created_at, updated_at, total_amount,
         payment_method, payment_status, order_status,
         ecpay_merchant_trade_no, payment_proof_path, payment_proof_uploaded_at,
+        ecpay_barcode_1, ecpay_barcode_2, ecpay_barcode_3, ecpay_barcode_expires_at,
         manual_payment_confirmed_at, ecpay_paid_at,
         order_items ( id, price, products ( name, country, validity_days ) )
       `)

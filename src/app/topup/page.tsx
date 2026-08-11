@@ -181,9 +181,13 @@ export default function TopupPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ amount: numericAmount, paymentMethod })
+        body: JSON.stringify({ amount: numericAmount, paymentMethod, returnPath: '/member' })
       });
       const result = await response.json();
+      if (response.ok && paymentMethod === 'BARCODE' && result.barcodeReady && result.redirect) {
+        window.location.href = result.redirect;
+        return;
+      }
       if (!response.ok || !result.action || !result.fields) {
         throw new Error(result.error || '無法建立儲值付款');
       }
