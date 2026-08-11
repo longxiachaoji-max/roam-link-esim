@@ -44,6 +44,11 @@ interface NotificationSettings {
   telegram_chat_id: string;
 }
 
+interface PaymentConfirmationOptions {
+  source?: 'ecpay' | 'manual';
+  adminUserId?: string;
+}
+
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -152,8 +157,14 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
   }
 }
 
-export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount: number) {
+export async function markEcpayOrderPaidAndFulfill(
+  orderId: string,
+  tradeAmount: number,
+  options: PaymentConfirmationOptions = {}
+) {
   const supabase = getAdminClient();
+  const confirmationSource = options.source || 'ecpay';
+  const confirmedAt = new Date().toISOString();
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .select(`
@@ -171,11 +182,30 @@ export async function markEcpayOrderPaidAndFulfill(orderId: string, tradeAmount:
   const order = orderData as unknown as PaidOrder;
   if (order.payment_method !== 'ECPAY') throw new Error('付款方式與訂單不符');
   if (Math.round(Number(order.total_amount)) !== Math.round(tradeAmount)) throw new Error('綠界付款金額與訂單不符');
+
+  if (confirmationSource === 'ecpay') {
+    const { error: receivedError } = await supabase
+      .from('orders')
+      .update({ ecpay_paid_at: confirmedAt, updated_at: confirmedAt })
+      .eq('id', orderId)
+      .is('ecpay_paid_at', null);
+    if (receivedError) throw receivedError;
+  }
+
   if (order.payment_status === 'PAID') return { alreadyProcessed: true, order };
+
+  const paidUpdate: Record<string, string> = {
+    payment_status: 'PAID',
+    updated_at: confirmedAt
+  };
+  if (confirmationSource === 'manual') {
+    paidUpdate.manual_payment_confirmed_at = confirmedAt;
+    if (options.adminUserId) paidUpdate.manual_payment_confirmed_by = options.adminUserId;
+  }
 
   const { data: claimedOrders, error: paidError } = await supabase
     .from('orders')
-    .update({ payment_status: 'PAID', updated_at: new Date().toISOString() })
+    .update(paidUpdate)
     .eq('id', orderId)
     .eq('payment_status', 'PENDING')
     .select('id');

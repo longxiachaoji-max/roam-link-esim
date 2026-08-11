@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { awardReferralRewards } from '@/lib/referrals';
 
+interface PaymentConfirmationOptions {
+  source?: 'ecpay' | 'manual';
+  adminUserId?: string;
+}
+
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -8,18 +13,34 @@ function getAdminClient() {
   return createClient(url, serviceKey);
 }
 
-export async function markEcpayTopupPaid(orderId: string, tradeAmount: number) {
+export async function markEcpayTopupPaid(
+  orderId: string,
+  tradeAmount: number,
+  options: PaymentConfirmationOptions = {}
+) {
   const supabase = getAdminClient();
+  const confirmationSource = options.source || 'ecpay';
+  const confirmedAt = new Date().toISOString();
   const normalizedAmount = Math.round(tradeAmount);
   const { data: order, error: orderError } = await supabase
     .from('orders')
-    .select('id, customer_id, total_amount, payment_method, payment_status, tokens_used')
+    .select('id, customer_id, total_amount, payment_method, payment_status, tokens_used, ecpay_payment_method')
     .eq('id', orderId)
     .single();
 
   if (orderError || !order) throw new Error('找不到儲值訂單');
   if (order.payment_method !== 'ECPAY_TOPUP') throw new Error('付款方式與儲值訂單不符');
   if (Math.round(Number(order.total_amount)) !== normalizedAmount) throw new Error('綠界付款金額與儲值訂單不符');
+
+  if (confirmationSource === 'ecpay') {
+    const { error: receivedError } = await supabase
+      .from('orders')
+      .update({ ecpay_paid_at: confirmedAt, updated_at: confirmedAt })
+      .eq('id', orderId)
+      .is('ecpay_paid_at', null);
+    if (receivedError) throw receivedError;
+  }
+
   if (order.payment_status === 'PAID') {
     if (Number(order.tokens_used || 0) > 0) {
       await awardReferralRewards(supabase, orderId);
@@ -74,7 +95,7 @@ export async function markEcpayTopupPaid(orderId: string, tradeAmount: number) {
       amount: normalizedAmount,
       transaction_type: 'topup',
       balance_after: newBalance,
-      reason: `[收款金額:${normalizedAmount}] 拾機綠界信用卡儲值 訂單:${order.id}`
+      reason: `[收款金額:${normalizedAmount}] 一飛通${order.ecpay_payment_method === 'BARCODE' ? '超商' : '綠界'}儲值${confirmationSource === 'manual' ? '（後台確認）' : ''} 訂單:${order.id}`
     }])
     .select('id')
     .single();
@@ -85,9 +106,19 @@ export async function markEcpayTopupPaid(orderId: string, tradeAmount: number) {
     throw transactionError || new Error('儲值紀錄建立失敗');
   }
 
+  const paidUpdate: Record<string, string> = {
+    payment_status: 'PAID',
+    order_status: 'COMPLETED',
+    updated_at: confirmedAt
+  };
+  if (confirmationSource === 'manual') {
+    paidUpdate.manual_payment_confirmed_at = confirmedAt;
+    if (options.adminUserId) paidUpdate.manual_payment_confirmed_by = options.adminUserId;
+  }
+
   const { error: paidError } = await supabase
     .from('orders')
-    .update({ payment_status: 'PAID', order_status: 'COMPLETED', updated_at: new Date().toISOString() })
+    .update(paidUpdate)
     .eq('id', orderId)
     .eq('payment_status', 'PROCESSING');
 

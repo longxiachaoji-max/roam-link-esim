@@ -261,12 +261,12 @@ export default function TopupPage() {
         </div>
 
         {paymentNotice && (
-          <div className={`mb-6 border px-4 py-3 text-sm font-bold ${paymentNotice === 'success' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : paymentNotice === 'pending' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
+          <div className={`mb-6 border px-4 py-3 text-sm font-bold ${paymentNotice === 'success' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : paymentNotice === 'pending' || paymentNotice === 'barcode' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
             {paymentNotice === 'success' && '儲值成功，會員餘額已更新。'}
             {paymentNotice === 'pending' && '付款結果確認中，請稍後重新開啟頁面。'}
             {paymentNotice === 'failed' && '付款未完成，本次沒有增加餘額。'}
             {paymentNotice === 'cancelled' && '已取消付款，本次沒有增加餘額。'}
-            {paymentNotice === 'barcode' && '超商條碼已建立，繳費完成後系統會自動增加會員餘額。'}
+            {paymentNotice === 'barcode' && <span>超商條碼已建立，繳費後可前往 <a href="https://firstesim.space/member?view=barcode" className="underline underline-offset-2">會員中心上傳收據</a>，由後台提早確認入帳。</span>}
           </div>
         )}
 

@@ -9,6 +9,7 @@ import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 import PhysicalOrdersPanel from './physical-orders-panel';
+import BarcodeOrdersPanel from './barcode-orders-panel';
 
 interface MemberReview {
   id: string;
@@ -80,7 +81,7 @@ export default function MemberCenter() {
   const [referralCode, setReferralCode] = useState('');
   const [referralRule, setReferralRule] = useState<any>(null);
   const [isSavingReferral, setIsSavingReferral] = useState(false);
-  const [orderView, setOrderView] = useState<'esim' | 'physical'>('esim');
+  const [orderView, setOrderView] = useState<'esim' | 'physical' | 'barcode'>('esim');
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -144,6 +145,10 @@ export default function MemberCenter() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const payment = params.get('payment');
+    if (params.get('view') === 'barcode') {
+      window.setTimeout(() => setOrderView('barcode'), 0);
+      window.history.replaceState({}, '', '/member');
+    }
     if (params.get('topup') === '1') {
       window.setTimeout(() => setIsTopupOpen(true), 0);
       window.history.replaceState({}, '', '/member');
@@ -156,6 +161,7 @@ export default function MemberCenter() {
     } else if (payment === 'barcode') {
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
+      window.setTimeout(() => setOrderView('barcode'), 0);
       window.setTimeout(() => showToast('超商條碼已建立，繳費完成後訂單會自動更新'), 0);
     } else if (payment === 'pending') {
       window.history.replaceState({}, '', '/member');
@@ -703,7 +709,7 @@ export default function MemberCenter() {
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-1 rounded-md border border-white/10 bg-white/[0.03] p-1">
+        <div className="mb-6 grid grid-cols-3 gap-1 rounded-md border border-white/10 bg-white/[0.03] p-1">
           <button
             type="button"
             onClick={() => setOrderView('esim')}
@@ -718,7 +724,15 @@ export default function MemberCenter() {
             className={`flex min-h-11 items-center justify-center gap-2 rounded px-3 text-sm font-bold transition-colors ${orderView === 'physical' ? 'bg-[#F05A28] text-white shadow' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}
           >
             <PackageSearch size={17} />
-            實體商品訂單
+            實體訂單
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderView('barcode')}
+            className={`flex min-h-11 items-center justify-center gap-1.5 rounded px-2 text-sm font-bold transition-colors ${orderView === 'barcode' ? 'bg-[#F05A28] text-white shadow' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}
+          >
+            <Barcode size={17} />
+            超商付款
           </button>
         </div>
 
@@ -935,7 +949,7 @@ export default function MemberCenter() {
             </div>
           )}
           </div>
-        </> : <PhysicalOrdersPanel />}
+        </> : orderView === 'physical' ? <PhysicalOrdersPanel /> : <BarcodeOrdersPanel />}
       </div>
 
       {purchaseReminderOpen && (

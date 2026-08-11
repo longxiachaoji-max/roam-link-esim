@@ -52,6 +52,8 @@ export async function POST(request: Request) {
       referralQuote = buildReferralRewardQuote(config, authUser.email, referralCode, amount);
     }
 
+    const merchantTradeNo = createMerchantTradeNo();
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([{
@@ -59,6 +61,8 @@ export async function POST(request: Request) {
         total_amount: amount,
         tokens_used: referralQuote ? 1 : 0,
         payment_method: 'ECPAY_TOPUP',
+        ecpay_payment_method: paymentMethod,
+        ecpay_merchant_trade_no: merchantTradeNo,
         payment_status: 'PENDING',
         order_status: 'CREATED'
       }])
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
     const fields: Record<string, string> = {
       MerchantID: merchantId,
-      MerchantTradeNo: createMerchantTradeNo(),
+      MerchantTradeNo: merchantTradeNo,
       MerchantTradeDate: formatEcpayTradeDate(),
       PaymentType: 'aio',
       TotalAmount: String(amount),

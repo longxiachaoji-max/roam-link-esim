@@ -113,6 +113,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${limit.label}金額需介於 NT$${limit.min.toLocaleString()} 至 NT$${limit.max.toLocaleString()}` }, { status: 400 });
     }
 
+    const merchantTradeNo = createMerchantTradeNo();
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([{
@@ -120,6 +122,8 @@ export async function POST(request: Request) {
         total_amount: totalAmount,
         tokens_used: 0,
         payment_method: 'ECPAY',
+        ecpay_payment_method: paymentMethod,
+        ecpay_merchant_trade_no: merchantTradeNo,
         payment_status: 'PENDING',
         order_status: 'CREATED'
       }])
@@ -160,7 +164,7 @@ export async function POST(request: Request) {
     const itemName = sanitizeEcpayText(products.map(product => product.name).join('#'), 200);
     const fields: Record<string, string> = {
       MerchantID: merchantId,
-      MerchantTradeNo: createMerchantTradeNo(),
+      MerchantTradeNo: merchantTradeNo,
       MerchantTradeDate: formatEcpayTradeDate(),
       PaymentType: 'aio',
       TotalAmount: String(totalAmount),

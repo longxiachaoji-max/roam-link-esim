@@ -44,6 +44,7 @@ export default function AdminLayout({
     { name: '儀表板', href: '/admin' },
     { name: '會員管理', href: '/admin/customers' },
     { name: '儲值紀錄', href: '/admin/topup-history' },
+    { name: '超商付款訂單', href: '/admin/barcode-orders' },
     { name: '流量統計', href: '/admin/analytics' },
     { name: '資源監控', href: '/admin/resource-monitor' },
     { name: '訂單管理', href: '/admin/orders' },
