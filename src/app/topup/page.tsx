@@ -390,6 +390,9 @@ export default function TopupPage() {
                   <Barcode size={20} />
                   {payingMethod === 'BARCODE' ? '正在產生條碼...' : '超商條碼付款'}
                 </button>
+                <div className="mt-3 border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-900">
+                  超商付款約 3 天入帳，入帳後將自動加入儲值金。
+                </div>
                 <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-black/45">
                   <LockKeyhole size={15} className="mt-0.5 shrink-0" />
                   <span>付款由綠界科技加密處理，系統確認付款成功後才會增加會員餘額。</span>

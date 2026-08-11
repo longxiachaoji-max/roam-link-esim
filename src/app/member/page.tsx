@@ -587,6 +587,9 @@ export default function MemberCenter() {
                 <Barcode size={20} />
                 {topupPayingMethod === 'BARCODE' ? '正在產生條碼...' : '超商條碼付款'}
               </button>
+              <div className="mt-3 rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs font-medium leading-5 text-amber-200">
+                超商付款約 3 天入帳，入帳後將自動加入儲值金。
+              </div>
             </div>
           </div>
         )}
