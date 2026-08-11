@@ -104,7 +104,7 @@ export default function BarcodeOrdersPanel() {
       <div className="mb-5 flex items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold">超商付款訂單</h2>
-          <p className="mt-1 text-xs leading-5 text-white/45">繳款後可上傳收據供後台提早確認；綠界入帳後也會自動更新。</p>
+          <p className="mt-1 text-xs leading-5 text-white/45">繳款後可至會員中心上傳繳款收據，人工審核後即時入帳；如未上傳收據，將於超商入帳後自動入帳。</p>
         </div>
         <button type="button" onClick={() => void loadOrders()} title="重新整理" className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 text-white/55 hover:bg-white/5 hover:text-white">
           <RefreshCw size={17} />

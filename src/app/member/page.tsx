@@ -162,7 +162,7 @@ export default function MemberCenter() {
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => setOrderView('barcode'), 0);
-      window.setTimeout(() => showToast('超商條碼已建立，繳費完成後訂單會自動更新'), 0);
+      window.setTimeout(() => showToast('繳款後可至會員中心上傳繳款收據，人工審核後即時入帳；如未上傳收據，將於超商入帳後自動入帳'), 0);
     } else if (payment === 'pending') {
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => showToast('付款結果確認中，請稍後重新整理'), 0);
@@ -598,7 +598,7 @@ export default function MemberCenter() {
                 {topupPayingMethod === 'BARCODE' ? '正在產生條碼...' : '超商條碼付款'}
               </button>
               <div className="mt-3 rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs font-medium leading-5 text-amber-200">
-                超商付款約 3 天入帳，入帳後將自動加入儲值金。
+                繳款後可至會員中心上傳繳款收據，人工審核後即時入帳；如未上傳收據，將於超商入帳後自動入帳。
               </div>
             </div>
           </div>

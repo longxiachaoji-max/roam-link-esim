@@ -270,7 +270,7 @@ export default function TopupPage() {
             {paymentNotice === 'pending' && '付款結果確認中，請稍後重新開啟頁面。'}
             {paymentNotice === 'failed' && '付款未完成，本次沒有增加餘額。'}
             {paymentNotice === 'cancelled' && '已取消付款，本次沒有增加餘額。'}
-            {paymentNotice === 'barcode' && <span>超商條碼已建立，繳費後可前往 <a href="https://firstesim.space/member?view=barcode" className="underline underline-offset-2">會員中心上傳收據</a>，由後台提早確認入帳。</span>}
+            {paymentNotice === 'barcode' && <span>超商條碼已建立，繳款後可至 <a href="https://firstesim.space/member?view=barcode" className="underline underline-offset-2">會員中心上傳繳款收據</a>，人工審核後即時入帳；如未上傳收據，將於超商入帳後自動入帳。</span>}
           </div>
         )}
 
@@ -395,7 +395,7 @@ export default function TopupPage() {
                   {payingMethod === 'BARCODE' ? '正在產生條碼...' : '超商條碼付款'}
                 </button>
                 <div className="mt-3 border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-900">
-                  超商付款約 3 天入帳，入帳後將自動加入儲值金。
+                  繳款後可至會員中心上傳繳款收據，人工審核後即時入帳；如未上傳收據，將於超商入帳後自動入帳。
                 </div>
                 <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-black/45">
                   <LockKeyhole size={15} className="mt-0.5 shrink-0" />
