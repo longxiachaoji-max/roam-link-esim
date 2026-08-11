@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       PaymentType: 'aio',
       TotalAmount: String(amount),
       TradeDesc: 'Catch the Moment Member Topup',
-      ItemName: `拾機會員儲值金 ${amount}元`,
+      ItemName: '一飛通儲值金',
       ReturnURL: `${paymentOrigin}/api/ecpay/topup/notify`,
       ClientBackURL: paymentMethod === 'BARCODE'
         ? `${paymentOrigin}${safeReturnPath}?payment=barcode`
