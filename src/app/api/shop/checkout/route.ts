@@ -10,6 +10,7 @@ import { getPhysicalStoreAdmin } from '@/lib/physical-store';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { calculateRentalPrice, normalizeRentalPriceTiers } from '@/lib/rental-pricing';
 import { sendPhysicalRentalOrderCreatedAlert } from '@/lib/physical-rental-alerts';
+import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 import {
   calculatePhysicalShippingFee,
   normalizePhysicalStoreSettings,
@@ -239,6 +240,17 @@ export async function POST(request: Request) {
     if (paymentMethod === 'BARCODE') fields.StoreExpireDate = '3';
     else fields.OrderResultURL = `${origin}/api/ecpay/shop/result`;
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
+
+    if (paymentMethod === 'BARCODE') {
+      await sendBarcodePaymentCreatedAlert(supabase, {
+        orderId,
+        customerEmail: authUser.email,
+        amount: totalAmount,
+        purpose: '一飛通商城商品',
+        itemNames: orderItems.map(item => `${item.product_name} × ${item.quantity}`),
+        merchantTradeNo
+      });
+    }
 
     return NextResponse.json({ action: checkoutUrl, fields, orderId });
   } catch (error) {

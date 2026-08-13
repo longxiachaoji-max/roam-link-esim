@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
+import { sendBarcodeReceiptUploadedAlert } from '@/lib/barcode-payment-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,7 +94,11 @@ export async function POST(request: Request) {
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, payment_status, payment_proof_path')
+      .select(`
+        id, order_number, total_amount, payment_method, payment_status,
+        ecpay_merchant_trade_no, payment_proof_path,
+        order_items ( products ( name ) )
+      `)
       .eq('id', orderId)
       .eq('customer_id', customerId)
       .eq('ecpay_payment_method', 'BARCODE')
@@ -128,6 +133,19 @@ export async function POST(request: Request) {
       await supabase.storage.from(BUCKET).remove([order.payment_proof_path]);
     }
     const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(uploadedPath, 300);
+    const itemNames = (order.order_items || []).flatMap(item => {
+      const product = Array.isArray(item.products) ? item.products[0] : item.products;
+      return product?.name ? [product.name] : [];
+    });
+    await sendBarcodeReceiptUploadedAlert(supabase, {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      customerEmail: user.email,
+      amount: Number(order.total_amount),
+      purpose: order.payment_method === 'ECPAY_TOPUP' ? '會員儲值' : 'eSIM 商品',
+      itemNames: order.payment_method === 'ECPAY_TOPUP' ? ['一飛通儲值金'] : itemNames,
+      merchantTradeNo: order.ecpay_merchant_trade_no
+    });
     uploadedPath = '';
     return NextResponse.json({ success: true, uploadedAt, paymentProofUrl: signed?.signedUrl || null });
   } catch (error) {

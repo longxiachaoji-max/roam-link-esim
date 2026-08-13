@@ -9,6 +9,7 @@ import {
 } from '@/lib/ecpay';
 import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
 import { parsePaymentLimits } from '@/lib/payment-limits';
+import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -185,6 +186,18 @@ export async function POST(request: Request) {
       fields.OrderResultURL = `${origin}/api/ecpay/result`;
     }
     fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
+
+    if (paymentMethod === 'BARCODE') {
+      await sendBarcodePaymentCreatedAlert(supabase, {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        customerEmail: authUser.email,
+        amount: totalAmount,
+        purpose: 'eSIM 商品',
+        itemNames: products.map(product => product.name),
+        merchantTradeNo
+      });
+    }
 
     return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id, orderNumber: order.order_number });
   } catch (error) {

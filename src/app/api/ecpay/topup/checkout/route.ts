@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createMerchantTradeNo, formatEcpayTradeDate, generateCheckMacValue, getEcpayConfig } from '@/lib/ecpay';
 import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
 import { buildReferralRewardQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
+import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
         payment_status: 'PENDING',
         order_status: 'CREATED'
       }])
-      .select('id')
+      .select('id, order_number')
       .single();
     if (orderError || !order) throw orderError || new Error('儲值訂單建立失敗');
     orderId = order.id;
@@ -126,6 +127,16 @@ export async function POST(request: Request) {
         })
         .eq('id', order.id);
       if (barcodeSaveError) throw barcodeSaveError;
+
+      await sendBarcodePaymentCreatedAlert(supabase, {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        customerEmail: authUser.email,
+        amount,
+        purpose: '會員儲值',
+        itemNames: ['一飛通儲值金'],
+        merchantTradeNo
+      });
 
       return NextResponse.json({
         barcodeReady: true,
