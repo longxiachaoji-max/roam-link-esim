@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, CalendarClock, Pencil, Plus, Save, TicketPercent, Trash2, UserRound, X } from 'lucide-react';
 import { adminFetch } from '@/lib/admin-fetch';
 import { normalizeReferralCode } from '@/lib/referral-code';
+import { discountPercentToRate, discountRateToPercent } from '@/lib/promo-discount-math';
 
 type RewardType = 'discount' | 'tokens';
 type DiscountType = 'percent' | 'fixed';
@@ -39,6 +40,7 @@ interface PromoForm {
   reward_tokens: string;
   discount_type: DiscountType;
   discount_value: string;
+  discount_rate: string;
   max_discount: string;
   min_order_amount: string;
   max_uses: string;
@@ -58,7 +60,8 @@ const EMPTY_FORM: PromoForm = {
   reward_type: 'discount',
   reward_tokens: '100',
   discount_type: 'percent',
-  discount_value: '5',
+  discount_value: '100',
+  discount_rate: '8',
   max_discount: '',
   min_order_amount: '0',
   max_uses: '100',
@@ -103,7 +106,7 @@ function benefitLabel(promo: PromoCode) {
   if (promo.reward_type === 'tokens') return `兌換 NT$${Number(promo.reward_tokens).toLocaleString()} 儲值金`;
   if (promo.discount_type === 'fixed') return `結帳折 NT$${Number(promo.discount_value).toLocaleString()}`;
   const cap = promo.max_discount ? `，最高 NT$${Number(promo.max_discount).toLocaleString()}` : '';
-  return `結帳折 ${Number(promo.discount_value)}%${cap}`;
+  return `結帳 ${discountPercentToRate(Number(promo.discount_value))} 折${cap}`;
 }
 
 function audienceLabel(promo: PromoCode) {
@@ -169,6 +172,9 @@ export default function PromoCodesPage() {
       reward_tokens: String(promo.reward_tokens || 0),
       discount_type: promo.discount_type || 'percent',
       discount_value: String(promo.discount_value || 0),
+      discount_rate: promo.discount_type === 'percent' && Number(promo.discount_value) > 0
+        ? String(discountPercentToRate(Number(promo.discount_value)))
+        : '8',
       max_discount: promo.max_discount ? String(promo.max_discount) : '',
       min_order_amount: String(promo.min_order_amount || 0),
       max_uses: String(promo.max_uses || 1),
@@ -193,7 +199,9 @@ export default function PromoCodesPage() {
         ...form,
         code: normalizeReferralCode(form.code),
         reward_tokens: Number(form.reward_tokens),
-        discount_value: Number(form.discount_value),
+        discount_value: form.discount_type === 'percent'
+          ? discountRateToPercent(Number(form.discount_rate))
+          : Number(form.discount_value),
         max_discount: form.max_discount ? Number(form.max_discount) : null,
         min_order_amount: Number(form.min_order_amount || 0),
         max_uses: Number(form.max_uses),
@@ -349,8 +357,12 @@ export default function PromoCodesPage() {
                   <label className="text-xs text-white/50 sm:col-span-2">用途<select value={form.reward_type} onChange={event => setForm(current => ({ ...current, reward_type: event.target.value as RewardType }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-[#0d0d1a] px-3 text-white outline-none focus:border-cyan-400"><option value="discount">購物車直接折扣</option><option value="tokens">兌換儲值金（保留舊代碼）</option></select></label>
                   {form.reward_type === 'discount' ? (
                     <>
-                      <label className="text-xs text-white/50">折扣方式<select value={form.discount_type} onChange={event => setForm(current => ({ ...current, discount_type: event.target.value as DiscountType }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-[#0d0d1a] px-3 text-white outline-none focus:border-cyan-400"><option value="percent">百分比折扣</option><option value="fixed">固定金額折扣</option></select></label>
-                      <label className="text-xs text-white/50">{form.discount_type === 'percent' ? '折扣百分比 (%)' : '折抵金額 (NT$)'}<input type="number" min="0.01" max={form.discount_type === 'percent' ? 99 : undefined} step="0.01" value={form.discount_value} onChange={event => setForm(current => ({ ...current, discount_value: event.target.value }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
+                      <label className="text-xs text-white/50">折扣方式<select value={form.discount_type} onChange={event => setForm(current => ({ ...current, discount_type: event.target.value as DiscountType }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-[#0d0d1a] px-3 text-white outline-none focus:border-cyan-400"><option value="percent">折數優惠</option><option value="fixed">固定金額折扣</option></select></label>
+                      {form.discount_type === 'percent' ? (
+                        <label className="text-xs text-white/50">折數<input type="number" min="0.1" max="9.9" step="0.1" value={form.discount_rate} onChange={event => setForm(current => ({ ...current, discount_rate: event.target.value }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /><span className="mt-1.5 block text-[11px] text-white/35">例如：8 折代表售價的 80%，7.5 折代表售價的 75%</span></label>
+                      ) : (
+                        <label className="text-xs text-white/50">折抵金額 (NT$)<input type="number" min="1" step="1" value={form.discount_value} onChange={event => setForm(current => ({ ...current, discount_value: event.target.value }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
+                      )}
                       <label className="text-xs text-white/50">最低消費 (NT$)<input type="number" min="0" value={form.min_order_amount} onChange={event => setForm(current => ({ ...current, min_order_amount: event.target.value }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>
                       {form.discount_type === 'percent' && <label className="text-xs text-white/50">最高折抵 (NT$，選填)<input type="number" min="1" value={form.max_discount} onChange={event => setForm(current => ({ ...current, max_discount: event.target.value }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label>}
                     </>
