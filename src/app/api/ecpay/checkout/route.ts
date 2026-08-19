@@ -7,7 +7,8 @@ import {
   getEcpayConfig,
   sanitizeEcpayText
 } from '@/lib/ecpay';
-import { buildReferralQuote, readReferralConfig, saveReferralConfig } from '@/lib/referrals';
+import { isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
+import { readReferralConfig, saveReferralConfig, type ReferralQuote } from '@/lib/referrals';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 
@@ -73,7 +74,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '訂單金額不正確' }, { status: 400 });
     }
     let totalAmount = originalTotalAmount;
-    let referralQuote: ReturnType<typeof buildReferralQuote> | null = null;
+    let discountQuote: CheckoutDiscountQuote | null = null;
+    let referralQuote: ReferralQuote | null = null;
 
     let { data: customer } = await supabase.from('customers').select('*').eq('email', authUser.email).single();
     if (!customer) {
@@ -92,9 +94,9 @@ export async function POST(request: Request) {
 
     const discountCode = String(body.discountCode || '').trim();
     if (discountCode) {
-      const { config } = await readReferralConfig(supabase);
-      referralQuote = buildReferralQuote(config, authUser.email, discountCode, originalTotalAmount);
-      totalAmount = referralQuote.payableTotal;
+      discountQuote = await resolveCheckoutDiscount(supabase, authUser.email, discountCode, originalTotalAmount);
+      totalAmount = discountQuote.payableTotal;
+      if (discountQuote.source === 'referral') referralQuote = discountQuote;
     }
     if (totalAmount <= 0) {
       return NextResponse.json({ error: '折扣後金額為 0，請改用儲值金結帳' }, { status: 400 });
@@ -121,6 +123,10 @@ export async function POST(request: Request) {
       .insert([{
         customer_id: customer.id,
         total_amount: totalAmount,
+        original_total_amount: originalTotalAmount,
+        discount_amount: discountQuote?.discountAmount || 0,
+        promo_code_id: isPromoDiscount(discountQuote) ? discountQuote.promoCodeId : null,
+        promo_code_snapshot: isPromoDiscount(discountQuote) ? discountQuote.code : null,
         tokens_used: 0,
         payment_method: 'ECPAY',
         ecpay_payment_method: paymentMethod,

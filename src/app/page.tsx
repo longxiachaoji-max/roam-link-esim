@@ -483,24 +483,20 @@ export default function Home() {
     showToast("⏳ 正在處理訂單...");
     
     try {
-      // 由於購物車可能有多個商品，我們逐一呼叫 API
-      for (const item of cart) {
-        const res = await authenticatedFetch('/api/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: user.name || user.email.split('@')[0],
-            productId: item.id,
-            useTokens: true,
-            paymentMethod: 'TOKENS',
-            discountCode: appliedDiscount?.code || undefined
-          })
-        });
-        
-        const data = await res.json();
-        if (!res.ok) {
-           throw new Error(data.error || '購買失敗');
-        }
+      const res = await authenticatedFetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: user.name || user.email.split('@')[0],
+          productIds: cart.map(item => item.id),
+          useTokens: true,
+          paymentMethod: 'TOKENS',
+          discountCode: appliedDiscount?.code || undefined
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '購買失敗');
       }
 
       setIsCheckoutOpen(false);
@@ -1290,7 +1286,7 @@ export default function Home() {
                 {appliedDiscount && (
                   <div className="mt-3 space-y-2 text-sm">
                     <div className="flex justify-between text-emerald-300">
-                      <span>折扣碼 {appliedDiscount.code}</span>
+                      <span>{appliedDiscount.label || '折扣碼'} · {appliedDiscount.code}</span>
                       <span>-NT${discountAmount}</span>
                     </div>
                     <div className="flex justify-between text-yellow font-black">

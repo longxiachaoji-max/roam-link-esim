@@ -17,13 +17,18 @@ export function parseTokenCheckoutRequest(value: unknown) {
     throw new TokenCheckoutRequestError('此結帳端點僅支援儲值金付款');
   }
 
-  const productId = typeof body.productId === 'string' ? body.productId.trim() : '';
-  if (!UUID_PATTERN.test(productId)) {
+  const requestedIds = Array.isArray(body.productIds)
+    ? body.productIds
+    : [body.productId];
+  const productIds = requestedIds
+    .map(productId => typeof productId === 'string' ? productId.trim() : '')
+    .filter(Boolean);
+  if (!productIds.length || productIds.length > 20 || productIds.some(productId => !UUID_PATTERN.test(productId))) {
     throw new TokenCheckoutRequestError('商品資料不正確');
   }
 
   return {
-    productId,
+    productIds,
     name: typeof body.name === 'string' ? body.name.trim().slice(0, 100) : '',
     discountCode: typeof body.discountCode === 'string' ? body.discountCode.trim().slice(0, 64) : ''
   };

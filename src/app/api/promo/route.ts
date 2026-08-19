@@ -43,6 +43,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '無效的兌換碼' }, { status: 400 });
     }
 
+    if (promo.reward_type === 'discount') {
+      return NextResponse.json({ error: '此代碼為結帳優惠碼，請在購物車結帳時使用' }, { status: 400 });
+    }
+    if (promo.is_active === false) {
+      return NextResponse.json({ error: '此兌換碼目前未啟用' }, { status: 400 });
+    }
+    if (promo.starts_at && new Date(promo.starts_at) > new Date()) {
+      return NextResponse.json({ error: '此兌換碼尚未開始' }, { status: 400 });
+    }
+
     // 檢查到期
     if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
       return NextResponse.json({ error: '此兌換碼已過期' }, { status: 400 });

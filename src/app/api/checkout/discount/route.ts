@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { buildReferralQuote, readReferralConfig } from '@/lib/referrals';
+import { resolveCheckoutDiscount } from '@/lib/checkout-discounts';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +43,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '部分商品已下架，請重新整理購物車' }, { status: 400 });
     }
 
-    const { config } = await readReferralConfig(supabase);
-    const quote = buildReferralQuote(config, authData.user.email, code, originalTotal);
+    const quote = await resolveCheckoutDiscount(supabase, authData.user.email, code, originalTotal);
     return NextResponse.json({ success: true, quote });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : '折扣碼無法使用' }, { status: 400 });

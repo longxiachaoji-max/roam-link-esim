@@ -213,6 +213,13 @@ export async function markEcpayOrderPaidAndFulfill(
   if (paidError) throw paidError;
   if (!claimedOrders?.length) return { alreadyProcessed: true, order };
 
+  const { error: promoRedemptionError } = await supabase.rpc('record_checkout_promo_redemption', {
+    p_order_id: orderId
+  });
+  if (promoRedemptionError) {
+    console.error('Failed to record checkout promo redemption:', { orderId, error: promoRedemptionError });
+  }
+
   for (const item of order.order_items || []) {
     if (item.inventory_id || !item.product_id) continue;
 

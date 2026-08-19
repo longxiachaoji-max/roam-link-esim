@@ -14,10 +14,22 @@ test('accepts the dedicated token payment method', () => {
     name: '  Test User  ',
     discountCode: ' SUMMER '
   }), {
-    productId: PRODUCT_ID,
+    productIds: [PRODUCT_ID],
     name: 'Test User',
     discountCode: 'SUMMER'
   });
+});
+
+test('accepts a cart with repeated products and validates every id', () => {
+  assert.deepEqual(parseTokenCheckoutRequest({
+    paymentMethod: 'TOKENS',
+    productIds: [PRODUCT_ID, PRODUCT_ID]
+  }).productIds, [PRODUCT_ID, PRODUCT_ID]);
+
+  assert.throws(() => parseTokenCheckoutRequest({
+    paymentMethod: 'TOKENS',
+    productIds: [PRODUCT_ID, 'not-a-product-id']
+  }), TokenCheckoutRequestError);
 });
 
 test('rejects the legacy mixed-payment bypass', () => {

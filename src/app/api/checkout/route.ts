@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
-import { buildReferralQuote, readReferralConfig } from '@/lib/referrals';
+import { isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
@@ -99,15 +99,17 @@ export async function POST(request: Request) {
     const authUser = await requireAuthenticatedUser(request);
     const supabase = getServerSupabase();
     const body = await request.json();
-    const { name, productId, discountCode } = parseTokenCheckoutRequest(body);
+    const { name, productIds, discountCode } = parseTokenCheckoutRequest(body);
     const email = authUser.email.toLowerCase();
 
     // 1. Get or create customer
-    let { data: customer, error: customerError } = await supabase
+    const customerResult = await supabase
       .from('customers')
       .select('*')
       .eq('email', email)
       .single();
+    let customer = customerResult.data;
+    const customerError = customerResult.error;
 
     if (customerError && customerError.code !== 'PGRST116') {
       console.error('Error fetching customer:', customerError);
@@ -125,61 +127,53 @@ export async function POST(request: Request) {
       customer = newCustomer;
     }
 
-    // 2. Get product
-    const { data: product, error: productError } = await supabase
+    // 2. Read the complete cart again on the server. Repeated IDs represent quantity.
+    const uniqueProductIds = [...new Set(productIds)];
+    const { data: productRows, error: productError } = await supabase
       .from('products')
       .select('*')
-      .eq('id', productId)
-      .single();
+      .in('id', uniqueProductIds);
 
-    if (productError || !product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    if (productError) throw productError;
+    const productMap = new Map((productRows || []).map(product => [product.id, product]));
+    const products = productIds.map(id => productMap.get(id)).filter(Boolean);
+    if (products.length !== productIds.length || products.some(product => !product.is_active)) {
+      return NextResponse.json({ error: '部分商品已下架，請重新整理購物車' }, { status: 400 });
     }
 
-    // 3. Find available eSIM inventory. If none exists, still allow checkout and
-    // leave the order item pending for manual fulfillment in admin/orders.
-    const { data: inventory, error: inventoryError } = await supabase
-      .from('e_sim_inventory')
-      .select('*')
-      .eq('product_id', productId)
-      .eq('status', 'AVAILABLE')
-      .limit(1)
-      .single();
-
-    const assignedInventory = inventoryError ? null : inventory;
-
-    // 4. Calculate total amount and token deduction
-    const originalTotalAmount = Math.round(Number(product.price));
-    let totalAmount = originalTotalAmount;
-    let tokensUsed = 0;
-    let referralQuote: ReturnType<typeof buildReferralQuote> | null = null;
+    // 3. Calculate the discount once for the whole cart.
+    const originalTotalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
+    let discountQuote: CheckoutDiscountQuote | null = null;
 
     if (discountCode) {
-      const { config } = await readReferralConfig(supabase);
-      referralQuote = buildReferralQuote(config, email, String(discountCode), originalTotalAmount);
-      totalAmount = referralQuote.payableTotal;
+      discountQuote = await resolveCheckoutDiscount(supabase, email, String(discountCode), originalTotalAmount);
     }
+    const tokensUsed = discountQuote?.payableTotal ?? originalTotalAmount;
 
-    if (!customer.token_balance || customer.token_balance < totalAmount) {
+    if (!customer.token_balance || customer.token_balance < tokensUsed) {
       return NextResponse.json({ error: '請儲值後結帳' }, { status: 400 });
     }
-    tokensUsed = totalAmount;
-    totalAmount = 0;
 
-    // Keep the balance deduction, order and ledger entry in one locked DB transaction.
-    const { data: checkoutRows, error: checkoutError } = await supabase.rpc('create_atomic_token_checkout', {
+    // 4. Keep the cart order, balance deduction, ledger and coupon usage in one transaction.
+    const { data: checkoutRows, error: checkoutError } = await supabase.rpc('create_atomic_token_cart_checkout', {
       p_customer_id: customer.id,
-      p_product_id: product.id,
-      p_payable_tokens: tokensUsed
+      p_product_ids: productIds,
+      p_payable_tokens: tokensUsed,
+      p_original_total: originalTotalAmount,
+      p_discount_amount: discountQuote?.discountAmount || 0,
+      p_promo_code_id: isPromoDiscount(discountQuote) ? discountQuote.promoCodeId : null
     });
     if (checkoutError || !checkoutRows?.[0]) {
       if (checkoutError?.message.includes('INSUFFICIENT_BALANCE')) {
         return NextResponse.json({ error: '儲值金餘額不足，請重新整理後再試' }, { status: 400 });
       }
+      if (checkoutError?.message.includes('PROMO_')) {
+        return NextResponse.json({ error: '優惠碼狀態已變更，請重新套用後再結帳' }, { status: 400 });
+      }
       throw checkoutError || new Error('建立儲值金訂單失敗');
     }
     const checkout = checkoutRows[0];
-    const order: Record<string, any> = {
+    const order = {
       id: checkout.order_id,
       order_number: checkout.order_number,
       total_amount: 0,
@@ -187,101 +181,121 @@ export async function POST(request: Request) {
       payment_status: 'PAID',
       order_status: 'PENDING'
     };
-    const orderItem = { id: checkout.order_item_id };
     customer.token_balance = checkout.new_balance;
 
-    // 6. Claim inventory only after the paid order item exists.
-    let fulfilledInventory = null;
-    if (assignedInventory && totalAmount === 0) {
-      const { data: claimedInventory, error: updateInventoryError } = await supabase
-        .from('e_sim_inventory')
-        .update({ status: 'SOLD', sold_at: new Date().toISOString() })
-        .eq('id', assignedInventory.id)
-        .eq('status', 'AVAILABLE')
-        .select('*')
-        .maybeSingle();
-      if (updateInventoryError) throw updateInventoryError;
+    // 5. Claim inventory or ask the supplier to fulfill each paid item.
+    const { data: orderItems, error: orderItemsError } = await supabase
+      .from('order_items')
+      .select('id, product_id')
+      .eq('order_id', order.id)
+      .order('created_at', { ascending: true });
+    if (orderItemsError) throw orderItemsError;
 
-      if (claimedInventory) {
-        const { error: bindError } = await supabase
+    const pendingProducts: typeof products = [];
+    for (const orderItem of orderItems || []) {
+      const product = productMap.get(orderItem.product_id);
+      if (!product) continue;
+      let fulfilled = false;
+
+      const { data: inventoryCandidates } = await supabase
+        .from('e_sim_inventory')
+        .select('id')
+        .eq('product_id', product.id)
+        .eq('status', 'AVAILABLE')
+        .limit(3);
+      for (const candidate of inventoryCandidates || []) {
+        const { data: claimedInventory, error: claimError } = await supabase
+          .from('e_sim_inventory')
+          .update({ status: 'SOLD', sold_at: new Date().toISOString() })
+          .eq('id', candidate.id)
+          .eq('status', 'AVAILABLE')
+          .select('id')
+          .maybeSingle();
+        if (claimError) throw claimError;
+        if (!claimedInventory) continue;
+
+        const { data: boundItem, error: bindError } = await supabase
           .from('order_items')
           .update({ inventory_id: claimedInventory.id })
           .eq('id', orderItem.id)
-          .is('inventory_id', null);
+          .is('inventory_id', null)
+          .select('id')
+          .maybeSingle();
         if (bindError) throw bindError;
-        fulfilledInventory = claimedInventory;
-      }
-    }
-
-    if (!fulfilledInventory && totalAmount === 0 && orderItem) {
-      try {
-        const createdInventory = await fulfillMicroesimOrderItem(supabase, orderItem.id, product.id, product);
-
-        if (createdInventory) {
-          await supabase
-            .from('orders')
-            .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
-            .eq('id', order.id);
-          fulfilledInventory = createdInventory;
+        if (boundItem) {
+          fulfilled = true;
+          break;
         }
-      } catch (microError) {
-        console.error('MicroEsim token checkout fulfillment failed:', {
-          productId: product.id,
-          supplierPlanId: product.supplier_plan_id,
-          error: microError
-        });
-        await sendMicroesimFulfillmentFailureAlert(supabase, {
-          source: '儲值金結帳自動配發',
-          orderId: order.id,
-          orderItemId: orderItem.id,
-          customerEmail: email,
-          productName: product.name,
-          country: product.country,
-          validityDays: product.validity_days,
-          supplierPlanId: product.supplier_plan_id,
-          error: microError
-        });
+        await supabase.from('e_sim_inventory').update({ status: 'AVAILABLE', sold_at: null }).eq('id', candidate.id);
       }
+
+      if (!fulfilled) {
+        try {
+          fulfilled = Boolean(await fulfillMicroesimOrderItem(supabase, orderItem.id, product.id, product));
+        } catch (microError) {
+          console.error('MicroEsim token checkout fulfillment failed:', {
+            productId: product.id,
+            supplierPlanId: product.supplier_plan_id,
+            error: microError
+          });
+          await sendMicroesimFulfillmentFailureAlert(supabase, {
+            source: '儲值金結帳自動配發',
+            orderId: order.id,
+            orderItemId: orderItem.id,
+            customerEmail: email,
+            productName: product.name,
+            country: product.country,
+            validityDays: product.validity_days,
+            supplierPlanId: product.supplier_plan_id,
+            error: microError
+          });
+        }
+      }
+      if (!fulfilled) pendingProducts.push(product);
     }
 
-    // 7. Send email via Resend
+    const fullyAssigned = pendingProducts.length === 0;
+    await supabase
+      .from('orders')
+      .update({ order_status: fullyAssigned ? 'COMPLETED' : 'PENDING', updated_at: new Date().toISOString() })
+      .eq('id', order.id);
+
+    // 6. Send customer and pending-fulfillment notifications.
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
     const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
+    const productNames = products.map(product => product.name).join('、');
     try {
       const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
       await resend.emails.send({
         from: `Roam Link eSIM <${fromEmail}>`,
         to: [email],
-        subject: fulfilledInventory ? `Your eSIM for ${product.name} is ready!` : `Your ${product.name} order is being prepared`,
-        html: fulfilledInventory ? `
-          <h1>Thank you for your purchase!</h1>
-          <p>Here are your eSIM details for <strong>${product.name}</strong>.</p>
-          <p><strong>SM-DP+ Address:</strong> ${fulfilledInventory.smdp_address}</p>
-          <p><strong>Activation Code:</strong> ${fulfilledInventory.activation_code}</p>
-          <p>Or scan the QR code (generated from the LPA string) on your device.</p>
+        subject: fullyAssigned ? '付款成功，eSIM 已可安裝' : '付款成功，eSIM 正在準備中',
+        html: fullyAssigned ? `
+          <h1>感謝您的購買</h1>
+          <p>訂單商品：<strong>${productNames}</strong></p>
+          <p>eSIM 已配發完成，請前往會員中心查看安裝按鈕與 QR Code。</p>
           <p><strong>安裝提醒：</strong>請於啟用日前或旅程出發前完成安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
-          <p>Enjoy your trip to ${product.country}!</p>
         ` : `
           <h1>Thank you for your purchase!</h1>
-          <p>Your order for <strong>${product.name}</strong> has been received and is being prepared.</p>
+          <p>Your order for <strong>${productNames}</strong> has been received and is being prepared.</p>
           <p>You can check your member center later. The installation button and QR Code will appear once the eSIM is assigned.</p>
           <p><strong>安裝提醒：</strong>請於啟用日前或旅程出發前完成安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
         `,
       });
 
-      const notificationSettings = !fulfilledInventory ? await getNotificationSettings() : null;
+      const notificationSettings = !fullyAssigned ? await getNotificationSettings() : null;
       const notifyEmail = notificationSettings?.order_notify_email || '';
-      if (!fulfilledInventory && notificationSettings?.notify_email_enabled && notifyEmail) {
+      if (!fullyAssigned && notificationSettings?.notify_email_enabled && notifyEmail) {
         await resend.emails.send({
           from: `Roam Link eSIM <${fromEmail}>`,
           to: [notifyEmail],
-          subject: `待補 eSIM 訂單：${product.name}`,
+          subject: `待補 eSIM 訂單：${pendingProducts.map(product => product.name).join('、')}`,
           html: `
             <h1>有一筆訂單需要補 eSIM</h1>
             <p><strong>訂單：</strong>${order.order_number || order.id}</p>
             <p><strong>客戶：</strong>${email}</p>
-            <p><strong>商品：</strong>${product.name}</p>
-            <p><strong>金額：</strong>NT$${Number(product.price)}</p>
+            <p><strong>商品：</strong>${pendingProducts.map(product => product.name).join('、')}</p>
+            <p><strong>實付：</strong>NT$${tokensUsed}</p>
             <p>請到後台訂單管理補上 eSIM 資料。</p>
           `,
         });
@@ -291,7 +305,7 @@ export async function POST(request: Request) {
       // We don't throw here, order is still successful, but email failed.
     }
 
-    if (!fulfilledInventory) {
+    if (!fullyAssigned) {
       const notificationSettings = await getNotificationSettings();
       if (!notificationSettings.notify_telegram_enabled) {
         return NextResponse.json({
@@ -306,10 +320,8 @@ export async function POST(request: Request) {
         '<b>有一筆訂單需要補 eSIM</b>',
         `訂單：<code>${escapeTelegramHtml(order.order_number || order.id)}</code>`,
         `客戶：${escapeTelegramHtml(email)}`,
-        `商品：${escapeTelegramHtml(product.name)}`,
-        `國家：${escapeTelegramHtml(product.country || '-')}`,
-        `天數：${product.validity_days || '-'} 天`,
-        `金額：NT$${Number(product.price)}`,
+        `商品：${escapeTelegramHtml(pendingProducts.map(product => product.name).join('、'))}`,
+        `實付：NT$${tokensUsed}`,
         `後台：${adminUrl}`
       ].join('\n'), notificationSettings.telegram_bot_token, notificationSettings.telegram_chat_id);
     }
@@ -318,17 +330,17 @@ export async function POST(request: Request) {
       success: true,
       orderId: order.id,
       orderNumber: order.order_number,
-      inventoryStatus: fulfilledInventory ? 'ASSIGNED' : 'PENDING',
-      message: fulfilledInventory ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
+      inventoryStatus: fullyAssigned ? 'ASSIGNED' : 'PENDING',
+      message: fullyAssigned ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
     if (error instanceof TokenCheckoutRequestError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error('Checkout error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal Server Error' }, { status: 500 });
   }
 }
