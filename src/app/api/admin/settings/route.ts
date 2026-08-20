@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
 import { parseHomeCarousel, withHomeCarousel } from '@/lib/home-carousel';
+import { parseHomeFaqs, withHomeFaqs } from '@/lib/home-faqs';
 import { getHiddenSiteConfigComments, stripHiddenSiteConfig } from '@/lib/site-settings-hidden-config';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,8 @@ export async function GET(request: Request) {
       settings: {
         ...data,
         usage_guide: stripHiddenSiteConfig(data.usage_guide),
-        home_carousel: parseHomeCarousel(data.usage_guide)
+        home_carousel: parseHomeCarousel(data.usage_guide),
+        home_faqs: parseHomeFaqs(data.usage_guide)
       }
     });
   } catch (error: unknown) {
@@ -49,7 +51,7 @@ export async function PUT(request: Request) {
   if (denied) return denied;
   try {
     const body = await request.json();
-    const { hero_badge, hero_title, hero_subtitle, section_title, usage_guide, home_carousel } = body;
+    const { hero_badge, hero_title, hero_subtitle, section_title, usage_guide, home_carousel, home_faqs } = body;
     const supabase = getServerSupabase();
 
     const updateData: Record<string, string> = { updated_at: new Date().toISOString() };
@@ -57,7 +59,7 @@ export async function PUT(request: Request) {
     if (hero_title !== undefined) updateData.hero_title = hero_title;
     if (hero_subtitle !== undefined) updateData.hero_subtitle = hero_subtitle;
     if (section_title !== undefined) updateData.section_title = section_title;
-    if (usage_guide !== undefined || home_carousel !== undefined) {
+    if (usage_guide !== undefined || home_carousel !== undefined || home_faqs !== undefined) {
       const { data } = await supabase
         .from('site_settings')
         .select('usage_guide')
@@ -69,9 +71,12 @@ export async function PUT(request: Request) {
         ? stripHiddenSiteConfig(currentUsageGuide)
         : String(usage_guide);
       const mergedUsageGuide = withExistingSortConfig(visibleUsageGuide, currentUsageGuide);
-      updateData.usage_guide = home_carousel === undefined
+      const withCarousel = home_carousel === undefined
         ? mergedUsageGuide
         : withHomeCarousel(mergedUsageGuide, home_carousel);
+      updateData.usage_guide = home_faqs === undefined
+        ? withCarousel
+        : withHomeFaqs(withCarousel, home_faqs);
     }
 
     const { error } = await supabase

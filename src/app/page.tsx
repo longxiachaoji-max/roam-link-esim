@@ -19,36 +19,10 @@ import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
 import { ESIM_DESTINATIONS, getEsimDestinationHref } from '@/lib/esim-destinations';
 import type { HomeCarouselItem } from '@/lib/home-carousel-types';
+import { DEFAULT_HOME_FAQS, type HomeFaqItem } from '@/lib/home-faq-types';
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
-
-const HOME_FAQS = [
-  {
-    question: '購買後多久收到 eSIM？',
-    answer: '付款成功且系統完成配發後，eSIM 安裝資訊會顯示在會員中心。多數訂單可於短時間內取得；若上游系統處理較久，訂單會先顯示處理中，完成後自動更新。'
-  },
-  {
-    question: '支援哪些手機？',
-    answer: '手機需支援 eSIM，並且未鎖定特定電信商。購買前可在手機的行動網路或蜂窩網路設定中，確認是否有「新增 eSIM」、「加入 eSIM」或「新增行動方案」功能。'
-  },
-  {
-    question: '安裝失敗如何處理？',
-    answer: '請先確認手機連接穩定 Wi-Fi，且安裝資訊沒有在其他裝置使用。請勿自行刪除已加入的 eSIM，可將訂單編號、手機型號與錯誤畫面提供給客服協助查看。'
-  },
-  {
-    question: '退款原則是什麼？',
-    answer: '是否可退款會依訂單配發、安裝、啟用狀態、方案規則與實際異常情況審核。如遇無法使用，請保留 eSIM 並先聯繫客服，不要自行刪除，以便查詢與排除。'
-  },
-  {
-    question: '付款安全嗎？',
-    answer: '信用卡、Apple Pay 與超商繳款由綠界科技付款頁面處理，本站不儲存完整信用卡卡號。完成付款後，訂單與付款狀態會依金流回傳結果更新。'
-  },
-  {
-    question: '哪裡可以查看真實顧客評價？',
-    answer: '完成訂單的會員可在會員中心提交星級、使用順暢度與留言。網站會逐步整理並顯示已提交的實際使用經驗。'
-  }
-];
 
 interface PublicSiteSettings {
   hero_badge: string;
@@ -57,6 +31,7 @@ interface PublicSiteSettings {
   section_title: string;
   usage_guide: string;
   home_carousel: HomeCarouselItem[];
+  home_faqs: HomeFaqItem[];
   contact_title: string;
   contact_email: string;
   contact_phone: string;
@@ -129,6 +104,7 @@ export default function Home() {
     section_title: '熱門目的地',
     usage_guide: '',
     home_carousel: [],
+    home_faqs: DEFAULT_HOME_FAQS,
     contact_title: '聯絡資訊',
     contact_email: 'roamlinktw@gmail.com',
     contact_phone: '',
@@ -149,6 +125,10 @@ export default function Home() {
     () => siteSettings.home_carousel.filter(item => item.is_active && item.image_url),
     [siteSettings.home_carousel]
   );
+  const activeFaqs = useMemo(
+    () => siteSettings.home_faqs.filter(item => item.is_active && item.question && item.answer),
+    [siteSettings.home_faqs]
+  );
   const currentCarouselBanner = activeCarousel.length > 0
     ? activeCarousel[carouselIndex % activeCarousel.length]
     : null;
@@ -168,7 +148,8 @@ export default function Home() {
         setSiteSettings(current => ({
           ...current,
           ...json.settings,
-          home_carousel: Array.isArray(json.settings.home_carousel) ? json.settings.home_carousel : []
+          home_carousel: Array.isArray(json.settings.home_carousel) ? json.settings.home_carousel : [],
+          home_faqs: Array.isArray(json.settings.home_faqs) ? json.settings.home_faqs : DEFAULT_HOME_FAQS
         }));
       }
     }).catch(() => {});
@@ -890,15 +871,19 @@ export default function Home() {
           </div>
         ) : activeTab === 'faq' ? (
           <div className="mx-auto max-w-4xl border-y border-white/10">
-            {HOME_FAQS.map((faq) => (
-              <details key={faq.question} className="group border-b border-white/10 last:border-b-0">
-                <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 py-4 text-left font-bold text-white marker:content-none">
-                  <span>{faq.question}</span>
-                  <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 text-lg text-cyan transition-transform group-open:rotate-45">+</span>
-                </summary>
-                <p className="max-w-3xl pb-6 pr-12 text-sm leading-7 text-white/55">{faq.answer}</p>
-              </details>
-            ))}
+            {activeFaqs.length === 0 ? (
+              <p className="py-16 text-center text-sm text-white/45">常見問題整理中，如需協助請聯繫客服。</p>
+            ) : (
+              activeFaqs.map((faq) => (
+                <details key={faq.id} className="group border-b border-white/10 last:border-b-0">
+                  <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 py-4 text-left font-bold text-white marker:content-none">
+                    <span>{faq.question}</span>
+                    <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 text-lg text-cyan transition-transform group-open:rotate-45">+</span>
+                  </summary>
+                  <p className="max-w-3xl whitespace-pre-line pb-6 pr-12 text-sm leading-7 text-white/55">{faq.answer}</p>
+                </details>
+              ))
+            )}
           </div>
         ) : (
         <>

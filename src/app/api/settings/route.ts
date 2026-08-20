@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { parseHomeCarousel } from '@/lib/home-carousel';
+import { parseHomeFaqs } from '@/lib/home-faqs';
 import { stripHiddenSiteConfig } from '@/lib/site-settings-hidden-config';
 
 export const dynamic = 'force-dynamic';
@@ -118,6 +119,7 @@ export async function GET() {
           section_title: '熱門目的地',
           usage_guide: '',
           home_carousel: [],
+          home_faqs: parseHomeFaqs(''),
           ...DEFAULT_CONTACT_INFO
         }
       });
@@ -125,12 +127,14 @@ export async function GET() {
 
     const contactInfo = parseContactInfo(data.usage_guide);
     const homeCarousel = parseHomeCarousel(data.usage_guide);
+    const homeFaqs = parseHomeFaqs(data.usage_guide);
 
     return NextResponse.json({
       settings: {
         ...data,
         usage_guide: stripHiddenSiteConfig(data.usage_guide),
         home_carousel: homeCarousel,
+        home_faqs: homeFaqs,
         ...contactInfo
       }
     });

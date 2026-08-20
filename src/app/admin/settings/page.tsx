@@ -6,9 +6,11 @@ import {
   ArrowDown,
   ArrowUp,
   Clock3,
+  CircleHelp,
   GripVertical,
   ImagePlus,
   Link2,
+  Plus,
   Save,
   Trash2,
   Upload
@@ -19,6 +21,11 @@ import {
   MAX_HOME_CAROUSEL_ITEMS,
   type HomeCarouselItem
 } from '@/lib/home-carousel-types';
+import {
+  DEFAULT_HOME_FAQS,
+  MAX_HOME_FAQ_ITEMS,
+  type HomeFaqItem
+} from '@/lib/home-faq-types';
 
 interface SiteSettings {
   hero_badge: string;
@@ -27,6 +34,7 @@ interface SiteSettings {
   section_title: string;
   usage_guide: string;
   home_carousel: HomeCarouselItem[];
+  home_faqs: HomeFaqItem[];
 }
 
 const DEFAULTS: SiteSettings = {
@@ -35,7 +43,8 @@ const DEFAULTS: SiteSettings = {
   hero_subtitle: '無需拔插實體 SIM 卡。掃描 QR Code 即可開通 190+ 國家的高速網路。',
   section_title: '熱門目的地',
   usage_guide: '',
-  home_carousel: []
+  home_carousel: [],
+  home_faqs: DEFAULT_HOME_FAQS
 };
 
 function errorMessage(error: unknown) {
@@ -48,6 +57,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [draggedFaqIndex, setDraggedFaqIndex] = useState<number | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
   const activeBanners = useMemo(
@@ -72,7 +82,10 @@ export default function SettingsPage() {
             ...result.settings,
             home_carousel: Array.isArray(result.settings.home_carousel)
               ? result.settings.home_carousel
-              : []
+              : [],
+            home_faqs: Array.isArray(result.settings.home_faqs)
+              ? result.settings.home_faqs
+              : DEFAULT_HOME_FAQS
           });
         }
       } catch (error: unknown) {
@@ -107,6 +120,50 @@ export default function SettingsPage() {
     event.preventDefault();
     if (draggedIndex !== null) moveBanner(draggedIndex, targetIndex);
     setDraggedIndex(null);
+  };
+
+  const updateFaq = (index: number, patch: Partial<HomeFaqItem>) => {
+    setSettings(current => ({
+      ...current,
+      home_faqs: current.home_faqs.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...patch } : item
+      ))
+    }));
+  };
+
+  const moveFaq = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= settings.home_faqs.length) return;
+    setSettings(current => {
+      const items = [...current.home_faqs];
+      const [moved] = items.splice(from, 1);
+      items.splice(to, 0, moved);
+      return { ...current, home_faqs: items };
+    });
+  };
+
+  const handleFaqDrop = (event: DragEvent<HTMLDivElement>, targetIndex: number) => {
+    event.preventDefault();
+    if (draggedFaqIndex !== null) moveFaq(draggedFaqIndex, targetIndex);
+    setDraggedFaqIndex(null);
+  };
+
+  const addFaq = () => {
+    if (settings.home_faqs.length >= MAX_HOME_FAQ_ITEMS) {
+      showToast(`常見問題最多 ${MAX_HOME_FAQ_ITEMS} 題`);
+      return;
+    }
+    setSettings(current => ({
+      ...current,
+      home_faqs: [
+        ...current.home_faqs,
+        {
+          id: crypto.randomUUID(),
+          question: '',
+          answer: '',
+          is_active: true
+        }
+      ]
+    }));
   };
 
   const handleBannerUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -158,6 +215,11 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (isSaving) return;
+    const invalidFaq = settings.home_faqs.find(item => !item.question.trim() || !item.answer.trim());
+    if (invalidFaq) {
+      showToast('請完成每題的問題與回答，或將空白項目刪除');
+      return;
+    }
     setIsSaving(true);
     try {
       const response = await adminFetch('/api/admin/settings', {
@@ -177,7 +239,7 @@ export default function SettingsPage() {
 
   const handleReset = () => {
     setSettings(current => ({ ...DEFAULTS, home_carousel: current.home_carousel }));
-    showToast('文字已重置，輪播圖片已保留，尚未儲存');
+    showToast('首頁文字與常見問題已重置，輪播圖片已保留，尚未儲存');
   };
 
   if (loading) return <div className="text-white/50">載入中...</div>;
@@ -187,7 +249,7 @@ export default function SettingsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-white">前台設定</h1>
-          <p className="mt-1 text-sm text-white/45">管理首頁廣告輪播、首頁文字與使用說明</p>
+          <p className="mt-1 text-sm text-white/45">管理首頁廣告輪播、首頁文字、使用說明與常見問題</p>
         </div>
         <button
           type="button"
@@ -351,6 +413,92 @@ export default function SettingsPage() {
           商品區塊標題
           <input type="text" className="rounded-md border border-white/20 bg-black/40 p-3 text-white" value={settings.section_title} onChange={event => setSettings({ ...settings, section_title: event.target.value })} />
         </label>
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-md border border-white/10 bg-[#111122]">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 p-5">
+          <div>
+            <h2 className="inline-flex items-center gap-2 font-bold text-white"><CircleHelp size={18} className="text-cyan" />首頁常見問題</h2>
+            <p className="mt-1 text-sm text-white/45">編輯首頁「常見問題」分頁，拖曳或使用箭頭調整順序；關閉顯示可暫時保留內容。</p>
+          </div>
+          <button
+            type="button"
+            onClick={addFaq}
+            disabled={settings.home_faqs.length >= MAX_HOME_FAQ_ITEMS}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-cyan/40 bg-cyan/10 px-4 text-sm font-bold text-cyan hover:bg-cyan/20 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Plus size={17} />新增問題
+          </button>
+        </div>
+
+        {settings.home_faqs.length === 0 ? (
+          <div className="p-10 text-center text-sm text-white/45">目前沒有常見問題，按「新增問題」建立第一題。</div>
+        ) : (
+          <div>
+            {settings.home_faqs.map((faq, index) => (
+              <div
+                key={faq.id}
+                draggable
+                onDragStart={() => setDraggedFaqIndex(index)}
+                onDragOver={event => event.preventDefault()}
+                onDrop={event => handleFaqDrop(event, index)}
+                onDragEnd={() => setDraggedFaqIndex(null)}
+                className={`grid gap-4 border-b border-white/10 p-4 last:border-b-0 md:grid-cols-[32px_minmax(0,1fr)_auto] md:items-start ${draggedFaqIndex === index ? 'bg-cyan/5 opacity-60' : ''}`}
+              >
+                <button type="button" className="hidden cursor-grab pt-7 text-white/35 md:block" title="拖曳排序">
+                  <GripVertical size={20} />
+                </button>
+                <div className="grid min-w-0 gap-3">
+                  <label className="grid gap-1 text-xs text-white/50">
+                    問題
+                    <input
+                      type="text"
+                      value={faq.question}
+                      maxLength={160}
+                      onChange={event => updateFaq(index, { question: event.target.value })}
+                      className="h-11 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-cyan"
+                      placeholder="例如：購買後多久收到 eSIM？"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs text-white/50">
+                    回答
+                    <textarea
+                      rows={3}
+                      value={faq.answer}
+                      maxLength={3000}
+                      onChange={event => updateFaq(index, { answer: event.target.value })}
+                      className="resize-y rounded-md border border-white/15 bg-black/30 p-3 text-sm leading-6 text-white outline-none placeholder:text-white/25 focus:border-cyan"
+                      placeholder="輸入顧客會在前台看到的回答"
+                    />
+                  </label>
+                </div>
+                <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
+                  <label className="inline-flex min-h-9 items-center gap-2 text-sm text-white/70">
+                    <input
+                      type="checkbox"
+                      checked={faq.is_active}
+                      onChange={event => updateFaq(index, { is_active: event.target.checked })}
+                      className="h-4 w-4 accent-cyan"
+                    />
+                    顯示
+                  </label>
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => moveFaq(index, index - 1)} disabled={index === 0} title="上移" className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-20"><ArrowUp size={16} /></button>
+                    <button type="button" onClick={() => moveFaq(index, index + 1)} disabled={index === settings.home_faqs.length - 1} title="下移" className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-20"><ArrowDown size={16} /></button>
+                    <button
+                      type="button"
+                      onClick={() => setSettings(current => ({ ...current, home_faqs: current.home_faqs.filter((_, itemIndex) => itemIndex !== index) }))}
+                      title="刪除問題"
+                      className="grid h-9 w-9 place-items-center rounded-md border border-red-400/25 text-red-300 hover:bg-red-400/10"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mt-6 space-y-5 rounded-md border border-white/10 bg-white/5 p-5 sm:p-6">
