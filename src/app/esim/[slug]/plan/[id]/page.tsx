@@ -10,6 +10,7 @@ import {
 import { buildEsimPlanSeo } from '@/lib/esim-plan-seo';
 import { getEsimDestinationPlanSummary, getEsimPlanDetail, getPublicEsimPlanReviews } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
+import { buildProductReviewJsonLd } from '@/lib/product-review-jsonld';
 import PlanPurchase from './plan-purchase';
 
 export const revalidate = 3600;
@@ -86,7 +87,8 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
         reviewCount: reviewSummary.reviewCount,
         bestRating: 5,
         worstRating: 1
-      }
+      },
+      review: buildProductReviewJsonLd(reviewSummary.reviews)
     } : {}),
     offers: plan.options.map(option => ({
       '@type': 'Offer',

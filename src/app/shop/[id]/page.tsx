@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { getPhysicalStoreAdmin, normalizePhysicalProduct, PHYSICAL_PRODUCT_CATEGORIES } from '@/lib/physical-store';
 import { serializeJsonLd } from '@/lib/json-ld';
 import { getPublicPhysicalProductReviews } from '@/lib/physical-product-reviews';
+import { buildProductReviewJsonLd } from '@/lib/product-review-jsonld';
 import ProductPurchase from './product-purchase';
 import ProductGallery from './product-gallery';
 
@@ -80,7 +81,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         reviewCount: reviewSummary.reviewCount,
         bestRating: 5,
         worstRating: 1
-      }
+      },
+      review: buildProductReviewJsonLd(reviewSummary.reviews)
     } : {}),
     offers: offer
   };
