@@ -27,7 +27,6 @@ interface PromoPayload {
   audience_type?: unknown;
   assigned_email?: unknown;
   company_name?: unknown;
-  allowed_email_domain?: unknown;
 }
 
 interface PromoMutation {
@@ -136,13 +135,6 @@ function parsePayload(body: PromoPayload): PromoMutation {
   }
   const companyName = audienceType === 'company' ? cleanText(body.company_name, 100) : null;
   if (audienceType === 'company' && !companyName) throw new Error('企業優惠碼需填寫企業名稱');
-  const allowedDomain = audienceType === 'company'
-    ? cleanText(body.allowed_email_domain, 120)?.toLowerCase().replace(/^@/, '') || null
-    : null;
-  if (allowedDomain && (!allowedDomain.includes('.') || allowedDomain.includes('@'))) {
-    throw new Error('企業 Email 網域格式不正確');
-  }
-
   return {
     code,
     name: cleanText(body.name, 80),
@@ -160,7 +152,7 @@ function parsePayload(body: PromoPayload): PromoMutation {
     audience_type: audienceType,
     assigned_email: assignedEmail,
     company_name: companyName,
-    allowed_email_domain: allowedDomain,
+    allowed_email_domain: null,
     updated_at: new Date().toISOString()
   };
 }

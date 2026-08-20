@@ -24,7 +24,6 @@ interface CheckoutPromoRow {
   audience_type: AudienceType | null;
   assigned_email: string | null;
   company_name: string | null;
-  allowed_email_domain: string | null;
 }
 
 export interface PromoDiscountQuote {
@@ -77,11 +76,6 @@ async function buildPromoQuote(
   if (promo.audience_type === 'personal' && normalizeEmail(promo.assigned_email || '') !== email) {
     promoError('此優惠碼僅限指定會員使用');
   }
-  const domain = String(promo.allowed_email_domain || '').trim().toLowerCase().replace(/^@/, '');
-  if (promo.audience_type === 'company' && domain && email.split('@')[1] !== domain) {
-    promoError('此優惠碼僅限指定企業會員使用');
-  }
-
   const { data: customer } = await supabase
     .from('customers')
     .select('id')
@@ -132,7 +126,7 @@ export async function resolveCheckoutDiscount(
 
   const { data: promo, error } = await supabase
     .from('promo_codes')
-    .select('id, code, name, reward_type, discount_type, discount_value, max_discount, min_order_amount, max_uses, max_uses_per_user, used_count, starts_at, expires_at, is_active, audience_type, assigned_email, company_name, allowed_email_domain')
+    .select('id, code, name, reward_type, discount_type, discount_value, max_discount, min_order_amount, max_uses, max_uses_per_user, used_count, starts_at, expires_at, is_active, audience_type, assigned_email, company_name')
     .eq('code', code)
     .maybeSingle();
   if (error) throw error;

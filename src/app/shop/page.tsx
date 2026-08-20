@@ -439,7 +439,7 @@ export default function PhysicalShopPage() {
         </div>
       </section>
 
-      <footer className="mt-12 border-t border-black/8 bg-white"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-3 px-6 py-7 text-sm text-black/45 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><a href="mailto:roamlinktw@gmail.com" className="hover:text-black">roamlinktw@gmail.com</a></div></footer>
+      <footer className="mt-12 border-t border-black/8 bg-white"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-3 px-6 py-7 text-sm text-black/45 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><div className="flex flex-col gap-3 sm:items-end"><a href="mailto:roamlinktw@gmail.com" className="hover:text-black">roamlinktw@gmail.com</a><Link href="/company-discount" className="font-semibold hover:text-black">查詢企業優惠</Link></div></div></footer>
 
       {cartOpen && <div className="fixed inset-0 z-50 flex justify-end bg-black/45" onMouseDown={e => e.target === e.currentTarget && setCartOpen(false)}><aside className="flex h-full w-full max-w-md flex-col bg-white text-[#172028] shadow-2xl">
         <div className="flex h-16 items-center justify-between border-b border-black/8 px-5"><h2 className="font-bold">購物車 ({count})</h2><button title="關閉" onClick={() => setCartOpen(false)} className="grid h-9 w-9 place-items-center rounded-md hover:bg-black/5"><X size={20} /></button></div>

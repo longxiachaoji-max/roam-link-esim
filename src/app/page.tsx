@@ -1096,6 +1096,11 @@ export default function Home() {
                 className="h-9 w-auto"
               />
             </a>
+            <div className="mt-5 border-t border-white/10 pt-4">
+              <Link href="/company-discount" className="inline-flex min-h-11 items-center text-sm font-bold text-white/60 transition-colors hover:text-cyan">
+                查詢企業優惠
+              </Link>
+            </div>
           </div>
         </div>
       </footer>

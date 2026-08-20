@@ -29,7 +29,6 @@ interface PromoCode {
   audience_type: AudienceType;
   assigned_email: string | null;
   company_name: string | null;
-  allowed_email_domain: string | null;
   created_at: string;
 }
 
@@ -51,7 +50,6 @@ interface PromoForm {
   audience_type: AudienceType;
   assigned_email: string;
   company_name: string;
-  allowed_email_domain: string;
 }
 
 const EMPTY_FORM: PromoForm = {
@@ -71,8 +69,7 @@ const EMPTY_FORM: PromoForm = {
   is_active: true,
   audience_type: 'public',
   assigned_email: '',
-  company_name: '',
-  allowed_email_domain: ''
+  company_name: ''
 };
 
 function dateTimeInput(value: string | null) {
@@ -112,7 +109,7 @@ function benefitLabel(promo: PromoCode) {
 function audienceLabel(promo: PromoCode) {
   if (promo.audience_type === 'personal') return promo.assigned_email || '指定會員';
   if (promo.audience_type === 'company') {
-    return `${promo.company_name || '企業優惠'}${promo.allowed_email_domain ? ` · @${promo.allowed_email_domain}` : ''}`;
+    return promo.company_name || '企業優惠';
   }
   return '所有會員';
 }
@@ -184,8 +181,7 @@ export default function PromoCodesPage() {
       is_active: promo.is_active !== false,
       audience_type: promo.audience_type || 'public',
       assigned_email: promo.assigned_email || '',
-      company_name: promo.company_name || '',
-      allowed_email_domain: promo.allowed_email_domain || ''
+      company_name: promo.company_name || ''
     });
     setModalOpen(true);
   };
@@ -376,7 +372,7 @@ export default function PromoCodesPage() {
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white/80">{form.audience_type === 'personal' ? <UserRound size={16} className="text-cyan-300" /> : <Building2 size={16} className="text-cyan-300" />}適用對象</h3>
                 <label className="text-xs text-white/50">優惠類型<select value={form.audience_type} onChange={event => setForm(current => ({ ...current, audience_type: event.target.value as AudienceType }))} className="mt-1 h-11 w-full rounded-md border border-white/15 bg-[#0d0d1a] px-3 text-white outline-none focus:border-cyan-400"><option value="public">公開優惠：所有會員可用</option><option value="personal">個人優惠：指定會員 Email</option><option value="company">企業優惠：企業專屬代碼</option></select></label>
                 {form.audience_type === 'personal' && <label className="mt-3 block text-xs text-white/50">指定會員 Email<input type="email" value={form.assigned_email} onChange={event => setForm(current => ({ ...current, assigned_email: event.target.value }))} placeholder="member@example.com" className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" /></label>}
-                {form.audience_type === 'company' && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs text-white/50">企業名稱<input value={form.company_name} onChange={event => setForm(current => ({ ...current, company_name: event.target.value }))} placeholder="例如 XX 旅行社" className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" /></label><label className="text-xs text-white/50">限定 Email 網域（選填）<input value={form.allowed_email_domain} onChange={event => setForm(current => ({ ...current, allowed_email_domain: event.target.value }))} placeholder="company.com" className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 font-mono text-white outline-none focus:border-cyan-400" /></label><p className="sm:col-span-2 text-xs leading-5 text-white/35">不填網域時，拿到代碼的會員都能使用；填入後僅限該企業 Email。</p></div>}
+                {form.audience_type === 'company' && <div className="mt-3"><label className="block text-xs text-white/50">企業名稱<input value={form.company_name} maxLength={100} onChange={event => setForm(current => ({ ...current, company_name: event.target.value }))} placeholder="例如 XX 旅行社" className="mt-1 h-11 w-full rounded-md border border-white/15 bg-black/25 px-3 text-white outline-none focus:border-cyan-400" /></label><p className="mt-2 text-xs leading-5 text-white/35">客戶可在官網輸入企業名稱查詢並複製這組專屬代碼，結帳時輸入即可折扣。</p></div>}
               </section>}
 
               <section>

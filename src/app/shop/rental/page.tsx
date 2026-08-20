@@ -159,6 +159,6 @@ export default async function RentalProductsPage() {
       <div className="mt-9 flex flex-wrap items-center gap-4"><Link href="/shop" className="inline-flex h-11 items-center gap-2 rounded-md bg-[#172028] px-5 text-sm font-bold text-white hover:bg-[#283541]">查看全部出遊商品 <ArrowRight size={16} /></Link><Link href="/esim/japan" className="text-sm font-bold text-[#df4d5f] hover:text-[#b93749]">準備去日本？比較日本網卡</Link></div>
     </section>
 
-    <footer className="border-t border-black/8 bg-white px-4 py-8 text-sm text-black/45 md:px-6"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-3 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><span>旅遊手機、空拍機與出遊用品租借</span></div></footer>
+    <footer className="border-t border-black/8 bg-white px-4 py-8 text-sm text-black/45 md:px-6"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-3 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><div className="flex flex-wrap gap-x-5 gap-y-2"><Link href="/company-discount" className="font-semibold hover:text-black">查詢企業優惠</Link><span>旅遊手機、空拍機與出遊用品租借</span></div></div></footer>
   </main>;
 }

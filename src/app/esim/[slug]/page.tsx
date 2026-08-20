@@ -201,7 +201,7 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
     </div>
 
     <footer className="border-t border-white/10 px-4 py-8 text-sm text-white/40 md:px-6">
-      <div className="mx-auto flex max-w-6xl flex-col justify-between gap-3 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><span className="inline-flex items-center gap-2"><Wifi size={15} />旅遊上網方案</span></div>
+      <div className="mx-auto flex max-w-6xl flex-col justify-between gap-3 sm:flex-row"><span>一飛通全球漫遊 FirstRoamLink</span><div className="flex flex-wrap gap-x-5 gap-y-2"><Link href="/company-discount" className="hover:text-white">查詢企業優惠</Link><span className="inline-flex items-center gap-2"><Wifi size={15} />旅遊上網方案</span></div></div>
     </footer>
   </main>;
 }

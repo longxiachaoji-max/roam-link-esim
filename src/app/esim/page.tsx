@@ -110,7 +110,7 @@ export default async function EsimDestinationHubPage() {
     <footer className="px-4 py-9 text-sm text-white/40 md:px-6">
       <div className="mx-auto flex max-w-6xl flex-col justify-between gap-3 sm:flex-row">
         <span>一飛通全球漫遊 FirstRoamLink</span>
-        <Link href="/" className="text-[#56d5ea] hover:text-white">查看全部上架方案</Link>
+        <div className="flex flex-wrap gap-x-5 gap-y-2"><Link href="/company-discount" className="hover:text-white">查詢企業優惠</Link><Link href="/" className="text-[#56d5ea] hover:text-white">查看全部上架方案</Link></div>
       </div>
     </footer>
   </main>;
