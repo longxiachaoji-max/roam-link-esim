@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, ShoppingCart, Zap } from 'lucide-react';
+import { trackAddToCart, trackViewItem } from '@/lib/analytics';
 
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
 
@@ -38,6 +39,17 @@ export default function PlanPurchase({ flag, options }: PlanPurchaseProps) {
     [options, selectedId]
   );
 
+  useEffect(() => {
+    if (!selected) return;
+    trackViewItem({
+      id: selected.id,
+      country: selected.country,
+      dataAmount: selected.dataAmount,
+      validityDays: `${selected.validityDays}天`,
+      price: selected.price
+    });
+  }, [selected]);
+
   if (!selected) return null;
 
   const addSelectedToCart = () => {
@@ -53,6 +65,13 @@ export default function PlanPurchase({ flag, options }: PlanPurchaseProps) {
       price: selected.price
     });
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    trackAddToCart({
+      id: selected.id,
+      country: selected.country,
+      dataAmount: selected.dataAmount,
+      validityDays: `${selected.validityDays}天`,
+      price: selected.price
+    });
     setAdded(true);
   };
 

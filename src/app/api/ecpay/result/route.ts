@@ -17,7 +17,11 @@ export async function POST(request: Request) {
     }
 
     await markEcpayOrderPaidAndFulfill(params.CustomField1, tradeAmount);
-    return NextResponse.redirect(`${origin}/member?payment=success`, 303);
+    const successUrl = new URL('/member', origin);
+    successUrl.searchParams.set('payment', 'success');
+    successUrl.searchParams.set('orderId', params.CustomField1);
+    successUrl.searchParams.set('value', String(tradeAmount));
+    return NextResponse.redirect(successUrl, 303);
   } catch (error) {
     console.error('ECPay result error:', error);
     return NextResponse.redirect(`${origin}/member?payment=pending`, 303);

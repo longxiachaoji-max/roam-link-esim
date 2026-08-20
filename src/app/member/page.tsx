@@ -10,6 +10,7 @@ import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 import PhysicalOrdersPanel from './physical-orders-panel';
 import BarcodeOrdersPanel from './barcode-orders-panel';
+import { completePendingPurchase } from '@/lib/analytics';
 
 interface MemberReview {
   id: string;
@@ -154,6 +155,9 @@ export default function MemberCenter() {
       window.history.replaceState({}, '', '/member');
     }
     if (payment === 'success') {
+      const orderId = params.get('orderId') || '';
+      const value = Number(params.get('value'));
+      if (orderId) completePendingPurchase(orderId, Number.isFinite(value) ? value : undefined);
       window.localStorage.removeItem('roam-link-cart-v1');
       window.history.replaceState({}, '', '/member');
       window.setTimeout(() => showToast('付款成功，訂單已更新'), 0);

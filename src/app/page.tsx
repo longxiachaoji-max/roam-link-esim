@@ -15,7 +15,14 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
-import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
+import {
+  getAnalyticsVisitorId,
+  rememberPendingPurchase,
+  trackAddToCart,
+  trackBeginCheckout,
+  trackImmediatePurchase,
+  trackPageView
+} from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
 import { ESIM_DESTINATIONS, getEsimDestinationHref } from '@/lib/esim-destinations';
 import type { HomeCarouselItem } from '@/lib/home-carousel-types';
@@ -57,6 +64,7 @@ export default function Home() {
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<EcpayPaymentMethod | null>(null);
   const [isTokenCheckoutSubmitting, setIsTokenCheckoutSubmitting] = useState(false);
   const tokenCheckoutLock = useRef(false);
+  const checkoutTrackedOpenRef = useRef(false);
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -311,6 +319,7 @@ export default function Home() {
   const addToCart = (product: any, plan: any) => {
     const item = { ...product, ...plan, uid: Date.now() };
     setCart([...cart, item]);
+    trackAddToCart(item);
     showToast(`✅ 已加入：${product.flag} ${product.country} ${plan.data}`);
   };
 
@@ -375,6 +384,16 @@ export default function Home() {
   const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
   const payableTotal = appliedDiscount?.payableTotal ?? cartTotal;
   const discountAmount = appliedDiscount?.discountAmount ?? 0;
+
+  useEffect(() => {
+    if (!isCheckoutOpen) {
+      checkoutTrackedOpenRef.current = false;
+      return;
+    }
+    if (!isCartHydrated || cart.length === 0 || checkoutTrackedOpenRef.current) return;
+    trackBeginCheckout(cart, payableTotal, appliedDiscount?.code);
+    checkoutTrackedOpenRef.current = true;
+  }, [appliedDiscount?.code, cart, isCartHydrated, isCheckoutOpen, payableTotal]);
 
   // Check active session on load
   useEffect(() => {
@@ -507,6 +526,14 @@ export default function Home() {
         throw new Error(data.error || '購買失敗');
       }
 
+      trackImmediatePurchase({
+        orderId: data.orderId,
+        transactionId: data.orderNumber,
+        value: payableTotal,
+        coupon: appliedDiscount?.code,
+        items: cart
+      });
+
       setIsCheckoutOpen(false);
       setIsSuccessOpen(true);
       setCart([]);
@@ -618,6 +645,14 @@ export default function Home() {
       if (!response.ok || !result.action || !result.fields) {
         throw new Error(result.error || '無法建立綠界付款');
       }
+
+      rememberPendingPurchase({
+        orderId: result.orderId,
+        transactionId: result.orderNumber,
+        value: payableTotal,
+        coupon: appliedDiscount?.code,
+        items: cart
+      });
 
       const form = document.createElement('form');
       form.method = 'POST';
