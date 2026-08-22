@@ -8,7 +8,7 @@ import {
   sanitizeEcpayText
 } from '@/lib/ecpay';
 import { isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
-import { readReferralConfig, saveReferralConfig, type ReferralQuote } from '@/lib/referrals';
+import { parseReferralConfig, saveReferralConfig, type ReferralQuote } from '@/lib/referrals';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 
@@ -21,6 +21,25 @@ interface CheckoutProduct {
   country: string | null;
 }
 
+interface PendingCheckoutOrder {
+  id: string;
+  order_number: string;
+  total_amount: number | string;
+  original_total_amount: number | string | null;
+  discount_amount: number | string | null;
+  promo_code_id: string | null;
+  promo_code_snapshot: string | null;
+  payment_proof_uploaded_at: string | null;
+  order_items: Array<{ product_id: string | null; price: number | string }>;
+}
+
+function checkoutItemSignature(items: Array<{ product_id: string | null; price: number | string }>) {
+  return items
+    .map(item => `${item.product_id || ''}:${Math.round(Number(item.price))}`)
+    .sort()
+    .join('|');
+}
+
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -30,6 +49,7 @@ function getSupabase() {
 
 export async function POST(request: Request) {
   let orderId = '';
+  let createdNewOrder = false;
   try {
     const authorization = request.headers.get('authorization') || '';
     const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
@@ -107,6 +127,7 @@ export async function POST(request: Request) {
       .select('usage_guide')
       .eq('id', 'main')
       .single();
+    const referralConfig = parseReferralConfig(settings?.usage_guide || '');
     const paymentLimits = parsePaymentLimits(settings?.usage_guide);
     const limit = paymentMethod === 'BARCODE'
       ? { min: paymentLimits.barcode_min, max: paymentLimits.barcode_max, label: '超商條碼付款' }
@@ -117,39 +138,95 @@ export async function POST(request: Request) {
     }
 
     const merchantTradeNo = createMerchantTradeNo();
-
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert([{
-        customer_id: customer.id,
-        total_amount: totalAmount,
-        original_total_amount: originalTotalAmount,
-        discount_amount: discountQuote?.discountAmount || 0,
-        promo_code_id: isPromoDiscount(discountQuote) ? discountQuote.promoCodeId : null,
-        promo_code_snapshot: isPromoDiscount(discountQuote) ? discountQuote.code : null,
-        tokens_used: 0,
-        payment_method: 'ECPAY',
-        ecpay_payment_method: paymentMethod,
-        ecpay_merchant_trade_no: merchantTradeNo,
-        payment_status: 'PENDING',
-        order_status: 'CREATED'
-      }])
-      .select('id, order_number')
-      .single();
-    if (orderError || !order) throw orderError || new Error('建立訂單失敗');
-    orderId = order.id;
-
-    const { error: itemsError } = await supabase.from('order_items').insert(products.map(product => ({
-      order_id: order.id,
+    const promoCodeId = isPromoDiscount(discountQuote) ? discountQuote.promoCodeId : null;
+    const promoCodeSnapshot = isPromoDiscount(discountQuote) ? discountQuote.code : null;
+    const discountAmount = discountQuote?.discountAmount || 0;
+    const currentItemSignature = checkoutItemSignature(products.map(product => ({
       product_id: product.id,
-      inventory_id: null,
       price: product.price
     })));
-    if (itemsError) throw itemsError;
+    const reusableSince = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+    const { data: pendingOrders, error: pendingOrdersError } = await supabase
+      .from('orders')
+      .select(`
+        id, order_number, total_amount, original_total_amount, discount_amount,
+        promo_code_id, promo_code_snapshot, payment_proof_uploaded_at,
+        order_items ( product_id, price )
+      `)
+      .eq('customer_id', customer.id)
+      .eq('payment_method', 'ECPAY')
+      .eq('payment_status', 'PENDING')
+      .gte('created_at', reusableSince)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (pendingOrdersError) throw pendingOrdersError;
+
+    const reusableOrder = ((pendingOrders || []) as unknown as PendingCheckoutOrder[]).find(candidate => {
+      const pendingReferralCode = referralConfig.pendingRewards[candidate.id]?.code || null;
+      return !candidate.payment_proof_uploaded_at
+        && Math.round(Number(candidate.total_amount)) === totalAmount
+        && Math.round(Number(candidate.original_total_amount)) === originalTotalAmount
+        && Math.round(Number(candidate.discount_amount || 0)) === discountAmount
+        && candidate.promo_code_id === promoCodeId
+        && candidate.promo_code_snapshot === promoCodeSnapshot
+        && pendingReferralCode === (referralQuote?.code || null)
+        && checkoutItemSignature(candidate.order_items || []) === currentItemSignature;
+    });
+
+    let order: { id: string; order_number: string } | null = null;
+    if (reusableOrder) {
+      const { data: updatedOrder, error: reuseError } = await supabase
+        .from('orders')
+        .update({
+          ecpay_payment_method: paymentMethod,
+          ecpay_merchant_trade_no: merchantTradeNo,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', reusableOrder.id)
+        .eq('payment_status', 'PENDING')
+        .select('id, order_number')
+        .maybeSingle();
+      if (reuseError) throw reuseError;
+      order = updatedOrder;
+    }
+
+    if (!order) {
+      const { data: insertedOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          customer_id: customer.id,
+          total_amount: totalAmount,
+          original_total_amount: originalTotalAmount,
+          discount_amount: discountAmount,
+          promo_code_id: promoCodeId,
+          promo_code_snapshot: promoCodeSnapshot,
+          tokens_used: 0,
+          payment_method: 'ECPAY',
+          ecpay_payment_method: paymentMethod,
+          ecpay_merchant_trade_no: merchantTradeNo,
+          payment_status: 'PENDING',
+          order_status: 'CREATED'
+        }])
+        .select('id, order_number')
+        .single();
+      if (orderError || !insertedOrder) throw orderError || new Error('建立訂單失敗');
+      order = insertedOrder;
+      createdNewOrder = true;
+    }
+    orderId = order.id;
+
+    if (createdNewOrder) {
+      const { error: itemsError } = await supabase.from('order_items').insert(products.map(product => ({
+        order_id: order.id,
+        product_id: product.id,
+        inventory_id: null,
+        price: product.price
+      })));
+      if (itemsError) throw itemsError;
+    }
 
     if (referralQuote) {
-      const { usageGuide, config } = await readReferralConfig(supabase);
-      config.pendingRewards[order.id] = {
+      referralConfig.pendingRewards[order.id] = {
         orderId: order.id,
         source: 'checkout',
         customerId: customer.id,
@@ -163,7 +240,7 @@ export async function POST(request: Request) {
         referrerRewardPercent: referralQuote.referrerRewardPercent,
         createdAt: new Date().toISOString()
       };
-      await saveReferralConfig(supabase, usageGuide, config);
+      await saveReferralConfig(supabase, settings?.usage_guide || '', referralConfig);
     }
 
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
@@ -208,7 +285,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id, orderNumber: order.order_number });
   } catch (error) {
     console.error('Create ECPay checkout error:', error);
-    if (orderId) {
+    if (orderId && createdNewOrder) {
       try {
         await getSupabase().from('orders').delete().eq('id', orderId).eq('payment_status', 'PENDING');
       } catch (cleanupError) {

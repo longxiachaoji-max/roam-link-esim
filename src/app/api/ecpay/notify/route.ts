@@ -16,7 +16,9 @@ export async function POST(request: Request) {
 
     const tradeAmount = Number(params.TradeAmt);
     if (params.RtnCode === '1' && params.SimulatePaid !== '1' && params.CustomField1 && Number.isFinite(tradeAmount)) {
-      await markEcpayOrderPaidAndFulfill(params.CustomField1, tradeAmount);
+      await markEcpayOrderPaidAndFulfill(params.CustomField1, tradeAmount, {
+        merchantTradeNo: params.MerchantTradeNo
+      });
     } else {
       console.warn('ECPay payment was not fulfilled', {
         merchantTradeNo: params.MerchantTradeNo,

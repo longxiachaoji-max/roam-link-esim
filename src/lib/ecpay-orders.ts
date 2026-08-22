@@ -32,6 +32,7 @@ interface PaidOrder {
   payment_method: string;
   payment_status: string;
   order_status: string;
+  ecpay_merchant_trade_no: string | null;
   customers: { email?: string | null; name?: string | null } | null;
   order_items: FulfillmentItem[];
 }
@@ -47,6 +48,7 @@ interface NotificationSettings {
 interface PaymentConfirmationOptions {
   source?: 'ecpay' | 'manual';
   adminUserId?: string;
+  merchantTradeNo?: string;
 }
 
 function getAdminClient() {
@@ -168,7 +170,7 @@ export async function markEcpayOrderPaidAndFulfill(
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .select(`
-      id, order_number, total_amount, payment_method, payment_status, order_status,
+      id, order_number, total_amount, payment_method, payment_status, order_status, ecpay_merchant_trade_no,
       customers ( email, name ),
       order_items (
         id, product_id, inventory_id,
@@ -182,6 +184,13 @@ export async function markEcpayOrderPaidAndFulfill(
   const order = orderData as unknown as PaidOrder;
   if (order.payment_method !== 'ECPAY') throw new Error('付款方式與訂單不符');
   if (Math.round(Number(order.total_amount)) !== Math.round(tradeAmount)) throw new Error('綠界付款金額與訂單不符');
+  if (
+    confirmationSource === 'ecpay'
+    && options.merchantTradeNo
+    && order.ecpay_merchant_trade_no !== options.merchantTradeNo
+  ) {
+    throw new Error('此綠界付款頁面已被較新的付款方式取代');
+  }
 
   if (confirmationSource === 'ecpay') {
     const { error: receivedError } = await supabase

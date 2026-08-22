@@ -32,6 +32,38 @@ interface EsimStatusOrderItem {
   e_sim_inventory: QueryRelation<EsimStatusInventory>;
 }
 
+interface AdminOrderListItem {
+  id: string;
+  customer_id: string;
+  created_at: string;
+  total_amount: number | string;
+  payment_method: string;
+  payment_status: string;
+  order_items: Array<{ product_id: string | null; price: number | string }>;
+}
+
+function orderItemSignature(order: AdminOrderListItem) {
+  return (order.order_items || [])
+    .map(item => `${item.product_id || ''}:${Math.round(Number(item.price))}`)
+    .sort()
+    .join('|');
+}
+
+function hideSupersededPaymentAttempts(orders: AdminOrderListItem[]) {
+  return orders.filter(order => {
+    if (order.payment_method !== 'ECPAY' || order.payment_status !== 'PENDING') return true;
+    const signature = orderItemSignature(order);
+    return !orders.some(newerOrder => (
+      newerOrder.payment_method === 'ECPAY'
+      && newerOrder.payment_status === 'PAID'
+      && newerOrder.customer_id === order.customer_id
+      && Math.round(Number(newerOrder.total_amount)) === Math.round(Number(order.total_amount))
+      && orderItemSignature(newerOrder) === signature
+      && new Date(newerOrder.created_at).getTime() > new Date(order.created_at).getTime()
+    ));
+  });
+}
+
 // GET - 取得所有訂單
 export async function GET(request: Request) {
   const denied = await adminApiGuard(request);
@@ -48,6 +80,7 @@ export async function GET(request: Request) {
       .from('orders')
       .select(`
         id,
+        customer_id,
         order_number,
         created_at,
         total_amount,
@@ -103,7 +136,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ orders: data });
+    const visibleOrders = hideSupersededPaymentAttempts((data || []) as unknown as AdminOrderListItem[]);
+    return NextResponse.json({ orders: visibleOrders });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

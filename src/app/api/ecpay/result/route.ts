@@ -16,7 +16,9 @@ export async function POST(request: Request) {
       return NextResponse.redirect(`${origin}/?payment=failed`, 303);
     }
 
-    await markEcpayOrderPaidAndFulfill(params.CustomField1, tradeAmount);
+    await markEcpayOrderPaidAndFulfill(params.CustomField1, tradeAmount, {
+      merchantTradeNo: params.MerchantTradeNo
+    });
     return NextResponse.redirect(`${origin}/member?payment=success`, 303);
   } catch (error) {
     console.error('ECPay result error:', error);
