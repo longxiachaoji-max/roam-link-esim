@@ -187,6 +187,7 @@ export async function markEcpayOrderPaidAndFulfill(
   if (
     confirmationSource === 'ecpay'
     && options.merchantTradeNo
+    && order.ecpay_merchant_trade_no
     && order.ecpay_merchant_trade_no !== options.merchantTradeNo
   ) {
     throw new Error('此綠界付款頁面已被較新的付款方式取代');

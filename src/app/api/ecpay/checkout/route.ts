@@ -29,6 +29,8 @@ interface PendingCheckoutOrder {
   discount_amount: number | string | null;
   promo_code_id: string | null;
   promo_code_snapshot: string | null;
+  ecpay_payment_method: string | null;
+  ecpay_barcode_created_at: string | null;
   payment_proof_uploaded_at: string | null;
   order_items: Array<{ product_id: string | null; price: number | string }>;
 }
@@ -150,7 +152,8 @@ export async function POST(request: Request) {
       .from('orders')
       .select(`
         id, order_number, total_amount, original_total_amount, discount_amount,
-        promo_code_id, promo_code_snapshot, payment_proof_uploaded_at,
+        promo_code_id, promo_code_snapshot, ecpay_payment_method,
+        ecpay_barcode_created_at, payment_proof_uploaded_at,
         order_items ( product_id, price )
       `)
       .eq('customer_id', customer.id)
@@ -164,6 +167,8 @@ export async function POST(request: Request) {
     const reusableOrder = ((pendingOrders || []) as unknown as PendingCheckoutOrder[]).find(candidate => {
       const pendingReferralCode = referralConfig.pendingRewards[candidate.id]?.code || null;
       return !candidate.payment_proof_uploaded_at
+        && candidate.ecpay_payment_method !== 'BARCODE'
+        && !candidate.ecpay_barcode_created_at
         && Math.round(Number(candidate.total_amount)) === totalAmount
         && Math.round(Number(candidate.original_total_amount)) === originalTotalAmount
         && Math.round(Number(candidate.discount_amount || 0)) === discountAmount
@@ -180,6 +185,7 @@ export async function POST(request: Request) {
         .update({
           ecpay_payment_method: paymentMethod,
           ecpay_merchant_trade_no: merchantTradeNo,
+          ecpay_barcode_created_at: paymentMethod === 'BARCODE' ? new Date().toISOString() : null,
           updated_at: new Date().toISOString()
         })
         .eq('id', reusableOrder.id)
@@ -204,6 +210,7 @@ export async function POST(request: Request) {
           payment_method: 'ECPAY',
           ecpay_payment_method: paymentMethod,
           ecpay_merchant_trade_no: merchantTradeNo,
+          ecpay_barcode_created_at: paymentMethod === 'BARCODE' ? new Date().toISOString() : null,
           payment_status: 'PENDING',
           order_status: 'CREATED'
         }])

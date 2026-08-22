@@ -50,16 +50,17 @@ function orderItemSignature(order: AdminOrderListItem) {
 }
 
 function hideSupersededPaymentAttempts(orders: AdminOrderListItem[]) {
+  const relatedAttemptWindowMs = 2 * 60 * 60_000;
   return orders.filter(order => {
     if (order.payment_method !== 'ECPAY' || order.payment_status !== 'PENDING') return true;
     const signature = orderItemSignature(order);
-    return !orders.some(newerOrder => (
-      newerOrder.payment_method === 'ECPAY'
-      && newerOrder.payment_status === 'PAID'
-      && newerOrder.customer_id === order.customer_id
-      && Math.round(Number(newerOrder.total_amount)) === Math.round(Number(order.total_amount))
-      && orderItemSignature(newerOrder) === signature
-      && new Date(newerOrder.created_at).getTime() > new Date(order.created_at).getTime()
+    return !orders.some(paidOrder => (
+      paidOrder.payment_method === 'ECPAY'
+      && paidOrder.payment_status === 'PAID'
+      && paidOrder.customer_id === order.customer_id
+      && Math.round(Number(paidOrder.total_amount)) === Math.round(Number(order.total_amount))
+      && orderItemSignature(paidOrder) === signature
+      && Math.abs(new Date(paidOrder.created_at).getTime() - new Date(order.created_at).getTime()) <= relatedAttemptWindowMs
     ));
   });
 }
