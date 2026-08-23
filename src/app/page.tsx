@@ -569,9 +569,11 @@ export default function Home() {
     const isStandaloneWebApp = window.matchMedia('(display-mode: standalone)').matches
       || standaloneNavigator.standalone === true;
     const paymentWindowName = 'roamLinkEcpayPayment';
-    const paymentWindow = isStandaloneWebApp ? window.open('', paymentWindowName) : null;
+    const paymentWindow = isStandaloneWebApp && paymentMethod !== 'BARCODE'
+      ? window.open('', paymentWindowName)
+      : null;
 
-    if (isStandaloneWebApp && !paymentWindow) {
+    if (isStandaloneWebApp && paymentMethod !== 'BARCODE' && !paymentWindow) {
       showToast('請允許彈出式視窗，才能前往綠界付款');
       return;
     }
@@ -615,6 +617,12 @@ export default function Home() {
         })
       });
       const result = await response.json();
+      if (response.ok && result.barcodeReady && result.redirect) {
+        setIsCheckoutOpen(false);
+        setCheckoutPaymentMethod(null);
+        window.location.assign(result.redirect);
+        return;
+      }
       if (!response.ok || !result.action || !result.fields) {
         throw new Error(result.error || '無法建立綠界付款');
       }

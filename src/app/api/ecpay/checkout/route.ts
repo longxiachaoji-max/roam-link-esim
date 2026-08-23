@@ -11,6 +11,7 @@ import { isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } 
 import { parseReferralConfig, saveReferralConfig, type ReferralQuote } from '@/lib/referrals';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
+import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
 
 export const dynamic = 'force-dynamic';
 
@@ -250,34 +251,34 @@ export async function POST(request: Request) {
       await saveReferralConfig(supabase, settings?.usage_guide || '', referralConfig);
     }
 
-    const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
     const itemName = sanitizeEcpayText(products.map(product => product.name).join('#'), 200);
-    const fields: Record<string, string> = {
-      MerchantID: merchantId,
-      MerchantTradeNo: merchantTradeNo,
-      MerchantTradeDate: formatEcpayTradeDate(),
-      PaymentType: 'aio',
-      TotalAmount: String(totalAmount),
-      TradeDesc: 'Roam Link eSIM',
-      ItemName: itemName || 'Roam Link eSIM',
-      ReturnURL: `${origin}/api/ecpay/notify`,
-      ClientBackURL: paymentMethod === 'BARCODE'
-        ? `${origin}/member?payment=barcode`
-        : `${origin}/?payment=cancelled`,
-      ChoosePayment: paymentMethod,
-      EncryptType: '1',
-      Language: 'CHT',
-      CustomField1: order.id
-    };
     if (paymentMethod === 'BARCODE') {
-      fields.StoreExpireDate = '3';
-    } else {
-      fields.OrderResultURL = `${origin}/api/ecpay/result`;
-    }
-    fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
+      const barcode = await createEcpayBackgroundBarcode({
+        merchantTradeNo,
+        amount: totalAmount,
+        orderId: order.id,
+        returnUrl: `${origin}/api/ecpay/notify`,
+        expireDays: 3,
+        tradeDesc: 'Roam Link eSIM',
+        itemName: itemName || 'Roam Link eSIM'
+      });
+      const barcodeCreatedAt = new Date().toISOString();
+      const { error: barcodeSaveError } = await supabase
+        .from('orders')
+        .update({
+          ecpay_trade_no: barcode.tradeNo || null,
+          ecpay_barcode_1: barcode.barcode1,
+          ecpay_barcode_2: barcode.barcode2,
+          ecpay_barcode_3: barcode.barcode3,
+          ecpay_barcode_expires_at: barcode.expiresAt,
+          ecpay_barcode_created_at: barcodeCreatedAt,
+          updated_at: barcodeCreatedAt
+        })
+        .eq('id', order.id)
+        .eq('payment_status', 'PENDING');
+      if (barcodeSaveError) throw barcodeSaveError;
 
-    if (paymentMethod === 'BARCODE') {
       await sendBarcodePaymentCreatedAlert(supabase, {
         orderId: order.id,
         orderNumber: order.order_number,
@@ -287,7 +288,33 @@ export async function POST(request: Request) {
         itemNames: products.map(product => product.name),
         merchantTradeNo
       });
+
+      return NextResponse.json({
+        barcodeReady: true,
+        orderId: order.id,
+        orderNumber: order.order_number,
+        redirect: `${origin}/member?payment=barcode`
+      });
     }
+
+    const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
+    const fields: Record<string, string> = {
+      MerchantID: merchantId,
+      MerchantTradeNo: merchantTradeNo,
+      MerchantTradeDate: formatEcpayTradeDate(),
+      PaymentType: 'aio',
+      TotalAmount: String(totalAmount),
+      TradeDesc: 'Roam Link eSIM',
+      ItemName: itemName || 'Roam Link eSIM',
+      ReturnURL: `${origin}/api/ecpay/notify`,
+      ClientBackURL: `${origin}/?payment=cancelled`,
+      ChoosePayment: paymentMethod,
+      EncryptType: '1',
+      Language: 'CHT',
+      CustomField1: order.id
+    };
+    fields.OrderResultURL = `${origin}/api/ecpay/result`;
+    fields.CheckMacValue = generateCheckMacValue(fields, hashKey, hashIv);
 
     return NextResponse.json({ action: checkoutUrl, fields, orderId: order.id, orderNumber: order.order_number });
   } catch (error) {

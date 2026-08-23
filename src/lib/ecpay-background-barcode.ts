@@ -59,6 +59,8 @@ export async function createEcpayBackgroundBarcode(options: {
   returnUrl: string;
   orderId: string;
   expireDays?: number;
+  tradeDesc?: string;
+  itemName?: string;
 }) {
   const { merchantId, hashKey, hashIv } = getEcpayConfig();
   const requestData = {
@@ -69,8 +71,8 @@ export async function createEcpayBackgroundBarcode(options: {
       MerchantTradeDate: formatEcpayTradeDate(),
       TotalAmount: options.amount,
       ReturnURL: options.returnUrl,
-      TradeDesc: 'Catch the Moment Member Topup',
-      ItemName: '一飛通儲值金'
+      TradeDesc: options.tradeDesc || 'FirstRoamLink payment',
+      ItemName: options.itemName || '一飛通儲值金'
     },
     BarcodeInfo: { ExpireDate: options.expireDays || 3 },
     CustomField: options.orderId
