@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Building2, Check, Copy, Search } from 'lucide-react';
+import { ArrowLeft, Building2, Check, Copy, MessageCircle, Search } from 'lucide-react';
 
 interface CompanyDiscountResult {
   companyName: string;
@@ -127,7 +127,17 @@ export default function CompanyDiscountSearch() {
           {searched && results.length === 0 && (
             <div className="rounded-md border border-dashed border-white/15 px-5 py-12 text-center">
               <p className="font-bold text-white/70">目前查不到這間企業的優惠</p>
-              <p className="mt-2 text-sm text-white/40">請確認企業名稱，或聯繫企業窗口取得專屬代碼。</p>
+              <p className="mt-2 text-sm text-white/40">請確認企業名稱，或聯繫客服取得您專屬的企業優惠碼。</p>
+              <a
+                href="https://lin.ee/Td0EgHE"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="加入一飛通 LINE 好友並聯繫客服"
+                className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#06c755] px-6 text-sm font-black text-white transition hover:bg-[#05b84e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#06c755] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d0d1a]"
+              >
+                <MessageCircle size={19} aria-hidden="true" />
+                LINE 加入好友
+              </a>
             </div>
           )}
         </section>
