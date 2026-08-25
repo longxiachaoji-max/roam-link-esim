@@ -29,9 +29,9 @@ function errorResponse(error: unknown) {
 
 async function addProofUrl(supabase: ReturnType<typeof getServerSupabase>, order: Record<string, unknown>) {
   const path = typeof order.payment_proof_path === 'string' ? order.payment_proof_path : '';
-  if (!path) return { ...order, payment_proof_url: null };
+  if (!path) return { ...order, payment_proof_url: null, payment_proof_is_pdf: false };
   const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 300);
-  return { ...order, payment_proof_url: data?.signedUrl || null };
+  return { ...order, payment_proof_url: data?.signedUrl || null, payment_proof_is_pdf: path.toLowerCase().endsWith('.pdf') };
 }
 
 export async function GET(request: Request) {
@@ -44,8 +44,8 @@ export async function GET(request: Request) {
       .select(`
         id, order_number, created_at, updated_at, total_amount,
         payment_method, payment_status, order_status,
-        ecpay_merchant_trade_no, payment_proof_path, payment_proof_uploaded_at,
-        ecpay_barcode_expires_at,
+        ecpay_merchant_trade_no, ecpay_trade_no, payment_proof_path, payment_proof_uploaded_at,
+        ecpay_barcode_1, ecpay_barcode_2, ecpay_barcode_3, ecpay_barcode_expires_at,
         manual_payment_confirmed_at, ecpay_paid_at,
         customers ( email, name ),
         order_items ( id, price, inventory_id, products ( name, country, validity_days ) )
