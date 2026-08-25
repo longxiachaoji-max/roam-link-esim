@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPhysicalStoreAdmin } from '@/lib/physical-store';
 import { sendDuePhysicalRentalReminders } from '@/lib/physical-rental-alerts';
+import { expirePendingBarcodeOrders } from '@/lib/barcode-order-expiry';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -12,12 +13,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await sendDuePhysicalRentalReminders(getPhysicalStoreAdmin());
-    return NextResponse.json({ ok: true, ...result }, {
+    const supabase = getPhysicalStoreAdmin();
+    const [result, barcodeExpiry] = await Promise.all([
+      sendDuePhysicalRentalReminders(supabase),
+      expirePendingBarcodeOrders(supabase)
+    ]);
+    return NextResponse.json({ ok: true, ...result, ...barcodeExpiry }, {
       headers: { 'Cache-Control': 'private, no-store, max-age=0' }
     });
   } catch (error) {
-    console.error('Rental reminder cron failed:', error);
-    return NextResponse.json({ error: 'Rental reminder failed' }, { status: 500 });
+    console.error('Scheduled maintenance failed:', error);
+    return NextResponse.json({ error: 'Scheduled maintenance failed' }, { status: 500 });
   }
 }

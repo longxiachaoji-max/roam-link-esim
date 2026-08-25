@@ -5,6 +5,7 @@ import { Barcode, ExternalLink, FileCheck2, RefreshCw, Smartphone, Upload, Walle
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { compressImageForUpload } from '@/lib/client-image-compression';
 import ReactBarcode from 'react-barcode';
+import { isBarcodeOrderExpired } from '@/lib/barcode-order-expiry';
 
 interface BarcodeOrderItem {
   id: string;
@@ -40,6 +41,7 @@ function getStatus(order: BarcodeOrder) {
   if (order.ecpay_paid_at) return { label: '已收到款項', className: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200' };
   if (order.manual_payment_confirmed_at || order.payment_status === 'PAID') return { label: '已人工確認', className: 'border-cyan/25 bg-cyan/10 text-cyan' };
   if (order.payment_proof_uploaded_at) return { label: '收據待審核', className: 'border-amber-300/25 bg-amber-300/10 text-amber-100' };
+  if (isBarcodeOrderExpired(order)) return { label: '已逾期取消', className: 'border-red-300/25 bg-red-300/10 text-red-200' };
   return { label: '等待繳款', className: 'border-white/10 bg-white/5 text-white/55' };
 }
 
@@ -118,6 +120,7 @@ export default function BarcodeOrdersPanel() {
           const status = getStatus(order);
           const isTopup = order.payment_method === 'ECPAY_TOPUP';
           const isPaid = order.payment_status === 'PAID';
+          const isExpired = isBarcodeOrderExpired(order);
           const productNames = order.order_items.map(item => getProduct(item)?.name).filter(Boolean);
           const barcodeValues = [order.ecpay_barcode_1, order.ecpay_barcode_2, order.ecpay_barcode_3].filter((value): value is string => Boolean(value));
           return (
@@ -145,7 +148,7 @@ export default function BarcodeOrdersPanel() {
                 {order.payment_proof_uploaded_at && <span>收據：{new Date(order.payment_proof_uploaded_at).toLocaleString('zh-TW')}</span>}
               </div>
 
-              {!isPaid && barcodeValues.length === 3 && (
+              {!isPaid && !isExpired && barcodeValues.length === 3 && (
                 <div className="mt-4 border-y border-white/10 py-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div><p className="text-sm font-bold text-white/85">超商繳費條碼</p><p className="mt-1 text-xs text-white/40">請於超商櫃台依序掃描三段條碼</p></div>
@@ -153,10 +156,10 @@ export default function BarcodeOrdersPanel() {
                   </div>
                   <div className="space-y-2 overflow-hidden bg-white px-2 py-3 text-black">
                     {barcodeValues.map((value, index) => (
-                      <div key={value} className="overflow-x-auto border-b border-black/10 pb-2 last:border-0 last:pb-0">
-                        <div className="mx-auto w-max min-w-full text-center">
+                      <div key={value} className="overflow-hidden border-b border-black/10 pb-3 last:border-0 last:pb-0">
+                        <div className="mx-auto w-full max-w-[520px] text-center [&_svg]:block [&_svg]:h-auto [&_svg]:w-full">
                           <p className="mb-1 text-xs font-bold text-black/50">第 {index + 1} 段</p>
-                          <ReactBarcode value={value} format="CODE39" width={1.25} height={44} margin={0} displayValue fontSize={13} background="#ffffff" lineColor="#000000" />
+                          <ReactBarcode value={value} format="CODE39" width={1} height={52} margin={0} displayValue fontSize={12} background="#ffffff" lineColor="#000000" />
                         </div>
                       </div>
                     ))}
@@ -165,13 +168,15 @@ export default function BarcodeOrdersPanel() {
                 </div>
               )}
 
+              {isExpired && <div className="mt-4 border border-red-300/20 bg-red-300/8 px-3 py-3 text-sm leading-6 text-red-100">繳費期限已過，此訂單已自動取消。若仍需購買，請重新建立訂單。</div>}
+
               <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {order.payment_proof_url && (
                   <a href={order.payment_proof_url} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 text-sm font-bold text-white/75 hover:bg-white/10">
                     <FileCheck2 size={16} />查看已上傳收據<ExternalLink size={14} />
                   </a>
                 )}
-                {!isPaid && (
+                {!isPaid && !isExpired && (
                   <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-md bg-[#F05A28] px-3 text-sm font-bold text-white hover:bg-[#d94f22]">
                     <Upload size={16} />
                     {uploadingId === order.id ? '上傳中...' : order.payment_proof_uploaded_at ? '更換收據' : '上傳繳款收據'}

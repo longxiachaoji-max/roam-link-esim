@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Barcode, CheckCircle2, ExternalLink, FileWarning, RefreshCw, Search, Smartphone, WalletCards, X } from 'lucide-react';
+import { Barcode, CheckCircle2, ExternalLink, FileWarning, RefreshCw, Search, Smartphone, Upload, WalletCards, X } from 'lucide-react';
 import { adminFetch } from '@/lib/admin-fetch';
+import { compressImageForUpload } from '@/lib/client-image-compression';
 
 interface ProductInfo {
   name: string;
@@ -30,6 +31,7 @@ interface BarcodeOrder {
   payment_proof_url: string | null;
   manual_payment_confirmed_at: string | null;
   ecpay_paid_at: string | null;
+  ecpay_barcode_expires_at: string | null;
   customers: { email: string; name: string | null } | { email: string; name: string | null }[] | null;
   order_items: BarcodeOrderItem[];
 }
@@ -42,6 +44,7 @@ function statusInfo(order: BarcodeOrder) {
   if (order.ecpay_paid_at) return { label: '已收到款項', className: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200' };
   if (order.manual_payment_confirmed_at || order.payment_status === 'PAID') return { label: '已人工放行', className: 'border-cyan/25 bg-cyan/10 text-cyan' };
   if (order.payment_proof_uploaded_at) return { label: '收據待審核', className: 'border-amber-300/30 bg-amber-300/10 text-amber-100' };
+  if (order.payment_status === 'EXPIRED') return { label: '已逾期取消', className: 'border-red-300/25 bg-red-300/10 text-red-200' };
   return { label: '等待繳款', className: 'border-white/10 bg-white/5 text-white/55' };
 }
 
@@ -53,6 +56,7 @@ export default function AdminBarcodeOrdersPage() {
   const [filter, setFilter] = useState<'pending' | 'paid' | 'all'>('pending');
   const [confirmOrder, setConfirmOrder] = useState<BarcodeOrder | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [uploadingId, setUploadingId] = useState('');
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -74,7 +78,7 @@ export default function AdminBarcodeOrdersPage() {
   }, [loadOrders]);
 
   const filteredOrders = useMemo(() => orders.filter(order => {
-    if (filter === 'pending' && order.payment_status === 'PAID') return false;
+    if (filter === 'pending' && order.payment_status !== 'PENDING') return false;
     if (filter === 'paid' && order.payment_status !== 'PAID') return false;
     const customer = relation(order.customers);
     const productNames = order.order_items.map(item => relation(item.products)?.name || '').join(' ');
@@ -106,8 +110,35 @@ export default function AdminBarcodeOrdersPage() {
     }
   };
 
-  const pendingCount = orders.filter(order => order.payment_status !== 'PAID').length;
-  const receiptCount = orders.filter(order => order.payment_status !== 'PAID' && order.payment_proof_uploaded_at).length;
+  const uploadReceipt = async (order: BarcodeOrder, sourceFile: File) => {
+    if (uploadingId) return;
+    setUploadingId(order.id);
+    setMessage('');
+    try {
+      let uploadBlob: Blob = sourceFile;
+      let fileName = sourceFile.name || 'receipt';
+      if (sourceFile.type.startsWith('image/')) {
+        const prepared = await compressImageForUpload(sourceFile, 'barcode-receipt');
+        uploadBlob = prepared.blob;
+        fileName = prepared.fileName;
+      }
+      const formData = new FormData();
+      formData.set('orderId', order.id);
+      formData.set('receipt', uploadBlob, fileName);
+      const response = await adminFetch('/api/admin/barcode-orders', { method: 'POST', body: formData });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '收據上傳失敗');
+      await loadOrders();
+      setMessage(result.message || '收據已上傳');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '收據上傳失敗');
+    } finally {
+      setUploadingId('');
+    }
+  };
+
+  const pendingCount = orders.filter(order => order.payment_status === 'PENDING').length;
+  const receiptCount = orders.filter(order => order.payment_status === 'PENDING' && order.payment_proof_uploaded_at).length;
 
   return (
     <div className="w-full">
@@ -170,7 +201,8 @@ export default function AdminBarcodeOrdersPage() {
                   ) : (
                     <div className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-amber-300/15 bg-amber-300/5 text-sm font-bold text-amber-100/60"><FileWarning size={16} />尚未上傳收據</div>
                   )}
-                  {order.payment_status !== 'PAID' && <button type="button" onClick={() => setConfirmOrder(order)} className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-bold text-white hover:bg-emerald-500"><CheckCircle2 size={16} />確認已繳款並放行</button>}
+                  {order.payment_status !== 'PAID' && <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-cyan/20 bg-cyan/8 px-3 text-sm font-bold text-cyan-100 hover:bg-cyan/15"><Upload size={16} />{uploadingId === order.id ? '上傳中...' : order.payment_proof_url ? '更換收據' : '代為上傳收據'}<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={Boolean(uploadingId)} className="sr-only" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadReceipt(order, file); }} /></label>}
+                  {order.payment_status === 'PENDING' && <button type="button" onClick={() => setConfirmOrder(order)} className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-bold text-white hover:bg-emerald-500"><CheckCircle2 size={16} />確認已繳款並放行</button>}
                 </div>
 
                 {(order.manual_payment_confirmed_at || order.ecpay_paid_at) && <div className="mt-3 text-xs leading-5 text-white/35">{order.ecpay_paid_at ? `綠界入帳：${new Date(order.ecpay_paid_at).toLocaleString('zh-TW')}` : `人工確認：${new Date(order.manual_payment_confirmed_at!).toLocaleString('zh-TW')}`}</div>}

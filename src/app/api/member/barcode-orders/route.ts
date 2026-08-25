@@ -3,6 +3,7 @@ import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUse
 import { sendBarcodeReceiptUploadedAlert } from '@/lib/barcode-payment-alerts';
 import { createMerchantTradeNo, sanitizeEcpayText } from '@/lib/ecpay';
 import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
+import { expirePendingBarcodeOrders } from '@/lib/barcode-order-expiry';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +58,7 @@ async function ensureStoredBarcode(
   origin: string
 ) {
   if (
-    order.payment_status === 'PAID'
+    order.payment_status !== 'PENDING'
     || order.payment_proof_uploaded_at
     || (order.ecpay_barcode_1 && order.ecpay_barcode_2 && order.ecpay_barcode_3)
   ) return order;
@@ -145,6 +146,7 @@ export async function GET(request: Request) {
     const supabase = getServerSupabase();
     const customerId = await getCustomerId(supabase, user.email.toLowerCase());
     if (!customerId) return NextResponse.json({ orders: [] });
+    await expirePendingBarcodeOrders(supabase);
 
     const { data, error } = await supabase
       .from('orders')
@@ -184,6 +186,7 @@ export async function POST(request: Request) {
     const supabase = getServerSupabase();
     const customerId = await getCustomerId(supabase, user.email.toLowerCase());
     if (!customerId) return NextResponse.json({ error: '找不到會員資料' }, { status: 404 });
+    await expirePendingBarcodeOrders(supabase);
 
     const formData = await request.formData();
     const orderId = String(formData.get('orderId') || '');
@@ -211,6 +214,7 @@ export async function POST(request: Request) {
     if (orderError) throw orderError;
     if (!order) return NextResponse.json({ error: '找不到這筆超商付款訂單' }, { status: 404 });
     if (order.payment_status === 'PAID') return NextResponse.json({ error: '此訂單已確認付款，不需再上傳收據' }, { status: 400 });
+    if (order.payment_status !== 'PENDING') return NextResponse.json({ error: '繳費期限已過，此訂單已自動取消，請重新下單' }, { status: 400 });
 
     uploadedPath = `${user.id}/${order.id}/${crypto.randomUUID()}.${fileType.extension}`;
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(uploadedPath, fileBytes, {
