@@ -10,14 +10,19 @@ import {
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Barcode, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
+import { ArrowRight, Barcode, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
-import { ESIM_DESTINATIONS, getEsimDestinationHref } from '@/lib/esim-destinations';
+import {
+  createAutomaticEsimDestination,
+  ESIM_DESTINATIONS,
+  getEsimDestinationForCountry,
+  getEsimDestinationHref
+} from '@/lib/esim-destinations';
 import type { HomeCarouselItem } from '@/lib/home-carousel-types';
 import { DEFAULT_HOME_FAQS, type HomeFaqItem } from '@/lib/home-faq-types';
 
@@ -39,16 +44,19 @@ interface PublicSiteSettings {
   contact_items: Array<{ id: string; label: string; value: string; href: string }>;
 }
 
-const shortenHotspotText = (value?: string) => {
-  const text = (value || '').trim();
-  if (!text) return '';
-  if (text.length <= 24) return text;
-  return `${text.slice(0, 24)}...`;
-};
+interface HomeEsimDestination {
+  country: string;
+  flag: string;
+  region: string;
+}
+
+function getCountryDestinationHref(country: string) {
+  const destination = getEsimDestinationForCountry(country) || createAutomaticEsimDestination(country);
+  return destination ? getEsimDestinationHref(destination) : '/esim';
+}
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState("全部");
-  const [selectedCountry, setSelectedCountry] = useState("");
   const [cart, setCart] = useState<any[]>([]);
   const [isCartHydrated, setIsCartHydrated] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -85,16 +93,10 @@ export default function Home() {
   const [authConfirmPassword, setAuthConfirmPassword] = useState("");
   const [authPromoCode, setAuthPromoCode] = useState("");
 
-  // 從資料庫動態載入商品
-  const [products, setProducts] = useState<any[]>([]);
+  // 首頁只載入有上架方案的目的地，方案內容於國家頁載入
+  const [destinations, setDestinations] = useState<HomeEsimDestination[]>([]);
   const [regions, setRegions] = useState<string[]>(["全部", "亞洲", "歐洲", "美洲", "大洋洲"]);
-  const [productsLoading, setProductsLoading] = useState(true);
-
-  // 展開狀態管理
-  const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
-  const [showHiddenGem, setShowHiddenGem] = useState(false);
-  // 天數選擇狀態: key = "country|data", value = index in options
-  const [selectedDays, setSelectedDays] = useState<Record<string, number>>({});
+  const [destinationsLoading, setDestinationsLoading] = useState(true);
 
   // 網站標語設定
   const [siteSettings, setSiteSettings] = useState<PublicSiteSettings>({
@@ -136,7 +138,13 @@ export default function Home() {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const requestedCountry = searchParams.get('country');
-    if (requestedCountry) setSelectedCountry(requestedCountry);
+    if (requestedCountry) {
+      const destinationHref = getCountryDestinationHref(requestedCountry);
+      if (destinationHref !== '/esim') {
+        window.location.replace(destinationHref);
+        return;
+      }
+    }
     if (searchParams.get('cart') === 'open') setIsCartOpen(true);
     if (searchParams.get('checkout') === 'open') setIsCheckoutOpen(true);
     trackPageView('roamlink_page_view');
@@ -154,22 +162,23 @@ export default function Home() {
       }
     }).catch(() => {});
 
-    const fetchProducts = async () => {
+    const fetchDestinations = async () => {
       try {
-        const res = await fetch('/api/products');
+        const res = await fetch('/api/esim-destinations');
         const json = await res.json();
-        if (json.products) {
-          setProducts(json.products);
+        if (!res.ok) throw new Error(json.error || '目的地載入失敗');
+        if (Array.isArray(json.destinations)) {
+          setDestinations(json.destinations);
         }
-        if (json.regions && json.regions.length > 0) {
+        if (Array.isArray(json.regions) && json.regions.length > 0) {
           setRegions(json.regions);
         }
       } catch (err) {
-        console.error('Error fetching products:', err);
+        console.error('Error fetching destinations:', err);
       }
-      setProductsLoading(false);
+      setDestinationsLoading(false);
     };
-    fetchProducts();
+    fetchDestinations();
   }, []);
 
   useEffect(() => {
@@ -292,27 +301,9 @@ export default function Home() {
     };
   }, []);
 
-  // 金探子隨機出現 (30% 機率)
-  useEffect(() => {
-    setShowHiddenGem(Math.random() < 0.3);
-  }, []);
-
-  // 過濾區域，並過濾金探子方案 (方案層級，不是國家層級)
-  const filteredProducts = (selectedCountry
-    ? products.filter(p => p.country === selectedCountry)
-    : activeRegion === "全部"
-      ? products
-      : products.filter(p => p.region === activeRegion)
-  ).map(p => ({
-    ...p,
-    plans: p.plans.filter((plan: any) => !plan.isHiddenGem || showHiddenGem)
-  })).filter(p => p.plans.length > 0);
-
-  const addToCart = (product: any, plan: any) => {
-    const item = { ...product, ...plan, uid: Date.now() };
-    setCart([...cart, item]);
-    showToast(`✅ 已加入：${product.flag} ${product.country} ${plan.data}`);
-  };
+  const filteredDestinations = activeRegion === "全部"
+    ? destinations
+    : destinations.filter(destination => destination.region === activeRegion);
 
   const removeFromCart = (uid: number) => {
     setCart(cart.filter(item => item.uid !== uid));
@@ -333,12 +324,9 @@ export default function Home() {
       return;
     }
 
-    const existing = products.find(product => String(product.country || '').trim().toLocaleLowerCase('zh-TW') === country.toLocaleLowerCase('zh-TW'));
+    const existing = destinations.find(destination => destination.country.toLocaleLowerCase('zh-TW') === country.toLocaleLowerCase('zh-TW'));
     if (existing) {
-      setSelectedCountry(existing.country);
-      setDestinationRequestState('success');
-      setDestinationRequestMessage(`${existing.country}已有方案，已幫你移到商品列表`);
-      window.setTimeout(() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+      window.location.assign(getCountryDestinationHref(existing.country));
       return;
     }
 
@@ -899,12 +887,9 @@ export default function Home() {
             {regions.map(region => (
               <button
                 key={region}
-                onClick={() => {
-                  setSelectedCountry('');
-                  setActiveRegion(region);
-                }}
+                onClick={() => setActiveRegion(region)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  !selectedCountry && activeRegion === region
+                  activeRegion === region
                     ? 'bg-coral/20 border-coral text-coral border' 
                     : 'bg-transparent border-white/10 text-muted border hover:bg-white/5'
                 }`}
@@ -913,127 +898,35 @@ export default function Home() {
               </button>
             ))}
         </div>
-        {selectedCountry && <div className="mb-7 flex items-center justify-center gap-3 text-sm"><span className="text-white/55">正在顯示：<strong className="text-cyan">{selectedCountry} eSIM</strong></span><button type="button" onClick={() => setSelectedCountry('')} className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5">查看全部</button></div>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {productsLoading ? (
-            <div className="col-span-full text-center py-20">
+        <p className="mb-6 text-center text-sm text-white/45">選擇目的地，查看該國家目前上架的 eSIM 方案與使用天數。</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {destinationsLoading ? (
+            <div className="col-span-full py-20 text-center">
               <div className="inline-block w-8 h-8 border-2 border-white/20 border-t-coral rounded-full animate-spin mb-4"></div>
-              <p className="text-muted">載入方案中...</p>
+              <p className="text-muted">載入目的地中...</p>
             </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="col-span-full text-center py-20">
+          ) : filteredDestinations.length === 0 ? (
+            <div className="col-span-full py-20 text-center">
               <p className="text-4xl mb-4">📡</p>
-              <p className="text-muted text-lg">暫無方案，敬請期待</p>
+              <p className="text-muted text-lg">這個地區目前沒有上架方案</p>
             </div>
-          ) : filteredProducts.map((product, idx) => {
-            const isExpanded = expandedCountries.has(product.country);
-            const visiblePlans = isExpanded ? product.plans : product.plans.slice(0, 3);
-            const hasMore = product.plans.length > 3;
-
-            return (
-              <div key={idx} className="bg-card-bg border border-white/10 rounded-3xl overflow-hidden hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all group">
-                <div className="p-6 relative">
-                  <span className="text-5xl block mb-2">{product.flag}</span>
-                  <h3 className="text-xl font-bold">{product.country}</h3>
-                  <p className="text-muted text-sm">{product.region}</p>
-                  {product.totalSales > 0 && (
-                    <div className="absolute top-6 right-6 bg-yellow text-dark text-xs font-black px-2 py-1 rounded-full">
-                      熱銷
-                    </div>
-                  )}
-                </div>
-                <div className="px-6 pb-6 flex flex-col gap-3">
-                  {visiblePlans.map((plan: any, pIdx: number) => {
-                    const planKey = `${product.country}|${plan.data}`;
-                    const selIdx = selectedDays[planKey] ?? 0;
-                    const currentOption = plan.options[selIdx] || plan.options[0];
-                    const hasMultiple = plan.options.length > 1;
-
-                    return (
-                      <div key={pIdx} className={`rounded-xl p-3 transition-colors ${plan.isHiddenGem ? 'bg-yellow-500/5 border border-yellow-500/30 hover:border-yellow-500/50' : 'bg-white/5 border border-white/5 hover:border-coral/50'}`}>
-                        <div className="flex items-start justify-between mb-2 gap-3">
-                          <div className="min-w-0 font-bold text-sm flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                            <span className="flex items-center gap-1.5">
-                              {plan.isHiddenGem && <span className="animate-bounce">✨</span>}
-                              <span>{plan.data}</span>
-                            </span>
-                            {currentOption.hotspot_sharing && (
-                              <span className="max-w-full truncate text-cyan font-medium" title={currentOption.hotspot_sharing}>
-                                {shortenHotspotText(currentOption.hotspot_sharing)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="font-black text-coral">
-                              <span className="text-[10px] text-muted font-normal mr-0.5">NT$</span>
-                              {currentOption.price}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addToCart(product, {
-                                  id: currentOption.id,
-                                  data: plan.data,
-                                  hotspot_sharing: currentOption.hotspot_sharing,
-                                  days: `${currentOption.days}天`,
-                                  price: currentOption.price
-                                });
-                              }}
-                              className="bg-coral text-white w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#ff2d4f] hover:scale-110 transition-all"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        {hasMultiple ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {plan.options.map((opt: any, oIdx: number) => (
-                              <button
-                                key={oIdx}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedDays(prev => ({ ...prev, [planKey]: oIdx }));
-                                }}
-                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                                  oIdx === selIdx
-                                    ? 'bg-coral text-white'
-                                    : 'bg-white/5 text-muted hover:bg-white/10'
-                                }`}
-                              >
-                                {opt.days}天
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-muted text-xs">{currentOption.days}天</div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {hasMore && (
-                    <button
-                      onClick={() => {
-                        setExpandedCountries(prev => {
-                          const next = new Set(prev);
-                          if (next.has(product.country)) {
-                            next.delete(product.country);
-                          } else {
-                            next.add(product.country);
-                          }
-                          return next;
-                        });
-                      }}
-                      className="text-white/40 hover:text-white/60 text-xs font-medium text-center py-2 transition-colors"
-                    >
-                      {isExpanded ? '▲ 收起' : `▼ 顯示更多方案 (${product.plans.length - 3})`}
-                    </button>
-                  )}
-                </div>
+          ) : filteredDestinations.map(destination => (
+            <Link
+              key={destination.country}
+              href={getCountryDestinationHref(destination.country)}
+              className="group flex min-h-32 flex-col justify-between rounded-md border border-white/10 bg-card-bg p-4 transition-colors hover:border-cyan/45 hover:bg-white/[0.07] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan sm:min-h-36 sm:p-5"
+            >
+              <div>
+                <span className="block text-3xl sm:text-4xl" aria-hidden="true">{destination.flag}</span>
+                <h3 className="mt-3 break-words text-base font-bold leading-6 sm:text-lg">{destination.country}</h3>
+                <p className="mt-1 text-xs text-muted">{destination.region}</p>
               </div>
-            );
-          })}
+              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-cyan">
+                查看方案 <ArrowRight size={13} className="transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+          ))}
         </div>
         </>
         )}

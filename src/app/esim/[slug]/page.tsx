@@ -96,8 +96,6 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
       acceptedAnswer: { '@type': 'Answer', text: faq.answer }
     }))
   };
-  const shopHref = `/?country=${encodeURIComponent(destination.countries[0])}#products`;
-
   return <main className="min-h-screen bg-[#0D0D1A] text-[#F0F0FF]">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbData) }} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqData) }} />
@@ -167,7 +165,7 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
             ))}
           </div>
         )}
-        <Link href={shopHref} className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-[#56d5ea] hover:text-white">前往首頁選購全部 {destination.shortName} 方案 <ArrowRight size={15} /></Link>
+        <Link href="/esim" className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-[#56d5ea] hover:text-white">查看其他 eSIM 目的地 <ArrowRight size={15} /></Link>
       </section>
 
       <section className="border-y border-white/10 py-11">

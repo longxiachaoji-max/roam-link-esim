@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getEsimCountryInfo } from '@/lib/esim-country-info';
 import { compareEsimPlanOrder, compareEsimPlanPriority } from '@/lib/esim-plan-sort';
+import { getProductSortIndex, parseProductSortConfig } from '@/lib/product-sort-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,67 +11,10 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// 國家 → flag emoji + region 映射
-const COUNTRY_MAP: Record<string, { flag: string; region: string }> = {
-  '日本': { flag: '🇯🇵', region: '亞洲' },
-  '韓國': { flag: '🇰🇷', region: '亞洲' },
-  '泰國': { flag: '🇹🇭', region: '亞洲' },
-  '越南': { flag: '🇻🇳', region: '亞洲' },
-  '新加坡': { flag: '🇸🇬', region: '亞洲' },
-  '馬來西亞': { flag: '🇲🇾', region: '亞洲' },
-  '中國': { flag: '🇨🇳', region: '亞洲' },
-  '香港': { flag: '🇭🇰', region: '亞洲' },
-  '台灣': { flag: '🇹🇼', region: '亞洲' },
-  '印度': { flag: '🇮🇳', region: '亞洲' },
-  '印尼': { flag: '🇮🇩', region: '亞洲' },
-  '菲律賓': { flag: '🇵🇭', region: '亞洲' },
-  '柬埔寨': { flag: '🇰🇭', region: '亞洲' },
-  '美國': { flag: '🇺🇸', region: '美洲' },
-  '加拿大': { flag: '🇨🇦', region: '美洲' },
-  '墨西哥': { flag: '🇲🇽', region: '美洲' },
-  '巴西': { flag: '🇧🇷', region: '美洲' },
-  '法國': { flag: '🇫🇷', region: '歐洲' },
-  '英國': { flag: '🇬🇧', region: '歐洲' },
-  '德國': { flag: '🇩🇪', region: '歐洲' },
-  '義大利': { flag: '🇮🇹', region: '歐洲' },
-  '西班牙': { flag: '🇪🇸', region: '歐洲' },
-  '荷蘭': { flag: '🇳🇱', region: '歐洲' },
-  '瑞士': { flag: '🇨🇭', region: '歐洲' },
-  '土耳其': { flag: '🇹🇷', region: '歐洲' },
-  '澳洲': { flag: '🇦🇺', region: '大洋洲' },
-  '紐西蘭': { flag: '🇳🇿', region: '大洋洲' },
-};
-
-function getCountryInfo(country: string) {
-  return COUNTRY_MAP[country] || { flag: '🌍', region: '其他' };
-}
-
 function getHotspotSharing(description: string | null, name: string) {
   if (description?.trim()) return description.trim();
   const match = name.match(/[（(]([^）)]*熱點[^）)]*)[）)]/);
   return match?.[1]?.trim() || '';
-}
-
-const SORT_CONFIG_PATTERN = /\n?<!--PRODUCT_SORT_CONFIG:([\s\S]*?)-->\n?/;
-
-function parseSortConfig(usageGuide: string | null) {
-  const match = (usageGuide || '').match(SORT_CONFIG_PATTERN);
-  if (!match?.[1]) return { countries: [], plans: [] };
-
-  try {
-    const parsed = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
-    return {
-      countries: Array.isArray(parsed.countries) ? parsed.countries.filter(Boolean) : [],
-      plans: Array.isArray(parsed.plans) ? parsed.plans.filter(Boolean) : []
-    };
-  } catch {
-    return { countries: [], plans: [] };
-  }
-}
-
-function getSortIndex(items: string[], key: string) {
-  const index = items.indexOf(key);
-  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
 // GET - 公開 API：回傳 is_active=true 的商品，按國家分組，同流量合併天數選項，依銷量排序
@@ -97,7 +42,7 @@ export async function GET() {
       .eq('id', 'main')
       .single();
 
-    const sortConfig = parseSortConfig(settings?.usage_guide || '');
+    const sortConfig = parseProductSortConfig(settings?.usage_guide || '');
 
     // 2. 從 order_items 計算各 product_id 銷售次數
     const salesMap: Record<string, number> = {};
@@ -122,7 +67,7 @@ export async function GET() {
     }> = {};
 
     for (const item of data) {
-      const { flag, region } = getCountryInfo(item.country);
+      const { flag, region } = getEsimCountryInfo(item.country);
       const productSales = salesMap[item.id] || 0;
 
       if (!grouped[item.country]) {
@@ -174,15 +119,15 @@ export async function GET() {
         })).sort((a, b) => {
           const priority = compareEsimPlanPriority(a.data, b.data);
           if (priority !== 0) return priority;
-          const planA = getSortIndex(sortConfig.plans, `${g.country}|${a.data}`);
-          const planB = getSortIndex(sortConfig.plans, `${g.country}|${b.data}`);
+          const planA = getProductSortIndex(sortConfig.plans, `${g.country}|${a.data}`);
+          const planB = getProductSortIndex(sortConfig.plans, `${g.country}|${b.data}`);
           if (planA !== planB) return planA - planB;
           return compareEsimPlanOrder(a.data, b.data);
         })
       }))
       .sort((a, b) => {
-        const countryA = getSortIndex(sortConfig.countries, a.country);
-        const countryB = getSortIndex(sortConfig.countries, b.country);
+        const countryA = getProductSortIndex(sortConfig.countries, a.country);
+        const countryB = getProductSortIndex(sortConfig.countries, b.country);
         if (countryA !== countryB) return countryA - countryB;
         if (a.totalSales !== b.totalSales) return b.totalSales - a.totalSales;
         return a.country.localeCompare(b.country, 'zh-Hant');
