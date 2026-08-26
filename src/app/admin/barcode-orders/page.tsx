@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Barcode, CheckCircle2, ExternalLink, FileWarning, RefreshCw, Search, Smartphone, Upload, WalletCards, X } from 'lucide-react';
 import { adminFetch } from '@/lib/admin-fetch';
 import { compressImageForUpload } from '@/lib/client-image-compression';
+import { analyzeReceiptText, getBarcodeAmount } from '@/lib/barcode-receipt-matching';
 
 interface ProductInfo {
   name: string;
@@ -54,6 +55,13 @@ function statusInfo(order: BarcodeOrder) {
   return { label: '等待繳款', className: 'border-white/10 bg-white/5 text-white/55' };
 }
 
+interface ReceiptScanResult {
+  barcode2Matched: boolean;
+  amountMatched: boolean;
+  confidence: number;
+  normalizedText: string;
+}
+
 export default function AdminBarcodeOrdersPage() {
   const [orders, setOrders] = useState<BarcodeOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +72,10 @@ export default function AdminBarcodeOrdersPage() {
   const [reviewOrder, setReviewOrder] = useState<BarcodeOrder | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [uploadingId, setUploadingId] = useState('');
+  const [scanningReceipt, setScanningReceipt] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
+  const [scanError, setScanError] = useState('');
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -144,6 +156,53 @@ export default function AdminBarcodeOrdersPage() {
     }
   };
 
+  const openReceiptReview = (order: BarcodeOrder) => {
+    setScanResult(null);
+    setScanError('');
+    setScanProgress(0);
+    setReviewOrder(order);
+  };
+
+  const scanReceipt = async () => {
+    if (!reviewOrder?.payment_proof_url || reviewOrder.payment_proof_is_pdf || scanningReceipt) return;
+    setScanningReceipt(true);
+    setScanResult(null);
+    setScanError('');
+    setScanProgress(0);
+    let worker: Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>> | null = null;
+    try {
+      const [{ createWorker }, imageResponse] = await Promise.all([
+        import('tesseract.js'),
+        fetch(reviewOrder.payment_proof_url, { cache: 'no-store' })
+      ]);
+      if (!imageResponse.ok) throw new Error('收據圖片已過期，請關閉視窗後重新開啟');
+      const image = await imageResponse.blob();
+      worker = await createWorker('eng', undefined, {
+        workerPath: '/ocr/worker.min.js',
+        corePath: '/ocr/tesseract-core-lstm.wasm.js',
+        langPath: '/ocr',
+        logger: message => {
+          if (message.status === 'recognizing text') setScanProgress(Math.round(message.progress * 100));
+        }
+      });
+      await worker.setParameters({
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$NTD,.- ',
+        preserve_interword_spaces: '1'
+      });
+      const result = await worker.recognize(image, { rotateAuto: true });
+      const comparison = analyzeReceiptText(result.data.text, {
+        barcode2: reviewOrder.ecpay_barcode_2,
+        amount: reviewOrder.total_amount
+      });
+      setScanResult({ ...comparison, confidence: Math.round(result.data.confidence) });
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : '收據辨識失敗，請改用人工核對');
+    } finally {
+      if (worker) await worker.terminate().catch(() => undefined);
+      setScanningReceipt(false);
+    }
+  };
+
   const pendingCount = orders.filter(order => order.payment_status === 'PENDING').length;
   const receiptCount = orders.filter(order => order.payment_status === 'PENDING' && order.payment_proof_uploaded_at).length;
 
@@ -181,6 +240,7 @@ export default function AdminBarcodeOrdersPage() {
             const isTopup = order.payment_method === 'ECPAY_TOPUP';
             const productNames = order.order_items.map(item => relation(item.products)?.name).filter(Boolean);
             const fulfilledCount = order.order_items.filter(item => item.inventory_id).length;
+            const barcodeAmount = getBarcodeAmount(order.ecpay_barcode_3);
             return (
               <article key={order.id} className="rounded-md border border-white/10 bg-[#151525] p-4 shadow-lg sm:p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -202,9 +262,15 @@ export default function AdminBarcodeOrdersPage() {
 
                 <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-white/40"><Barcode size={14} className="mt-0.5 shrink-0" /><span><span className="block break-all">特店交易編號：{order.ecpay_merchant_trade_no || '-'}</span><span className="mt-0.5 block break-all">綠界交易編號：{order.ecpay_trade_no || '-'}</span></span></div>
 
+                <div className="mt-3 space-y-1.5 rounded-md border border-white/[0.07] bg-black/15 p-3 text-xs">
+                  <p className="mb-2 font-bold text-white/55">三段條碼編號</p>
+                  {[order.ecpay_barcode_1, order.ecpay_barcode_2, order.ecpay_barcode_3].map((value, index) => <div key={index} className={`flex min-w-0 items-start gap-2 ${index === 1 ? 'text-cyan' : 'text-white/55'}`}><span className="shrink-0">第 {index + 1} 段{index === 1 ? '（收據主要比對）' : ''}</span><span className="min-w-0 break-all font-mono">{value || '舊訂單未保存'}</span></div>)}
+                  {barcodeAmount !== null && <p className={`pt-1 ${barcodeAmount === Math.round(Number(order.total_amount)) ? 'text-emerald-300' : 'text-red-200'}`}>第三段條碼內金額：NT$ {barcodeAmount.toLocaleString()} {barcodeAmount === Math.round(Number(order.total_amount)) ? '（與訂單相符）' : '（與訂單不符，請勿放行）'}</p>}
+                </div>
+
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {order.payment_proof_url ? (
-                    <button type="button" onClick={() => setReviewOrder(order)} className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 text-sm font-bold text-white/75 hover:bg-white/10">核對繳款收據<ExternalLink size={15} /></button>
+                    <button type="button" onClick={() => openReceiptReview(order)} className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 text-sm font-bold text-white/75 hover:bg-white/10">核對繳款收據<ExternalLink size={15} /></button>
                   ) : (
                     <div className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-amber-300/15 bg-amber-300/5 text-sm font-bold text-amber-100/60"><FileWarning size={16} />尚未上傳收據</div>
                   )}
@@ -249,6 +315,11 @@ export default function AdminBarcodeOrdersPage() {
                   <div><dt className="text-xs text-white/35">原始三段條碼號碼</dt><dd className="mt-2 space-y-1.5">{[reviewOrder.ecpay_barcode_1, reviewOrder.ecpay_barcode_2, reviewOrder.ecpay_barcode_3].map((value, index) => <div key={index} className="flex min-h-9 items-center gap-2 rounded-md bg-white/5 px-3"><span className="shrink-0 text-xs text-white/30">{index + 1}</span><span className="break-all font-mono text-white/80">{value || '舊訂單未保存'}</span></div>)}</dd></div>
                   <div><dt className="text-xs text-white/35">條碼期限</dt><dd className="mt-1 text-white/70">{reviewOrder.ecpay_barcode_expires_at ? new Date(reviewOrder.ecpay_barcode_expires_at).toLocaleString('zh-TW') : '-'}</dd></div>
                 </dl>
+                <div className="mt-5 border-t border-white/10 pt-5">
+                  <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-bold">照片自動比對</h3><p className="mt-1 text-xs text-white/35">辨識第二段條碼與實收金額，不會自動放行</p></div><button type="button" onClick={() => void scanReceipt()} disabled={reviewOrder.payment_proof_is_pdf || scanningReceipt} className="h-10 shrink-0 rounded-md bg-cyan px-3 text-sm font-bold text-[#0B0B1A] disabled:cursor-not-allowed disabled:opacity-40">{scanningReceipt ? `辨識中 ${scanProgress}%` : reviewOrder.payment_proof_is_pdf ? 'PDF 不支援' : '自動辨識收據'}</button></div>
+                  {scanError && <div className="mt-3 rounded-md border border-red-300/20 bg-red-300/8 px-3 py-2 text-xs leading-5 text-red-100">{scanError}</div>}
+                  {scanResult && <div className="mt-3 space-y-2 rounded-md border border-white/10 bg-white/[0.03] p-3 text-xs"><div className="flex items-center justify-between gap-3"><span className="text-white/45">第二段條碼</span><span className={scanResult.barcode2Matched ? 'font-bold text-emerald-300' : 'text-amber-100'}>{scanResult.barcode2Matched ? '辨識相符' : '未辨識到，請人工查看'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-white/45">收據金額</span><span className={scanResult.amountMatched ? 'font-bold text-emerald-300' : 'text-amber-100'}>{scanResult.amountMatched ? '辨識相符' : '未辨識到，請人工查看'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-white/45">照片辨識信心</span><span className="text-white/65">{scanResult.confidence}%</span></div>{scanResult.barcode2Matched && scanResult.amountMatched ? <p className="border-t border-white/10 pt-2 font-bold text-emerald-300">條碼與金額皆辨識相符，仍請目視確認收據日期。</p> : <p className="border-t border-white/10 pt-2 leading-5 text-amber-100">自動辨識不完整不代表資料錯誤，請依上方原圖人工核對。</p>}<details className="border-t border-white/10 pt-2 text-white/35"><summary className="cursor-pointer">查看辨識文字</summary><pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-5">{scanResult.normalizedText || '沒有辨識到文字'}</pre></details></div>}
+                </div>
                 <div className="mt-5 rounded-md border border-amber-300/20 bg-amber-300/8 px-3 py-3 text-xs leading-5 text-amber-100">請確認收據金額、繳款日期，以及收據上的條碼或交易資料與本區一致。收據照片不等於綠界已入帳；資料有疑問時請勿人工放行。</div>
                 <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                   <a href={reviewOrder.payment_proof_url} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 text-sm font-bold text-white/70 hover:bg-white/10">新視窗查看<ExternalLink size={15} /></a>

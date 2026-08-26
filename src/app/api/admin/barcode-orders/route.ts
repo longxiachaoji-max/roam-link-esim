@@ -3,6 +3,7 @@ import { markEcpayOrderPaidAndFulfill } from '@/lib/ecpay-orders';
 import { markEcpayTopupPaid } from '@/lib/ecpay-topups';
 import { AuthenticationError, getServerSupabase, requireAdminUser } from '@/lib/server-auth';
 import { expirePendingBarcodeOrders } from '@/lib/barcode-order-expiry';
+import { getBarcodeAmount } from '@/lib/barcode-receipt-matching';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,7 +148,7 @@ export async function PATCH(request: Request) {
     const supabase = getServerSupabase();
     const { data: order, error } = await supabase
       .from('orders')
-      .select('id, total_amount, payment_method, payment_status, ecpay_payment_method')
+      .select('id, total_amount, payment_method, payment_status, ecpay_payment_method, ecpay_barcode_3')
       .eq('id', orderId)
       .maybeSingle();
     if (error) throw error;
@@ -165,6 +166,10 @@ export async function PATCH(request: Request) {
     const amount = Math.round(Number(order.total_amount));
     if (!Number.isInteger(amount) || amount <= 0) {
       return NextResponse.json({ error: '訂單金額不正確' }, { status: 400 });
+    }
+    const barcodeAmount = getBarcodeAmount(order.ecpay_barcode_3);
+    if (barcodeAmount !== null && barcodeAmount !== amount) {
+      return NextResponse.json({ error: '第三段條碼金額與訂單金額不一致，已阻止人工放行' }, { status: 409 });
     }
 
     if (order.payment_method === 'ECPAY_TOPUP') {
