@@ -1022,6 +1022,9 @@ export default function Home() {
               <Link href="/company-discount" className="inline-flex min-h-11 items-center text-sm font-bold text-cyan transition-colors hover:text-white">
                 查詢企業優惠
               </Link>
+              <Link href="/dealer" className="text-sm text-white/50 transition-colors hover:text-white">
+                經銷商專區
+              </Link>
             </div>
             <a
               href="https://lin.ee/Td0EgHE"

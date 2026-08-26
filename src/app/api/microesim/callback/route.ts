@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { verifyMicroesimCallbackToken } from '@/lib/microesim';
+import { sendDealerEsimDeliveryEmail } from '@/lib/dealer-delivery-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,13 @@ export async function POST(request: Request) {
       orderItem.product_id,
       product
     );
+    if (inventory) {
+      try {
+        await sendDealerEsimDeliveryEmail(supabase, orderItem.id);
+      } catch (deliveryError) {
+        console.error('Dealer callback delivery email failed:', deliveryError);
+      }
+    }
     return NextResponse.json({ success: true, matched: true, completed: Boolean(inventory) });
   } catch (error) {
     console.error('MicroEsim callback failed:', error);

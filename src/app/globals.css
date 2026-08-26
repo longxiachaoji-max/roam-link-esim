@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@utility field {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 6px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: #141426;
+  padding-inline: 0.875rem;
+  color: white;
+  outline: none;
+}
+
+.field:focus {
+  border-color: #55d5ea;
+}
+
 @theme {
   --font-sans: var(--font-noto-sans-tc), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
