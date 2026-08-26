@@ -60,6 +60,55 @@ export interface PublicEsimReviewSummary {
   reviews: PublicEsimReview[];
 }
 
+interface PublicProductApiResponse {
+  products?: Array<{
+    country?: string;
+    plans?: Array<{
+      data?: string;
+      options?: Array<{ id?: string; days?: number; price?: number; hotspot_sharing?: string }>;
+    }>;
+  }>;
+}
+
+async function getDestinationPlansFromPublicApi(destination: EsimDestination): Promise<EsimSeoPlan[] | null> {
+  try {
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://firstesim.space').replace(/\/$/, '');
+    const response = await fetch(`${siteUrl}/api/products`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8_000)
+    });
+    if (!response.ok) return null;
+    const result = await response.json() as PublicProductApiResponse;
+    const rows: EsimSeoPlan[] = [];
+    for (const countryGroup of result.products || []) {
+      const country = String(countryGroup.country || '').trim();
+      if (!destination.countries.includes(country)) continue;
+      for (const plan of countryGroup.plans || []) {
+        const dataAmount = String(plan.data || '標準方案');
+        for (const option of plan.options || []) {
+          const id = String(option.id || '');
+          const validityDays = Number(option.days || 0);
+          const price = Number(option.price || 0);
+          if (!id || validityDays <= 0 || price <= 0) continue;
+          rows.push({
+            id,
+            name: `${country} ${dataAmount}`,
+            country,
+            dataAmount,
+            validityDays,
+            price,
+            description: String(option.hotspot_sharing || '').trim()
+          });
+        }
+      }
+    }
+    return rows.length ? rows : null;
+  } catch (error) {
+    console.error(`Public plan fallback failed for ${destination.slug}:`, error);
+    return null;
+  }
+}
+
 export async function getActiveEsimCountries() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -89,18 +138,29 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
   }
 
   const supabase = createClient(url, serviceRoleKey);
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, name, country, data_amount, validity_days, price, description')
-    .eq('is_active', true)
-    .in('country', destination.countries)
-    .order('price', { ascending: true })
-    .order('validity_days', { ascending: true })
-    .limit(250);
+  const fetchPlans = () => supabase
+      .from('products')
+      .select('id, name, country, data_amount, validity_days, price, description')
+      .eq('is_active', true)
+      .in('country', destination.countries)
+      .order('price', { ascending: true })
+      .order('validity_days', { ascending: true })
+      .limit(250);
+
+  let { data, error } = await fetchPlans();
+  if (error) {
+    await new Promise(resolve => setTimeout(resolve, 900));
+    ({ data, error } = await fetchPlans());
+  }
 
   if (error || !data) {
     console.error(`SEO plans failed for ${destination.slug}:`, error?.message || 'No data');
-    return { planCount: 0, lowestPrice: null, availableDays: [], featureLabels: [], plans: [] };
+    const fallbackPlans = await getDestinationPlansFromPublicApi(destination);
+    if (fallbackPlans) return summarizeEsimPlans(fallbackPlans);
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return { planCount: 0, lowestPrice: null, availableDays: [], featureLabels: [], plans: [] };
+    }
+    throw new Error(`無法更新 ${destination.name} 方案，保留上一版頁面`);
   }
 
   const normalized = data.map(row => ({
@@ -113,6 +173,10 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
     description: String(row.description || '').trim()
   })).filter(plan => plan.validityDays > 0 && plan.price > 0);
 
+  return summarizeEsimPlans(normalized);
+}
+
+function summarizeEsimPlans(normalized: EsimSeoPlan[]): EsimDestinationPlanSummary {
   const groupedPlans = new Map<string, EsimSeoPlan[]>();
   for (const plan of normalized) {
     const group = groupedPlans.get(plan.dataAmount) || [];

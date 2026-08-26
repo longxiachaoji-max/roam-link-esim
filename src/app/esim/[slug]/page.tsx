@@ -11,7 +11,7 @@ import {
 import { getEsimDestinationPlanSummary } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 export function generateStaticParams() {
   return ESIM_DESTINATIONS.map(destination => ({ slug: destination.slug }));
