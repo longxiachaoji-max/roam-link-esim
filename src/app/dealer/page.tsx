@@ -106,8 +106,15 @@ export default function DealerPage() {
       if (authMode === 'register') {
         if (!application.storeName || !application.contactName || !application.phone) throw new Error('請填寫完整店家資料');
         const result = await supabase.auth.signUp({ email: email.trim(), password });
-        if (result.error) throw result.error;
-        if (result.data.session) {
+        const isExistingAccountError = result.error?.code === 'user_already_exists'
+          || /already (registered|exists)/i.test(result.error?.message || '');
+        if (result.error && !isExistingAccountError) throw result.error;
+        const isExistingMember = isExistingAccountError || result.data.user?.identities?.length === 0;
+        if (isExistingMember) {
+          const signIn = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+          if (signIn.error) throw new Error('這個 Email 已是一般會員，請輸入原會員密碼後再送出申請');
+          await submitApplication();
+        } else if (result.data.session) {
           await submitApplication();
         } else {
           localStorage.setItem(APPLICATION_KEY, JSON.stringify(application));
@@ -189,12 +196,12 @@ export default function DealerPage() {
       <div className="mx-auto max-w-md">
         <Link href="/" className="text-sm text-white/45 hover:text-white">← 返回一飛通全球漫遊</Link>
         <div className="mt-10 border-b border-white/10 pb-7"><Building2 className="mb-5 text-[#55d5ea]" size={36} /><h1 className="text-3xl font-black">經銷商專區</h1><p className="mt-2 text-white/50">代客選購、餘額管理與訂單進度</p></div>
-        <div className="mt-7 grid grid-cols-2 border-b border-white/10"><button onClick={() => setAuthMode('login')} className={`py-3 font-semibold ${authMode === 'login' ? 'border-b-2 border-[#ff4f73] text-white' : 'text-white/40'}`}>登入</button><button onClick={() => setAuthMode('register')} className={`py-3 font-semibold ${authMode === 'register' ? 'border-b-2 border-[#ff4f73] text-white' : 'text-white/40'}`}>申請帳號</button></div>
+        <div className="mt-7 grid grid-cols-2 border-b border-white/10"><button onClick={() => setAuthMode('login')} className={`py-3 font-semibold ${authMode === 'login' ? 'border-b-2 border-[#ff4f73] text-white' : 'text-white/40'}`}>登入</button><button onClick={() => setAuthMode('register')} className={`py-3 font-semibold ${authMode === 'register' ? 'border-b-2 border-[#ff4f73] text-white' : 'text-white/40'}`}>申請經銷商</button></div>
         <form onSubmit={handleAuth} className="mt-6 space-y-4">
-          {authMode === 'register' && <ApplicationFields value={application} onChange={setApplication} />}
+          {authMode === 'register' && <><p className="text-sm leading-6 text-white/50">已有一飛通一般會員帳號，可直接輸入原 Email 與密碼申請，不需要重新註冊。</p><ApplicationFields value={application} onChange={setApplication} /></>}
           <Field label="Email"><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="field" /></Field>
-          <Field label="密碼"><input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="field" /></Field>
-          <button disabled={busy} className="h-12 w-full rounded-md bg-[#ff4f73] font-black disabled:opacity-50">{busy ? '處理中...' : authMode === 'login' ? '登入經銷商專區' : '註冊並送出申請'}</button>
+          <Field label="密碼"><input type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="field" /></Field>
+          <button disabled={busy} className="h-12 w-full rounded-md bg-[#ff4f73] font-black disabled:opacity-50">{busy ? '處理中...' : authMode === 'login' ? '登入經銷商專區' : '送出經銷商申請'}</button>
         </form>
         {message && <p role="status" className="mt-5 border-l-2 border-[#55d5ea] pl-3 text-sm text-white/70">{message}</p>}
       </div>
