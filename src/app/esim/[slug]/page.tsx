@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, ShoppingBag, Wifi } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, Wifi } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/esim-destinations';
 import { getEsimDestinationPlanSummary } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
+import EsimPageHeader from '../esim-page-header';
 
 export const revalidate = 300;
 
@@ -101,18 +102,7 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqData) }} />
     {summary.plans.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(planStructuredData(destination, summary.plans)) }} />}
 
-    <header className="border-b border-white/10 bg-[#0D0D1A]/95">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-6">
-        <Link href="/" className="font-bold leading-tight">
-          <span className="block text-xs text-white/55">一飛通全球漫遊</span>
-          <span className="block text-base text-[#ff6b73]">FirstRoamLink</span>
-        </Link>
-        <nav className="flex items-center gap-1 text-sm">
-          <Link href="/esim" className="rounded-md px-3 py-2 text-white/60 hover:bg-white/5 hover:text-white">eSIM 目的地</Link>
-          <Link href="/shop" aria-label="一飛通商城" className="grid h-10 w-10 place-items-center rounded-md text-white/60 hover:bg-white/5 hover:text-white"><ShoppingBag size={17} /></Link>
-        </nav>
-      </div>
-    </header>
+    <EsimPageHeader fallbackHref="/esim" />
 
     <div className="mx-auto max-w-6xl px-4 pb-14 pt-6 md:px-6 md:pb-20">
       <nav className="flex items-center gap-2 text-xs text-white/40" aria-label="麵包屑">
