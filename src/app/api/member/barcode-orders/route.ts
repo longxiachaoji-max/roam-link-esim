@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
 import { sendBarcodeReceiptUploadedAlert } from '@/lib/barcode-payment-alerts';
+import { createMerchantTradeNo, sanitizeEcpayText } from '@/lib/ecpay';
+import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
+import { expirePendingBarcodeOrders } from '@/lib/barcode-order-expiry';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +29,104 @@ const FILE_TYPES: Record<string, { extension: string; signature: (bytes: Uint8Ar
   }
 };
 
+interface MemberBarcodeOrder extends Record<string, unknown> {
+  id: string;
+  order_number: string | null;
+  total_amount: number | string;
+  payment_method: string;
+  payment_status: string;
+  payment_proof_uploaded_at: string | null;
+  ecpay_barcode_1: string | null;
+  ecpay_barcode_2: string | null;
+  ecpay_barcode_3: string | null;
+  order_items: Array<{
+    products: { name?: string | null } | Array<{ name?: string | null }> | null;
+  }>;
+}
+
+function barcodeItemNames(order: MemberBarcodeOrder) {
+  if (order.payment_method === 'ECPAY_TOPUP') return ['一飛通儲值金'];
+  return (order.order_items || []).flatMap(item => {
+    const product = Array.isArray(item.products) ? item.products[0] : item.products;
+    return product?.name ? [product.name] : [];
+  });
+}
+
+async function ensureStoredBarcode(
+  supabase: ReturnType<typeof getServerSupabase>,
+  order: MemberBarcodeOrder,
+  origin: string
+) {
+  if (
+    order.payment_status !== 'PENDING'
+    || order.payment_proof_uploaded_at
+    || (order.ecpay_barcode_1 && order.ecpay_barcode_2 && order.ecpay_barcode_3)
+  ) return order;
+
+  const merchantTradeNo = createMerchantTradeNo();
+  const claimedAt = new Date().toISOString();
+  const { data: claimed, error: claimError } = await supabase
+    .from('orders')
+    .update({
+      ecpay_merchant_trade_no: merchantTradeNo,
+      ecpay_barcode_created_at: claimedAt,
+      updated_at: claimedAt
+    })
+    .eq('id', order.id)
+    .eq('payment_status', 'PENDING')
+    .eq('ecpay_payment_method', 'BARCODE')
+    .is('ecpay_barcode_1', null)
+    .select('id')
+    .maybeSingle();
+  if (claimError) throw claimError;
+  if (!claimed) return order;
+
+  try {
+    const itemNames = barcodeItemNames(order);
+    const isTopup = order.payment_method === 'ECPAY_TOPUP';
+    const barcode = await createEcpayBackgroundBarcode({
+      merchantTradeNo,
+      amount: Math.round(Number(order.total_amount)),
+      orderId: order.id,
+      returnUrl: `${origin}${isTopup ? '/api/ecpay/topup/notify' : '/api/ecpay/notify'}`,
+      expireDays: 3,
+      tradeDesc: isTopup ? 'FirstRoamLink member topup' : 'Roam Link eSIM',
+      itemName: sanitizeEcpayText(itemNames.join('#'), 200) || (isTopup ? '一飛通儲值金' : 'Roam Link eSIM')
+    });
+    const savedAt = new Date().toISOString();
+    const { error: saveError } = await supabase
+      .from('orders')
+      .update({
+        ecpay_trade_no: barcode.tradeNo || null,
+        ecpay_barcode_1: barcode.barcode1,
+        ecpay_barcode_2: barcode.barcode2,
+        ecpay_barcode_3: barcode.barcode3,
+        ecpay_barcode_expires_at: barcode.expiresAt,
+        ecpay_barcode_created_at: savedAt,
+        updated_at: savedAt
+      })
+      .eq('id', order.id)
+      .eq('ecpay_merchant_trade_no', merchantTradeNo);
+    if (saveError) throw saveError;
+    return {
+      ...order,
+      ecpay_merchant_trade_no: merchantTradeNo,
+      ecpay_barcode_1: barcode.barcode1,
+      ecpay_barcode_2: barcode.barcode2,
+      ecpay_barcode_3: barcode.barcode3,
+      ecpay_barcode_expires_at: barcode.expiresAt
+    };
+  } catch (error) {
+    await supabase
+      .from('orders')
+      .update({ ecpay_merchant_trade_no: null, ecpay_barcode_created_at: null, updated_at: new Date().toISOString() })
+      .eq('id', order.id)
+      .eq('ecpay_merchant_trade_no', merchantTradeNo);
+    console.error('Generate missing member barcode failed:', { orderId: order.id, error });
+    return order;
+  }
+}
+
 async function addProofUrl(supabase: ReturnType<typeof getServerSupabase>, order: Record<string, unknown>) {
   const path = typeof order.payment_proof_path === 'string' ? order.payment_proof_path : '';
   if (!path) return { ...order, payment_proof_url: null };
@@ -45,6 +146,7 @@ export async function GET(request: Request) {
     const supabase = getServerSupabase();
     const customerId = await getCustomerId(supabase, user.email.toLowerCase());
     if (!customerId) return NextResponse.json({ orders: [] });
+    await expirePendingBarcodeOrders(supabase);
 
     const { data, error } = await supabase
       .from('orders')
@@ -62,7 +164,12 @@ export async function GET(request: Request) {
       .limit(30);
     if (error) throw error;
 
-    const orders = await Promise.all((data || []).map(order => addProofUrl(supabase, order)));
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+    const preparedOrders: MemberBarcodeOrder[] = [];
+    for (const order of (data || []) as unknown as MemberBarcodeOrder[]) {
+      preparedOrders.push(await ensureStoredBarcode(supabase, order, origin));
+    }
+    const orders = await Promise.all(preparedOrders.map(order => addProofUrl(supabase, order)));
     return NextResponse.json({ orders });
   } catch (error) {
     const authError = authenticationErrorResponse(error);
@@ -79,6 +186,7 @@ export async function POST(request: Request) {
     const supabase = getServerSupabase();
     const customerId = await getCustomerId(supabase, user.email.toLowerCase());
     if (!customerId) return NextResponse.json({ error: '找不到會員資料' }, { status: 404 });
+    await expirePendingBarcodeOrders(supabase);
 
     const formData = await request.formData();
     const orderId = String(formData.get('orderId') || '');
@@ -106,6 +214,7 @@ export async function POST(request: Request) {
     if (orderError) throw orderError;
     if (!order) return NextResponse.json({ error: '找不到這筆超商付款訂單' }, { status: 404 });
     if (order.payment_status === 'PAID') return NextResponse.json({ error: '此訂單已確認付款，不需再上傳收據' }, { status: 400 });
+    if (order.payment_status !== 'PENDING') return NextResponse.json({ error: '繳費期限已過，此訂單已自動取消，請重新下單' }, { status: 400 });
 
     uploadedPath = `${user.id}/${order.id}/${crypto.randomUUID()}.${fileType.extension}`;
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(uploadedPath, fileBytes, {

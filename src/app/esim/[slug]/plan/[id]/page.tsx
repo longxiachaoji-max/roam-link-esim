@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, ShoppingCart, Star, Wifi } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, Star, Wifi } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
@@ -12,6 +12,7 @@ import { getEsimDestinationPlanSummary, getEsimPlanDetail, getPublicEsimPlanRevi
 import { serializeJsonLd } from '@/lib/json-ld';
 import { buildProductReviewJsonLd } from '@/lib/product-review-jsonld';
 import PlanPurchase from './plan-purchase';
+import EsimPageHeader from '../../../esim-page-header';
 
 export const revalidate = 3600;
 
@@ -114,12 +115,7 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(productData) }} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbData) }} />
 
-    <header className="border-b border-white/10 bg-[#0D0D1A]/95">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-6">
-        <Link href="/" className="font-bold leading-tight"><span className="block text-xs text-white/55">一飛通全球漫遊</span><span className="block text-base text-[#ff6b73]">FirstRoamLink</span></Link>
-        <Link href="/?cart=open" aria-label="開啟購物車" className="grid h-10 w-10 place-items-center rounded-md text-white/60 hover:bg-white/5 hover:text-white"><ShoppingCart size={18} /></Link>
-      </div>
-    </header>
+    <EsimPageHeader fallbackHref={destinationHref} />
 
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 md:px-6 md:pb-20">
       <nav className="flex flex-wrap items-center gap-2 text-xs text-white/40" aria-label="麵包屑">
