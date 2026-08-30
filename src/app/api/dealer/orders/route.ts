@@ -95,7 +95,10 @@ export async function GET(request: Request) {
           id, order_item_id, retail_price, dealer_price,
           delivery_email_status, delivery_email_error,
           products ( name, country, validity_days ),
-          order_items ( inventory_id, supplier_status )
+          order_items (
+            inventory_id, supplier_status,
+            e_sim_inventory ( iccid, microesim_usage_cache, microesim_usage_checked_at )
+          )
         )
       `)
       .eq('dealer_id', dealer.id)
@@ -126,6 +129,91 @@ export async function GET(request: Request) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
     return NextResponse.json({ error: '讀取經銷訂單失敗' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const { dealer, supabase } = await requireDealerUser(request, true);
+    const body = await request.json();
+    const dealerOrderId = String(body.dealerOrderId || '');
+    const customerEmail = String(body.customerEmail || '').trim().toLowerCase().slice(0, 255);
+
+    if (!/^[0-9a-f-]{36}$/i.test(dealerOrderId)) {
+      return NextResponse.json({ error: '訂單資料不正確' }, { status: 400 });
+    }
+    if (!EMAIL_PATTERN.test(customerEmail)) {
+      return NextResponse.json({ error: '請輸入正確的客戶 Email' }, { status: 400 });
+    }
+
+    const { data: dealerOrder, error: orderError } = await supabase
+      .from('dealer_orders')
+      .select(`
+        id, fulfillment_order_id, customer_name,
+        dealer_order_items (
+          id, order_item_id,
+          order_items ( inventory_id )
+        )
+      `)
+      .eq('id', dealerOrderId)
+      .eq('dealer_id', dealer.id)
+      .maybeSingle();
+    if (orderError) throw orderError;
+    if (!dealerOrder) {
+      return NextResponse.json({ error: '找不到這筆經銷訂單' }, { status: 404 });
+    }
+
+    const customer = await getOrCreateCustomer(supabase, customerEmail, dealerOrder.customer_name || '');
+    const { error: emailUpdateError } = await supabase
+      .from('dealer_orders')
+      .update({ customer_email: customerEmail })
+      .eq('id', dealerOrder.id)
+      .eq('dealer_id', dealer.id);
+    if (emailUpdateError) throw emailUpdateError;
+
+    const { error: customerUpdateError } = await supabase
+      .from('orders')
+      .update({ customer_id: customer.id, updated_at: new Date().toISOString() })
+      .eq('id', dealerOrder.fulfillment_order_id);
+    if (customerUpdateError) throw customerUpdateError;
+
+    const dealerItems = Array.isArray(dealerOrder.dealer_order_items) ? dealerOrder.dealer_order_items : [];
+    const dealerItemIds = dealerItems.map(item => item.id);
+    if (dealerItemIds.length) {
+      const { error: resetError } = await supabase
+        .from('dealer_order_items')
+        .update({ delivery_email_status: 'pending', delivery_email_sent_at: null, delivery_email_error: null })
+        .in('id', dealerItemIds);
+      if (resetError) throw resetError;
+    }
+
+    const readyItemIds = dealerItems.flatMap(item => {
+      const normalItem = Array.isArray(item.order_items) ? item.order_items[0] : item.order_items;
+      return normalItem?.inventory_id ? [item.order_item_id] : [];
+    });
+    const results = await Promise.allSettled(
+      readyItemIds.map(itemId => sendDealerEsimDeliveryEmail(supabase, itemId))
+    );
+    const failedCount = results.filter(result => result.status === 'rejected').length;
+
+    if (failedCount) {
+      return NextResponse.json({
+        error: `${failedCount} 封郵件寄送失敗，Email 已更新，可稍後再試`,
+        emailUpdated: true
+      }, { status: 502 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      customerEmail,
+      sentCount: readyItemIds.length,
+      pendingCount: dealerItems.length - readyItemIds.length
+    });
+  } catch (error) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
+    console.error('Dealer order email resend failed:', error);
+    return NextResponse.json({ error: '更新 Email 或再次寄送失敗' }, { status: 500 });
   }
 }
 

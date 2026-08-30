@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Building2, ChevronRight, LogOut, Minus, Plus, RefreshCw, Send, WalletCards } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronRight, LogOut, Mail, Minus, Plus, RefreshCw, Send, WalletCards } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getEsimCountryInfo } from '@/lib/esim-country-info';
@@ -24,7 +24,37 @@ interface Product {
 interface DealerOrder {
   id: string; customer_email: string; dealer_total: number; created_at: string;
   orders: { order_number: string; order_status: string } | { order_number: string; order_status: string }[];
-  dealer_order_items: Array<{ id: string; delivery_email_status: string; products: { name: string } | { name: string }[] }>;
+  dealer_order_items: Array<{
+    id: string;
+    delivery_email_status: string;
+    delivery_email_error: string | null;
+    products: { name: string; country: string; validity_days: number } | { name: string; country: string; validity_days: number }[];
+    order_items: {
+      inventory_id: string | null;
+      supplier_status: string | null;
+      e_sim_inventory: {
+        iccid: string | null;
+        microesim_usage_cache: { status?: string } | null;
+        microesim_usage_checked_at: string | null;
+      } | {
+        iccid: string | null;
+        microesim_usage_cache: { status?: string } | null;
+        microesim_usage_checked_at: string | null;
+      }[];
+    } | {
+      inventory_id: string | null;
+      supplier_status: string | null;
+      e_sim_inventory: {
+        iccid: string | null;
+        microesim_usage_cache: { status?: string } | null;
+        microesim_usage_checked_at: string | null;
+      } | {
+        iccid: string | null;
+        microesim_usage_cache: { status?: string } | null;
+        microesim_usage_checked_at: string | null;
+      }[];
+    }[];
+  }>;
 }
 interface Transaction { id: string; amount: number; balance_after: number; reason: string; created_at: string; }
 
@@ -32,6 +62,12 @@ const APPLICATION_KEY = 'firstroamlink-dealer-application';
 
 function money(value: number) { return `NT$${Number(value || 0).toLocaleString('zh-TW')}`; }
 function first<T>(value: T | T[]) { return Array.isArray(value) ? value[0] : value; }
+function installStatus(item: DealerOrder['dealer_order_items'][number]) {
+  const orderItem = first(item.order_items);
+  const inventory = orderItem ? first(orderItem.e_sim_inventory) : null;
+  if (!orderItem?.inventory_id) return 'eSIM 準備中';
+  return inventory?.microesim_usage_cache?.status || '尚未安裝';
+}
 
 export default function DealerPage() {
   const [checking, setChecking] = useState(true);
@@ -54,6 +90,8 @@ export default function DealerPage() {
   const [customerName, setCustomerName] = useState('');
   const [topupAmount, setTopupAmount] = useState('');
   const [topupNote, setTopupNote] = useState('');
+  const [orderEmails, setOrderEmails] = useState<Record<string, string>>({});
+  const [sendingOrderId, setSendingOrderId] = useState('');
   const customerEmailRef = useRef<HTMLInputElement>(null);
   const salesCatalogRef = useRef<HTMLElement>(null);
 
@@ -210,6 +248,30 @@ export default function DealerPage() {
     void createOrder();
   };
 
+  const resendOrderEmail = async (order: DealerOrder) => {
+    const nextEmail = (orderEmails[order.id] ?? order.customer_email).trim();
+    setSendingOrderId(order.id); setMessage('');
+    try {
+      const response = await authenticatedFetch('/api/dealer/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dealerOrderId: order.id, customerEmail: nextEmail })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '再次寄送失敗');
+      setMessage(result.sentCount
+        ? `已更新 Email，並重新寄送 ${result.sentCount} 封 eSIM 安裝信`
+        : '已更新 Email，eSIM 配發完成後會自動寄送');
+      setOrderEmails(current => ({ ...current, [order.id]: nextEmail }));
+      await loadOrders();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '再次寄送失敗');
+      await loadOrders();
+    } finally {
+      setSendingOrderId('');
+    }
+  };
+
   const requestTopup = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setMessage('');
     try {
@@ -339,7 +401,77 @@ export default function DealerPage() {
           </section>
           <aside className="lg:sticky lg:top-20 lg:self-start"><h2 className="text-xl font-black">本次代客訂單</h2><div className="mt-4 divide-y divide-white/8 border-y border-white/10">{cartItems.length ? cartItems.map(item => <div key={item.id} className="py-3"><p className="text-sm font-medium">{item.name}</p><div className="mt-2 flex items-center justify-between"><span className="text-[#55d5ea]">{money(item.dealer_price * item.quantity)}</span><div className="flex items-center gap-3"><button onClick={() => changeQuantity(item.id,-1)} className="p-1"><Minus size={17}/></button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id,1)} className="p-1"><Plus size={17}/></button></div></div></div>) : <p className="py-7 text-sm text-white/35">尚未選擇商品</p>}</div><div className="flex justify-between py-4 text-lg font-black"><span>經銷扣款</span><span>{money(cartTotal)}</span></div><Field label="客戶 Email（安裝資料寄送至此）"><input ref={customerEmailRef} type="email" required value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} className="field" placeholder="customer@example.com"/></Field><div className="mt-3"><Field label="客戶姓名（選填）"><input value={customerName} onChange={e => setCustomerName(e.target.value)} className="field"/></Field></div><button onClick={handleOrderAction} disabled={busy || !cartItems.length} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#ff4f73] font-black disabled:opacity-40"><Send size={18}/>{busy ? '建立中...' : '扣款並寄送 eSIM'}</button><p className="mt-3 text-xs leading-5 text-white/35">系統會將 QR Code 與一鍵安裝連結直接寄給客戶。客戶使用相同 Email 登入一飛通後，也可在會員中心查看。</p></aside>
         </div>}
-        {view === 'orders' && <section><div className="flex items-end justify-between"><div><h2 className="text-2xl font-black">經銷訂單</h2><p className="mt-1 text-sm text-white/40">最近 50 筆代客販售</p></div><button onClick={loadOrders} title="重新整理" className="p-2 text-white/50"><RefreshCw size={19}/></button></div><div className="mt-5 divide-y divide-white/8 border-y border-white/10">{orders.length ? orders.map(order => { const normal = first(order.orders); return <article key={order.id} className="grid gap-3 py-4 md:grid-cols-[150px_1fr_150px_130px]"><div><p className="font-mono text-sm">{normal?.order_number}</p><p className="text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p></div><div><p>{order.customer_email}</p><p className="mt-1 text-sm text-white/40">{order.dealer_order_items.map(item => first(item.products)?.name).join('、')}</p></div><p className="font-black text-amber-300">{money(order.dealer_total)}</p><p className="text-sm text-[#55d5ea]">{order.dealer_order_items.every(item => item.delivery_email_status === 'sent') ? '已寄送安裝資料' : normal?.order_status === 'COMPLETED' ? '寄送處理中' : 'eSIM 準備中'}</p></article>}) : <p className="py-12 text-center text-white/35">尚無經銷訂單</p>}</div></section>}
+        {view === 'orders' && (
+          <section>
+            <div className="flex items-end justify-between">
+              <div><h2 className="text-2xl font-black">經銷訂單</h2><p className="mt-1 text-sm text-white/40">最近 50 筆代客販售</p></div>
+              <button onClick={loadOrders} title="重新整理" className="p-2 text-white/50"><RefreshCw size={19}/></button>
+            </div>
+            <div className="mt-5 space-y-4">
+              {orders.length ? orders.map(order => {
+                const normal = first(order.orders);
+                const draftEmail = orderEmails[order.id] ?? order.customer_email;
+                return (
+                  <article key={order.id} className="rounded-xl border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+                    <div className="grid gap-3 md:grid-cols-[160px_1fr_auto] md:items-start">
+                      <div>
+                        <p className="font-mono text-sm">{normal?.order_number}</p>
+                        <p className="mt-1 text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-white/45">收件 Email</p>
+                        <p className="break-all font-medium">{order.customer_email}</p>
+                      </div>
+                      <div className="md:text-right">
+                        <p className="font-black text-amber-300">{money(order.dealer_total)}</p>
+                        <p className="mt-1 text-xs text-[#55d5ea]">{order.dealer_order_items.every(item => item.delivery_email_status === 'sent') ? '已寄送安裝資料' : normal?.order_status === 'COMPLETED' ? '寄送處理中' : 'eSIM 準備中'}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 divide-y divide-white/8 border-y border-white/8">
+                      {order.dealer_order_items.map(item => {
+                        const product = first(item.products);
+                        const orderItem = first(item.order_items);
+                        const inventory = orderItem ? first(orderItem.e_sim_inventory) : null;
+                        return (
+                          <div key={item.id} className="grid gap-2 py-3 text-sm sm:grid-cols-[1fr_210px_110px] sm:items-center">
+                            <div>
+                              <p className="font-medium">{product?.name}</p>
+                              <p className="mt-1 text-xs text-white/35">{product?.country} · {product?.validity_days} 天</p>
+                            </div>
+                            <p className="break-all font-mono text-xs text-white/60"><span className="font-sans text-white/35">ICCID：</span>{inventory?.iccid || '配發中'}</p>
+                            <p className={`font-bold ${installStatus(item) === '尚未安裝' ? 'text-white/50' : 'text-emerald-300'}`}>{installStatus(item)}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <input
+                        type="email"
+                        aria-label={`${normal?.order_number || '訂單'}收件 Email`}
+                        value={draftEmail}
+                        onChange={event => setOrderEmails(current => ({ ...current, [order.id]: event.target.value }))}
+                        className="field"
+                        placeholder="customer@example.com"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void resendOrderEmail(order)}
+                        disabled={sendingOrderId === order.id || !draftEmail.trim()}
+                        className="flex h-11 items-center justify-center gap-2 rounded-md bg-[#ff4f73] px-5 font-black disabled:opacity-45"
+                      >
+                        {sendingOrderId === order.id ? <RefreshCw size={17} className="animate-spin" /> : <Mail size={17} />}
+                        {sendingOrderId === order.id ? '寄送中...' : '更新 Email 並再次寄送'}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-white/30">再次寄送不會重複扣款；修改 Email 後，會員中心訂單也會改綁定到新 Email。</p>
+                  </article>
+                );
+              }) : <p className="py-12 text-center text-white/35">尚無經銷訂單</p>}
+            </div>
+          </section>
+        )}
         {view === 'balance' && <div className="grid gap-8 lg:grid-cols-[360px_1fr]"><section><WalletCards className="text-amber-300"/><h2 className="mt-4 text-2xl font-black">申請現金加值</h2><p className="mt-2 text-sm leading-6 text-white/45">先向一飛通完成現金付款，再送出申請。後台核准後餘額才會增加。</p><form onSubmit={requestTopup} className="mt-6 space-y-4"><Field label="申請金額"><input type="number" min="1" max="1000000" required value={topupAmount} onChange={e => setTopupAmount(e.target.value)} className="field"/></Field><Field label="付款備註（選填）"><textarea rows={3} value={topupNote} onChange={e => setTopupNote(e.target.value)} className="field py-3" placeholder="例如：現金交付日期"/></Field><button disabled={busy} className="h-12 w-full rounded-md bg-[#ff4f73] font-black">送出加值申請</button></form></section><section><h2 className="text-2xl font-black">餘額帳本</h2><div className="mt-5 divide-y divide-white/8 border-y border-white/10">{transactions.length ? transactions.map(transaction => <div key={transaction.id} className="grid grid-cols-[1fr_auto] gap-3 py-4"><div><p>{transaction.reason}</p><p className="mt-1 text-xs text-white/35">{new Date(transaction.created_at).toLocaleString('zh-TW')} · 餘額 {money(transaction.balance_after)}</p></div><p className={`font-black ${transaction.amount > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{transaction.amount > 0 ? '+' : ''}{money(transaction.amount)}</p></div>) : <p className="py-10 text-center text-white/35">尚無餘額紀錄</p>}</div></section></div>}
       </div>
       {view === 'sale' && cartItems.length > 0 && (
