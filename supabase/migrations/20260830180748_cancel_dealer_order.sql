@@ -1,0 +1,71 @@
+create or replace function public.cancel_dealer_order(p_order_id uuid)
+returns table (cancelled boolean, refunded_amount integer, new_balance integer)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_order public.orders%rowtype;
+  v_dealer_order public.dealer_orders%rowtype;
+  v_new_balance integer;
+begin
+  select * into v_order
+  from public.orders
+  where id = p_order_id
+  for update;
+
+  if not found then
+    raise exception 'ORDER_NOT_FOUND';
+  end if;
+
+  select * into v_dealer_order
+  from public.dealer_orders
+  where fulfillment_order_id = p_order_id;
+
+  if not found then
+    raise exception 'NOT_DEALER_ORDER';
+  end if;
+
+  select balance into v_new_balance
+  from public.dealers
+  where id = v_dealer_order.dealer_id
+  for update;
+
+  if v_order.order_status = 'CANCELLED' then
+    return query select false, 0, v_new_balance;
+    return;
+  end if;
+
+  update public.dealers
+  set balance = balance + v_dealer_order.dealer_total
+  where id = v_dealer_order.dealer_id
+  returning balance into v_new_balance;
+
+  insert into public.dealer_balance_transactions (
+    dealer_id,
+    amount,
+    balance_after,
+    transaction_type,
+    reason,
+    dealer_order_id
+  ) values (
+    v_dealer_order.dealer_id,
+    v_dealer_order.dealer_total,
+    v_new_balance,
+    'refund',
+    '取消代客 eSIM 訂單退款（訂單 ' || coalesce(v_order.order_number, p_order_id::text) || '）',
+    v_dealer_order.id
+  );
+
+  update public.orders
+  set order_status = 'CANCELLED',
+      payment_status = 'REFUNDED',
+      updated_at = now()
+  where id = p_order_id;
+
+  return query select true, v_dealer_order.dealer_total, v_new_balance;
+end;
+$$;
+
+revoke execute on function public.cancel_dealer_order(uuid) from public, anon, authenticated;
+grant execute on function public.cancel_dealer_order(uuid) to service_role;

@@ -405,8 +405,11 @@ export default function OrdersPage() {
 
   const handleDeleteOrder = async (order: Order) => {
     const customer = order.customers?.email || '未知客戶';
+    const cancellationNote = order.payment_method === 'DEALER_BALANCE'
+      ? '經銷餘額會自動退回；已寄出的 eSIM 不會重新上架。'
+      : '已配發的 eSIM 會退回可用庫存。';
     const ok = window.confirm(
-      `確定要刪除這筆訂單嗎？\n\n客戶：${customer}\n訂單：${order.order_number || order.id}\n\n已配發的 eSIM 會退回可用庫存。`
+      `確定要取消這筆訂單嗎？\n\n客戶：${customer}\n訂單：${order.order_number || order.id}\n\n${cancellationNote}`
     );
     if (!ok) return;
 
@@ -418,11 +421,12 @@ export default function OrdersPage() {
         body: JSON.stringify({ order_id: order.id })
       });
       const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error || '刪除訂單失敗');
+      if (!res.ok || json.error) throw new Error(json.error || '取消訂單失敗');
       setExpandedOrderId(prev => (prev === order.id ? null : prev));
       await fetchOrders(false);
+      if (json.refundedAmount) alert(`訂單已取消，經銷餘額已退回 NT$${Number(json.refundedAmount).toLocaleString('zh-TW')}`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '刪除訂單失敗');
+      alert(err instanceof Error ? err.message : '取消訂單失敗');
     } finally {
       setDeletingOrderId(null);
     }
@@ -918,13 +922,13 @@ export default function OrdersPage() {
                               {restoringItemId === item.id ? '恢復中...' : '恢復顯示'}
                             </button>
                           )}
-                          {isFirst && (
+                          {isFirst && order.order_status !== 'CANCELLED' && (
                             <button
                               onClick={() => handleDeleteOrder(order)}
                               disabled={deletingOrderId === order.id}
                               className="self-start rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
                             >
-                              {deletingOrderId === order.id ? '刪除中...' : '刪除訂單'}
+                              {deletingOrderId === order.id ? '取消中...' : '取消訂單'}
                             </button>
                           )}
                         </div>

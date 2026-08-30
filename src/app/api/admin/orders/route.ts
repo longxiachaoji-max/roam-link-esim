@@ -406,7 +406,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE - 刪除訂單，並將已綁定的 eSIM 庫存退回可用
+// DELETE - 一般訂單刪除；經銷訂單改為取消並退回經銷餘額
 export async function DELETE(request: Request) {
   const denied = await adminApiGuard(request);
   if (denied) return denied;
@@ -419,12 +419,43 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 order_id' }, { status: 400 });
     }
 
+    const { data: dealerOrder, error: dealerOrderError } = await supabase
+      .from('dealer_orders')
+      .select('id')
+      .eq('fulfillment_order_id', order_id)
+      .maybeSingle();
+
+    if (dealerOrderError) {
+      console.error('Admin order cancellation dealer lookup failed:', dealerOrderError);
+      return NextResponse.json({ error: dealerOrderError.message }, { status: 500 });
+    }
+
+    if (dealerOrder) {
+      const { data: cancellationRows, error: cancellationError } = await supabase.rpc('cancel_dealer_order', {
+        p_order_id: order_id
+      });
+
+      if (cancellationError) {
+        console.error('Admin dealer order cancellation failed:', cancellationError);
+        return NextResponse.json({ error: cancellationError.message }, { status: 500 });
+      }
+
+      const cancellation = Array.isArray(cancellationRows) ? cancellationRows[0] : cancellationRows;
+      return NextResponse.json({
+        success: true,
+        cancelled: cancellation?.cancelled ?? false,
+        refundedAmount: cancellation?.refunded_amount ?? 0,
+        newBalance: cancellation?.new_balance ?? null
+      });
+    }
+
     const { data: orderItems, error: itemsError } = await supabase
       .from('order_items')
       .select('inventory_id')
       .eq('order_id', order_id);
 
     if (itemsError) {
+      console.error('Admin order deletion item lookup failed:', itemsError);
       return NextResponse.json({ error: itemsError.message }, { status: 500 });
     }
 
@@ -442,6 +473,7 @@ export async function DELETE(request: Request) {
         .in('id', inventoryIds);
 
       if (inventoryError) {
+        console.error('Admin order deletion inventory reset failed:', inventoryError);
         return NextResponse.json({ error: inventoryError.message }, { status: 500 });
       }
     }
@@ -452,11 +484,13 @@ export async function DELETE(request: Request) {
       .eq('id', order_id);
 
     if (deleteError) {
+      console.error('Admin order deletion failed:', deleteError);
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error('Admin order cancellation failed:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
