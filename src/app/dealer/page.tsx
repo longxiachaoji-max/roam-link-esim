@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, LogOut, Minus, Plus, RefreshCw, Search, Send, WalletCards } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Building2, ChevronRight, LogOut, Minus, Plus, RefreshCw, Send, WalletCards } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
+import { getEsimCountryInfo } from '@/lib/esim-country-info';
 
 interface Dealer {
   id: string;
@@ -46,13 +47,15 @@ export default function DealerPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [application, setApplication] = useState({ storeName: '', contactName: '', phone: '', taxId: '' });
-  const [search, setSearch] = useState('');
-  const [country, setCountry] = useState('全部');
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedDays, setSelectedDays] = useState<number | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [topupAmount, setTopupAmount] = useState('');
   const [topupNote, setTopupNote] = useState('');
+  const customerEmailRef = useRef<HTMLInputElement>(null);
+  const salesCatalogRef = useRef<HTMLElement>(null);
 
   const loadOrders = useCallback(async () => {
     const response = await authenticatedFetch('/api/dealer/orders', { cache: 'no-store' });
@@ -137,14 +140,39 @@ export default function DealerPage() {
     finally { setBusy(false); }
   };
 
-  const countries = useMemo(() => ['全部', ...Array.from(new Set(products.map(item => item.country))).sort((a, b) => a.localeCompare(b, 'zh-TW'))], [products]);
-  const filteredProducts = useMemo(() => products.filter(product => {
-    const keyword = search.trim().toLowerCase();
-    return (country === '全部' || product.country === country)
-      && (!keyword || `${product.name} ${product.country} ${product.data_amount || ''}`.toLowerCase().includes(keyword));
-  }), [products, search, country]);
+  const countries = useMemo(
+    () => Array.from(new Set(products.map(item => item.country))).sort((a, b) => a.localeCompare(b, 'zh-TW')),
+    [products]
+  );
+  const availableDays = useMemo(
+    () => Array.from(new Set(products
+      .filter(product => product.country === selectedCountry)
+      .map(product => product.validity_days)))
+      .sort((a, b) => a - b),
+    [products, selectedCountry]
+  );
+  const filteredProducts = useMemo(
+    () => products.filter(product => product.country === selectedCountry && product.validity_days === selectedDays),
+    [products, selectedCountry, selectedDays]
+  );
   const cartItems = products.filter(product => cart[product.id]).map(product => ({ ...product, quantity: cart[product.id] }));
   const cartTotal = cartItems.reduce((sum, item) => sum + item.dealer_price * item.quantity, 0);
+
+  const showCatalogTop = () => window.requestAnimationFrame(() => {
+    salesCatalogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  const chooseCountry = (countryName: string) => {
+    setSelectedCountry(countryName);
+    setSelectedDays(null);
+    showCatalogTop();
+  };
+
+  const returnToCountries = () => {
+    setSelectedCountry('');
+    setSelectedDays(null);
+    showCatalogTop();
+  };
 
   const changeQuantity = (id: string, delta: number) => setCart(current => {
     const quantity = Math.max(0, Math.min(20, (current[id] || 0) + delta));
@@ -170,6 +198,16 @@ export default function DealerPage() {
       await Promise.all([loadOrders(), loadAccount()]);
     } catch (error) { setMessage(error instanceof Error ? error.message : '下單失敗'); }
     finally { setBusy(false); }
+  };
+
+  const handleOrderAction = () => {
+    if (!customerEmail.trim()) {
+      setMessage('請先填寫客戶 Email，eSIM 安裝資料會寄到這個信箱');
+      customerEmailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => customerEmailRef.current?.focus(), 350);
+      return;
+    }
+    void createOrder();
   };
 
   const requestTopup = async (event: FormEvent) => {
@@ -221,15 +259,102 @@ export default function DealerPage() {
     <main className="min-h-screen bg-[#090916] text-white">
       <header className="border-b border-white/10 bg-[#101020] px-4 py-4"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3"><div><p className="text-xs text-white/40">一飛通經銷商</p><h1 className="font-bold">{dealer.store_name}</h1></div><div className="flex items-center gap-3"><div className="rounded-md border border-amber-300/25 bg-amber-300/8 px-3 py-2 text-right"><p className="text-[11px] text-white/40">可用餘額</p><p className="font-black text-amber-300">{money(dealer.balance)}</p></div><button onClick={logout} title="登出" className="p-3 text-white/45"><LogOut size={20}/></button></div></div></header>
       <nav className="sticky top-0 z-20 border-b border-white/10 bg-[#090916]/95 px-4 backdrop-blur"><div className="mx-auto flex max-w-7xl gap-6">{([['sale','代客販售'],['orders','經銷訂單'],['balance','加值與帳本']] as const).map(([key,label]) => <button key={key} onClick={() => setView(key)} className={`py-4 text-sm font-bold ${view === key ? 'border-b-2 border-[#ff4f73]' : 'text-white/40'}`}>{label}</button>)}</div></nav>
-      <div className="mx-auto max-w-7xl px-4 py-7">
+      <div className={`mx-auto max-w-7xl px-4 pt-7 ${view === 'sale' && cartItems.length ? 'pb-28 lg:pb-7' : 'pb-7'}`}>
         {message && <div className="mb-6 border-l-2 border-[#55d5ea] bg-white/5 px-4 py-3 text-sm">{message}</div>}
         {view === 'sale' && <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-          <section><div className="mb-5 flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search className="absolute left-3 top-3.5 text-white/30" size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜尋國家或方案" className="field pl-10"/></label><select value={country} onChange={e => setCountry(e.target.value)} className="field sm:w-48">{countries.map(item => <option key={item}>{item}</option>)}</select></div><div className="divide-y divide-white/8 border-y border-white/10">{filteredProducts.map(product => <article key={product.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="font-semibold">{product.name}</p><p className="mt-1 text-sm text-white/40">{product.country} · {product.validity_days} 天{product.data_amount ? ` · ${product.data_amount}` : ''}</p></div><div className="flex items-center justify-between gap-4 sm:justify-end"><div className="text-right"><p className="font-black text-[#55d5ea]">{money(product.dealer_price)}</p><p className="text-xs text-white/30 line-through">售價 {money(product.retail_price)}</p></div><button onClick={() => changeQuantity(product.id, 1)} title="加入" className="grid size-10 place-items-center rounded-md bg-[#ff4f73]"><Plus size={20}/></button></div></article>)}</div></section>
-          <aside className="lg:sticky lg:top-20 lg:self-start"><h2 className="text-xl font-black">本次代客訂單</h2><div className="mt-4 divide-y divide-white/8 border-y border-white/10">{cartItems.length ? cartItems.map(item => <div key={item.id} className="py-3"><p className="text-sm font-medium">{item.name}</p><div className="mt-2 flex items-center justify-between"><span className="text-[#55d5ea]">{money(item.dealer_price * item.quantity)}</span><div className="flex items-center gap-3"><button onClick={() => changeQuantity(item.id,-1)} className="p-1"><Minus size={17}/></button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id,1)} className="p-1"><Plus size={17}/></button></div></div></div>) : <p className="py-7 text-sm text-white/35">尚未選擇商品</p>}</div><div className="flex justify-between py-4 text-lg font-black"><span>經銷扣款</span><span>{money(cartTotal)}</span></div><Field label="客戶 Email（安裝資料寄送至此）"><input type="email" required value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} className="field" placeholder="customer@example.com"/></Field><div className="mt-3"><Field label="客戶姓名（選填）"><input value={customerName} onChange={e => setCustomerName(e.target.value)} className="field"/></Field></div><button onClick={createOrder} disabled={busy || !cartItems.length || !customerEmail} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#ff4f73] font-black disabled:opacity-40"><Send size={18}/>{busy ? '建立中...' : '扣款並寄送 eSIM'}</button><p className="mt-3 text-xs leading-5 text-white/35">系統會將 QR Code 與一鍵安裝連結直接寄給客戶。客戶使用相同 Email 登入一飛通後，也可在會員中心查看。</p></aside>
+          <section ref={salesCatalogRef} className="scroll-mt-20">
+            {!selectedCountry ? (
+              <>
+                <div>
+                  <p className="text-sm font-bold text-[#55d5ea]">代客販售</p>
+                  <h2 className="mt-1 text-2xl font-black">選擇 eSIM 國家</h2>
+                  <p className="mt-2 text-sm text-white/40">點選客戶要前往的國家，再選擇使用天數與方案。</p>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                  {countries.map(item => {
+                    const info = getEsimCountryInfo(item);
+                    const dayCount = new Set(products.filter(product => product.country === item).map(product => product.validity_days)).size;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => chooseCountry(item)}
+                        className="group flex min-h-28 flex-col items-start justify-between rounded-xl border border-white/10 bg-[#121222] p-4 text-left transition hover:border-[#55d5ea]/50 hover:bg-[#18182b]"
+                      >
+                        <span className="text-3xl" aria-hidden="true">{info.flag}</span>
+                        <span className="mt-4 flex w-full items-end justify-between gap-2">
+                          <span><span className="block font-black">{item}</span><span className="mt-0.5 block text-xs text-white/35">{dayCount} 種天數</span></span>
+                          <ChevronRight size={18} className="mb-1 text-white/30 transition-transform group-hover:translate-x-1 group-hover:text-[#55d5ea]" />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={returnToCountries}
+                  className="inline-flex items-center gap-2 text-sm font-bold text-white/50 hover:text-white"
+                >
+                  <ArrowLeft size={17} />返回選擇國家
+                </button>
+                <div className="mt-5 flex items-center gap-4 border-b border-white/10 pb-5">
+                  <span className="text-4xl" aria-hidden="true">{getEsimCountryInfo(selectedCountry).flag}</span>
+                  <div><p className="text-sm text-[#55d5ea]">代客販售</p><h2 className="text-2xl font-black">{selectedCountry} eSIM</h2></div>
+                </div>
+                <div className="py-6">
+                  <h3 className="font-black">選擇使用天數</h3>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {availableDays.map(days => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setSelectedDays(days)}
+                        className={`min-w-20 rounded-md border px-4 py-3 font-black transition ${selectedDays === days ? 'border-[#ff4f73] bg-[#ff4f73] text-white' : 'border-white/12 bg-white/5 text-white/65 hover:border-white/30 hover:text-white'}`}
+                      >
+                        {days} 天
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {selectedDays === null ? (
+                  <div className="rounded-xl border border-dashed border-white/12 px-5 py-10 text-center text-sm text-white/35">請先選擇客戶要使用的天數</div>
+                ) : (
+                  <div>
+                    <div className="mb-3 flex items-end justify-between gap-3"><h3 className="text-lg font-black">{selectedDays} 天方案</h3><span className="text-xs text-white/35">共 {filteredProducts.length} 個方案</span></div>
+                    <div className="divide-y divide-white/8 border-y border-white/10">
+                      {filteredProducts.map(product => (
+                        <article key={product.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                          <div><p className="font-semibold">{product.name}</p><p className="mt-1 text-sm text-white/40">{product.country} · {product.validity_days} 天{product.data_amount ? ` · ${product.data_amount}` : ''}</p></div>
+                          <div className="flex items-center justify-between gap-4 sm:justify-end"><div className="text-right"><p className="font-black text-[#55d5ea]">{money(product.dealer_price)}</p><p className="text-xs text-white/30 line-through">售價 {money(product.retail_price)}</p></div><button onClick={() => changeQuantity(product.id, 1)} title={`加入 ${product.name}`} className="grid size-10 place-items-center rounded-md bg-[#ff4f73]"><Plus size={20}/></button></div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+          <aside className="lg:sticky lg:top-20 lg:self-start"><h2 className="text-xl font-black">本次代客訂單</h2><div className="mt-4 divide-y divide-white/8 border-y border-white/10">{cartItems.length ? cartItems.map(item => <div key={item.id} className="py-3"><p className="text-sm font-medium">{item.name}</p><div className="mt-2 flex items-center justify-between"><span className="text-[#55d5ea]">{money(item.dealer_price * item.quantity)}</span><div className="flex items-center gap-3"><button onClick={() => changeQuantity(item.id,-1)} className="p-1"><Minus size={17}/></button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id,1)} className="p-1"><Plus size={17}/></button></div></div></div>) : <p className="py-7 text-sm text-white/35">尚未選擇商品</p>}</div><div className="flex justify-between py-4 text-lg font-black"><span>經銷扣款</span><span>{money(cartTotal)}</span></div><Field label="客戶 Email（安裝資料寄送至此）"><input ref={customerEmailRef} type="email" required value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} className="field" placeholder="customer@example.com"/></Field><div className="mt-3"><Field label="客戶姓名（選填）"><input value={customerName} onChange={e => setCustomerName(e.target.value)} className="field"/></Field></div><button onClick={handleOrderAction} disabled={busy || !cartItems.length} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#ff4f73] font-black disabled:opacity-40"><Send size={18}/>{busy ? '建立中...' : '扣款並寄送 eSIM'}</button><p className="mt-3 text-xs leading-5 text-white/35">系統會將 QR Code 與一鍵安裝連結直接寄給客戶。客戶使用相同 Email 登入一飛通後，也可在會員中心查看。</p></aside>
         </div>}
         {view === 'orders' && <section><div className="flex items-end justify-between"><div><h2 className="text-2xl font-black">經銷訂單</h2><p className="mt-1 text-sm text-white/40">最近 50 筆代客販售</p></div><button onClick={loadOrders} title="重新整理" className="p-2 text-white/50"><RefreshCw size={19}/></button></div><div className="mt-5 divide-y divide-white/8 border-y border-white/10">{orders.length ? orders.map(order => { const normal = first(order.orders); return <article key={order.id} className="grid gap-3 py-4 md:grid-cols-[150px_1fr_150px_130px]"><div><p className="font-mono text-sm">{normal?.order_number}</p><p className="text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p></div><div><p>{order.customer_email}</p><p className="mt-1 text-sm text-white/40">{order.dealer_order_items.map(item => first(item.products)?.name).join('、')}</p></div><p className="font-black text-amber-300">{money(order.dealer_total)}</p><p className="text-sm text-[#55d5ea]">{order.dealer_order_items.every(item => item.delivery_email_status === 'sent') ? '已寄送安裝資料' : normal?.order_status === 'COMPLETED' ? '寄送處理中' : 'eSIM 準備中'}</p></article>}) : <p className="py-12 text-center text-white/35">尚無經銷訂單</p>}</div></section>}
         {view === 'balance' && <div className="grid gap-8 lg:grid-cols-[360px_1fr]"><section><WalletCards className="text-amber-300"/><h2 className="mt-4 text-2xl font-black">申請現金加值</h2><p className="mt-2 text-sm leading-6 text-white/45">先向一飛通完成現金付款，再送出申請。後台核准後餘額才會增加。</p><form onSubmit={requestTopup} className="mt-6 space-y-4"><Field label="申請金額"><input type="number" min="1" max="1000000" required value={topupAmount} onChange={e => setTopupAmount(e.target.value)} className="field"/></Field><Field label="付款備註（選填）"><textarea rows={3} value={topupNote} onChange={e => setTopupNote(e.target.value)} className="field py-3" placeholder="例如：現金交付日期"/></Field><button disabled={busy} className="h-12 w-full rounded-md bg-[#ff4f73] font-black">送出加值申請</button></form></section><section><h2 className="text-2xl font-black">餘額帳本</h2><div className="mt-5 divide-y divide-white/8 border-y border-white/10">{transactions.length ? transactions.map(transaction => <div key={transaction.id} className="grid grid-cols-[1fr_auto] gap-3 py-4"><div><p>{transaction.reason}</p><p className="mt-1 text-xs text-white/35">{new Date(transaction.created_at).toLocaleString('zh-TW')} · 餘額 {money(transaction.balance_after)}</p></div><p className={`font-black ${transaction.amount > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{transaction.amount > 0 ? '+' : ''}{money(transaction.amount)}</p></div>) : <p className="py-10 text-center text-white/35">尚無餘額紀錄</p>}</div></section></div>}
       </div>
+      {view === 'sale' && cartItems.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#101020]/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_32px_rgba(0,0,0,0.45)] backdrop-blur lg:hidden">
+          <div className="mx-auto flex max-w-lg items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-white/45">{cartItems.reduce((sum, item) => sum + item.quantity, 0)} 件 eSIM</p>
+              <p className="truncate text-lg font-black text-[#55d5ea]">{money(cartTotal)}</p>
+            </div>
+            <button onClick={handleOrderAction} disabled={busy} className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-[#ff4f73] px-5 font-black disabled:opacity-50">
+              <Send size={18}/>{busy ? '建立中...' : '扣款並寄送 eSIM'}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
