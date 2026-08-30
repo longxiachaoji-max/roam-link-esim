@@ -421,7 +421,24 @@ export async function DELETE(request: Request) {
 
     const { data: dealerOrder, error: dealerOrderError } = await supabase
       .from('dealer_orders')
-      .select('id')
+      .select(`
+        id,
+        dealer_order_items (
+          order_items (
+            id,
+            inventory_id,
+            orders ( created_at ),
+            products ( supplier_raw ),
+            e_sim_inventory (
+              id,
+              iccid,
+              expiry_date,
+              microesim_topup_id,
+              microesim_usage_cache
+            )
+          )
+        )
+      `)
       .eq('fulfillment_order_id', order_id)
       .maybeSingle();
 
@@ -431,8 +448,56 @@ export async function DELETE(request: Request) {
     }
 
     if (dealerOrder) {
+      const dealerItems = Array.isArray(dealerOrder.dealer_order_items) ? dealerOrder.dealer_order_items : [];
+      const reclaimResults = await Promise.all(dealerItems.map(async dealerItem => {
+        const orderItemRecord = dealerItem.order_items;
+        const orderItem = Array.isArray(orderItemRecord) ? orderItemRecord[0] : orderItemRecord;
+        if (!orderItem?.inventory_id) return null;
+
+        const inventoryRecord = orderItem.e_sim_inventory;
+        const inventory = Array.isArray(inventoryRecord) ? inventoryRecord[0] : inventoryRecord;
+        const productRecord = orderItem.products;
+        const product = Array.isArray(productRecord) ? productRecord[0] : productRecord;
+        const orderRecord = orderItem.orders;
+        const order = Array.isArray(orderRecord) ? orderRecord[0] : orderRecord;
+        if (!inventory) return null;
+
+        let status = String((inventory.microesim_usage_cache as MicroesimUsageSummary | null)?.status || '');
+        if (inventory.microesim_topup_id && inventory.iccid) {
+          try {
+            const installationDeadline = inventory.expiry_date
+              || getMicroesimInstallationDeadline(product, null, order?.created_at)
+              || null;
+            const [detail, events] = await Promise.all([
+              fetchMicroesimDeviceDetail(inventory.microesim_topup_id, inventory.iccid),
+              fetchMicroesimEventDetail(inventory.iccid).catch(error => {
+                console.error('Dealer cancellation MicroEsim event query failed:', error);
+                return [];
+              })
+            ]);
+            const usage = normalizeMicroesimUsage(detail, events, installationDeadline);
+            status = usage.status;
+            const { error: usageUpdateError } = await supabase
+              .from('e_sim_inventory')
+              .update({
+                expiry_date: installationDeadline,
+                microesim_usage_cache: usage,
+                microesim_usage_checked_at: new Date().toISOString()
+              })
+              .eq('id', inventory.id);
+            if (usageUpdateError) throw usageUpdateError;
+          } catch (statusError) {
+            console.error('Dealer cancellation status refresh failed; inventory will not be reclaimed:', statusError);
+            return null;
+          }
+        }
+
+        return status === '尚未安裝' ? inventory.id : null;
+      }));
+      const reclaimInventoryIds = reclaimResults.filter((id): id is string => Boolean(id));
       const { data: cancellationRows, error: cancellationError } = await supabase.rpc('cancel_dealer_order', {
-        p_order_id: order_id
+        p_order_id: order_id,
+        p_reclaim_inventory_ids: reclaimInventoryIds
       });
 
       if (cancellationError) {
@@ -445,7 +510,8 @@ export async function DELETE(request: Request) {
         success: true,
         cancelled: cancellation?.cancelled ?? false,
         refundedAmount: cancellation?.refunded_amount ?? 0,
-        newBalance: cancellation?.new_balance ?? null
+        newBalance: cancellation?.new_balance ?? null,
+        reclaimedCount: cancellation?.reclaimed_count ?? 0
       });
     }
 

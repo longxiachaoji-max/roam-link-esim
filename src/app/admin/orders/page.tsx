@@ -406,7 +406,7 @@ export default function OrdersPage() {
   const handleDeleteOrder = async (order: Order) => {
     const customer = order.customers?.email || '未知客戶';
     const cancellationNote = order.payment_method === 'DEALER_BALANCE'
-      ? '經銷餘額會自動退回；已寄出的 eSIM 不會重新上架。'
+      ? '經銷餘額會自動退回；確認尚未安裝的 eSIM 會放回庫存，其他狀態不會重新上架。'
       : '已配發的 eSIM 會退回可用庫存。';
     const ok = window.confirm(
       `確定要取消這筆訂單嗎？\n\n客戶：${customer}\n訂單：${order.order_number || order.id}\n\n${cancellationNote}`
@@ -424,7 +424,7 @@ export default function OrdersPage() {
       if (!res.ok || json.error) throw new Error(json.error || '取消訂單失敗');
       setExpandedOrderId(prev => (prev === order.id ? null : prev));
       await fetchOrders(false);
-      if (json.refundedAmount) alert(`訂單已取消，經銷餘額已退回 NT$${Number(json.refundedAmount).toLocaleString('zh-TW')}`);
+      if (json.refundedAmount) alert(`訂單已取消，經銷餘額已退回 NT$${Number(json.refundedAmount).toLocaleString('zh-TW')}；${Number(json.reclaimedCount || 0)} 張未安裝 eSIM 已放回庫存`);
     } catch (err) {
       alert(err instanceof Error ? err.message : '取消訂單失敗');
     } finally {
