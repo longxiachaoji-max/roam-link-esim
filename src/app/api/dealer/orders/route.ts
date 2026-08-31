@@ -108,6 +108,8 @@ export async function GET(request: Request) {
 
     const deliveryItemIds: string[] = [];
     for (const order of orders || []) {
+      const fulfillmentOrder = Array.isArray(order.orders) ? order.orders[0] : order.orders;
+      if (fulfillmentOrder?.order_status === 'CANCELLED' || fulfillmentOrder?.payment_status === 'REFUNDED') continue;
       const items = Array.isArray(order.dealer_order_items) ? order.dealer_order_items : [];
       for (const item of items) {
         const normalItem = Array.isArray(item.order_items) ? item.order_items[0] : item.order_items;
@@ -150,6 +152,7 @@ export async function PATCH(request: Request) {
       .from('dealer_orders')
       .select(`
         id, fulfillment_order_id, customer_name,
+        orders ( order_status, payment_status ),
         dealer_order_items (
           id, order_item_id,
           order_items ( inventory_id )
@@ -161,6 +164,11 @@ export async function PATCH(request: Request) {
     if (orderError) throw orderError;
     if (!dealerOrder) {
       return NextResponse.json({ error: '找不到這筆經銷訂單' }, { status: 404 });
+    }
+
+    const fulfillmentOrder = Array.isArray(dealerOrder.orders) ? dealerOrder.orders[0] : dealerOrder.orders;
+    if (fulfillmentOrder?.order_status === 'CANCELLED' || fulfillmentOrder?.payment_status === 'REFUNDED') {
+      return NextResponse.json({ error: '已取消訂單不能修改 Email 或再次寄送' }, { status: 400 });
     }
 
     const customer = await getOrCreateCustomer(supabase, customerEmail, dealerOrder.customer_name || '');

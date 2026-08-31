@@ -23,7 +23,7 @@ interface Product {
 }
 interface DealerOrder {
   id: string; customer_email: string; dealer_total: number; created_at: string;
-  orders: { order_number: string; order_status: string } | { order_number: string; order_status: string }[];
+  orders: { order_number: string; order_status: string; payment_status: string } | { order_number: string; order_status: string; payment_status: string }[];
   dealer_order_items: Array<{
     id: string;
     delivery_email_status: string;
@@ -129,6 +129,21 @@ export default function DealerPage() {
     const timer = window.setTimeout(() => { void loadAccount(); }, 0);
     return () => window.clearTimeout(timer);
   }, [loadAccount]);
+
+  useEffect(() => {
+    if (view !== 'orders' || dealer?.status !== 'approved') return;
+    const refreshOrders = () => { void loadOrders(); };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshOrders();
+    };
+    refreshOrders();
+    window.addEventListener('focus', refreshOrders);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refreshOrders);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [dealer?.status, loadOrders, view]);
 
   const submitApplication = async (form = application) => {
     const response = await authenticatedFetch('/api/dealer/register', {
@@ -410,9 +425,10 @@ export default function DealerPage() {
             <div className="mt-5 space-y-4">
               {orders.length ? orders.map(order => {
                 const normal = first(order.orders);
+                const isCancelled = normal?.order_status === 'CANCELLED' || normal?.payment_status === 'REFUNDED';
                 const draftEmail = orderEmails[order.id] ?? order.customer_email;
                 return (
-                  <article key={order.id} className="rounded-xl border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+                  <article key={order.id} className={`rounded-xl border p-4 sm:p-5 ${isCancelled ? 'border-rose-400/25 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.025]'}`}>
                     <div className="grid gap-3 md:grid-cols-[160px_1fr_auto] md:items-start">
                       <div>
                         <p className="font-mono text-sm">{normal?.order_number}</p>
@@ -424,7 +440,7 @@ export default function DealerPage() {
                       </div>
                       <div className="md:text-right">
                         <p className="font-black text-amber-300">{money(order.dealer_total)}</p>
-                        <p className="mt-1 text-xs text-[#55d5ea]">{order.dealer_order_items.every(item => item.delivery_email_status === 'sent') ? '已寄送安裝資料' : normal?.order_status === 'COMPLETED' ? '寄送處理中' : 'eSIM 準備中'}</p>
+                        <p className={`mt-1 text-xs font-bold ${isCancelled ? 'text-rose-300' : 'text-[#55d5ea]'}`}>{isCancelled ? '已取消／已退款' : order.dealer_order_items.every(item => item.delivery_email_status === 'sent') ? '已寄送安裝資料' : normal?.order_status === 'COMPLETED' ? '寄送處理中' : 'eSIM 準備中'}</p>
                       </div>
                     </div>
 
@@ -439,14 +455,16 @@ export default function DealerPage() {
                               <p className="font-medium">{product?.name}</p>
                               <p className="mt-1 text-xs text-white/35">{product?.country} · {product?.validity_days} 天</p>
                             </div>
-                            <p className="break-all font-mono text-xs text-white/60"><span className="font-sans text-white/35">ICCID：</span>{inventory?.iccid || '配發中'}</p>
-                            <p className={`font-bold ${installStatus(item) === '尚未安裝' ? 'text-white/50' : 'text-emerald-300'}`}>{installStatus(item)}</p>
+                            <p className="break-all font-mono text-xs text-white/60"><span className="font-sans text-white/35">ICCID：</span>{inventory?.iccid || (isCancelled ? '已解除綁定' : '配發中')}</p>
+                            <p className={`font-bold ${isCancelled ? 'text-rose-300' : installStatus(item) === '尚未安裝' ? 'text-white/50' : 'text-emerald-300'}`}>{isCancelled ? '已取消' : installStatus(item)}</p>
                           </div>
                         );
                       })}
                     </div>
 
-                    <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    {isCancelled ? (
+                      <p className="mt-4 rounded-lg border border-rose-400/15 bg-rose-500/[0.06] px-3 py-2 text-sm text-rose-200">此訂單已由後台取消，經銷扣款已退回餘額，無法再次寄送。</p>
+                    ) : <><div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
                       <input
                         type="email"
                         aria-label={`${normal?.order_number || '訂單'}收件 Email`}
@@ -466,6 +484,7 @@ export default function DealerPage() {
                       </button>
                     </div>
                     <p className="mt-2 text-xs text-white/30">再次寄送不會重複扣款；修改 Email 後，會員中心訂單也會改綁定到新 Email。</p>
+                    </>}
                   </article>
                 );
               }) : <p className="py-12 text-center text-white/35">尚無經銷訂單</p>}
