@@ -74,6 +74,7 @@ export default function Home() {
   const [checkoutCode, setCheckoutCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState<any>(null);
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
+  const [discountMessage, setDiscountMessage] = useState("");
   const [destinationRequest, setDestinationRequest] = useState('');
   const [destinationRequestState, setDestinationRequestState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [destinationRequestMessage, setDestinationRequestMessage] = useState('');
@@ -275,6 +276,7 @@ export default function Home() {
 
   useEffect(() => {
     setAppliedDiscount(null);
+    setDiscountMessage('');
   }, [cart]);
 
   useEffect(() => {
@@ -509,14 +511,24 @@ export default function Home() {
     }
   };
 
+  const updateCheckoutCode = (value: string) => {
+    setCheckoutCode(value);
+    if (appliedDiscount?.code !== value) {
+      setAppliedDiscount(null);
+      setDiscountMessage('');
+    }
+  };
+
   const applyCheckoutCode = async () => {
     if (!user) {
       showToast("請先登入再使用折扣碼");
+      setDiscountMessage('請先登入會員，再套用折扣碼');
       setIsLoginOpen(true);
       return;
     }
     if (!checkoutCode.trim() || isApplyingDiscount) return;
     setIsApplyingDiscount(true);
+    setDiscountMessage('正在確認折扣碼...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('登入狀態已過期，請重新登入');
@@ -535,10 +547,13 @@ export default function Home() {
       if (!response.ok) throw new Error(result.error || '折扣碼無法使用');
       setAppliedDiscount(result.quote);
       setCheckoutCode(result.quote.code);
+      setDiscountMessage(`套用成功，已折抵 NT$${Number(result.quote.discountAmount).toLocaleString('zh-TW')}`);
       showToast(`已套用折扣碼，折抵 NT$${result.quote.discountAmount}`);
     } catch (error) {
       setAppliedDiscount(null);
-      showToast(`折扣碼錯誤：${error instanceof Error ? error.message : '請重新輸入'}`);
+      const text = error instanceof Error ? error.message : '請重新輸入';
+      setDiscountMessage(text);
+      showToast(`折扣碼錯誤：${text}`);
     } finally {
       setIsApplyingDiscount(false);
     }
@@ -1209,38 +1224,41 @@ export default function Home() {
               </div>
               <div className="flex justify-between items-center mb-3">
                 <span className="text-muted">小計</span>
-                <span className="font-bold">NT${cartTotal}</span>
+                <span className="font-bold">NT${cartTotal.toLocaleString('zh-TW')}</span>
               </div>
               <div className="mb-4 border-b border-white/5 pb-4">
-                <div className="flex gap-2">
+                <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void applyCheckoutCode(); }}>
                   <input
                     type="text"
                     value={checkoutCode}
-                    onChange={(e) => setCheckoutCode(normalizeReferralCode(e.target.value))}
+                    onChange={(e) => {
+                      const isComposing = (e.nativeEvent as InputEvent).isComposing;
+                      updateCheckoutCode(isComposing ? e.target.value : normalizeReferralCode(e.target.value));
+                    }}
+                    onCompositionEnd={(e) => updateCheckoutCode(normalizeReferralCode(e.currentTarget.value))}
+                    onBlur={(e) => updateCheckoutCode(normalizeReferralCode(e.currentTarget.value))}
                     placeholder="折扣碼 / 推薦碼"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className="min-w-0 flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-cyan font-mono placeholder:font-sans"
                   />
                   <button
-                    type="button"
-                    onClick={applyCheckoutCode}
+                    type="submit"
                     disabled={isApplyingDiscount || !checkoutCode.trim()}
                     className="bg-cyan/20 text-cyan hover:bg-cyan/30 disabled:bg-white/5 disabled:text-white/30 disabled:cursor-not-allowed px-4 py-2 rounded-xl text-sm font-bold transition-colors"
                   >
                     {isApplyingDiscount ? '套用中' : '套用'}
                   </button>
-                </div>
-                {appliedDiscount && (
-                  <div className="mt-3 space-y-2 text-sm">
-                    <div className="flex justify-between text-emerald-300">
-                      <span>{appliedDiscount.label || '折扣碼'} · {appliedDiscount.code}</span>
-                      <span>-NT${discountAmount}</span>
-                    </div>
-                    <div className="flex justify-between text-yellow font-black">
-                      <span>實付金額</span>
-                      <span>NT${payableTotal}</span>
-                    </div>
-                  </div>
-                )}
+                </form>
+                {discountMessage && <p role="status" className={`mt-2 text-xs leading-5 ${appliedDiscount ? 'text-emerald-300' : 'text-rose-300'}`}>{discountMessage}</p>}
+                {appliedDiscount && <p className="mt-1 text-xs text-white/40">{appliedDiscount.label || '折扣碼'} · {appliedDiscount.code}</p>}
+              </div>
+
+              {appliedDiscount && <div className="mb-3 flex items-center justify-between text-sm text-emerald-300"><span>優惠折抵</span><span className="font-bold">-NT${discountAmount.toLocaleString('zh-TW')}</span></div>}
+              <div className="mb-4 flex items-end justify-between border-b border-white/5 pb-4">
+                <span className="font-bold text-white">{appliedDiscount ? '折扣後應付總額' : '應付總額'}</span>
+                <span className={`text-2xl font-black ${appliedDiscount ? 'text-emerald-300' : 'text-yellow'}`}>NT${payableTotal.toLocaleString('zh-TW')}</span>
               </div>
               
               {user ? (
