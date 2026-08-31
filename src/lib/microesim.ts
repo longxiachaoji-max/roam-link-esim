@@ -131,6 +131,7 @@ export interface TransformedMicroesimPlan {
   margin_twd: number;
   carrier: string;
   networks: string;
+  apn: string;
   active_type_note: string;
   rule_desc_zh: string;
   special_desc_zh: string;
@@ -563,6 +564,7 @@ export function transformMicroesimPlan(
     margin_twd: suggestedPrice - costTwd,
     carrier,
     networks: plan.networks || '',
+    apn: plan.apn || '',
     active_type_note: activeTypeNote,
     rule_desc_zh: ruleDescZh,
     special_desc_zh: special.text,

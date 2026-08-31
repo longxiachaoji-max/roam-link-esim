@@ -4,7 +4,7 @@ import { adminFetch } from '@/lib/admin-fetch';
 import { compareEsimPlanOrder } from '@/lib/esim-plan-sort';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDownUp, Check, DownloadCloud, Filter, Loader2, Search, Star, UploadCloud } from 'lucide-react';
+import { ArrowDownUp, Check, DownloadCloud, Filter, LayoutGrid, List, Loader2, Search, Star, UploadCloud } from 'lucide-react';
 
 type SupplierPlan = {
   supplier_plan_id: string;
@@ -22,6 +22,7 @@ type SupplierPlan = {
   margin_twd: number;
   carrier: string;
   networks: string;
+  apn: string;
   active_type_note: string;
   rule_desc_zh: string;
   special_desc_zh: string;
@@ -89,6 +90,14 @@ const countryOptions: CountryOption[] = [
 type SortField = 'default' | 'name' | 'supplierName' | 'carrier' | 'cost' | 'suggestedPrice' | 'note' | 'flags';
 type SortDirection = 'asc' | 'desc';
 type PlanTypeFilter = 'metered' | 'daily' | 'unlimited' | 'throttledUnlimited' | 'highSpeedUnlimited';
+type ViewMode = 'cards' | 'table';
+
+type PlanGroup = {
+  key: string;
+  supplierBaseName: string;
+  groupCode: string;
+  plans: SupplierPlan[];
+};
 
 const planTypeOptions: { key: PlanTypeFilter; label: string }[] = [
   { key: 'metered', label: '計量型' },
@@ -113,6 +122,31 @@ const sortLabels: Partial<Record<SortField, [string, string]>> = {
 
 function money(value: number) {
   return `NT$${Math.round(value || 0).toLocaleString('zh-TW')}`;
+}
+
+function getPlanFamily(plan: SupplierPlan) {
+  const supplierName = plan.supplier_plan_name.trim();
+  const suffixMatch = supplierName.match(/-(\d+)-([a-z]+\d+)$/i);
+  if (suffixMatch) {
+    return {
+      supplierBaseName: supplierName.slice(0, -suffixMatch[0].length),
+      groupCode: suffixMatch[2].toUpperCase()
+    };
+  }
+
+  const dayPattern = new RegExp(`-${plan.validity_days}(?=-|$)`, 'i');
+  const withoutDay = supplierName.replace(dayPattern, '');
+  const groupMatch = withoutDay.match(/-([a-z]+\d+)$/i);
+  return {
+    supplierBaseName: groupMatch ? withoutDay.slice(0, -groupMatch[0].length) : withoutDay,
+    groupCode: groupMatch?.[1]?.toUpperCase() || '未分組'
+  };
+}
+
+function getPlanFamilyTitle(plan: SupplierPlan) {
+  const isLocalIij = /local\s*iij/i.test(plan.supplier_plan_name);
+  const networkLabel = isLocalIij ? 'Docomo 本地網路' : '';
+  return [plan.country, networkLabel, plan.data_amount].filter(Boolean).join('｜');
 }
 
 function yesNoBadge(active: boolean, label: string, activeClass = 'bg-red-500/15 text-red-200 border-red-400/30') {
@@ -282,6 +316,8 @@ export default function MicroesimPlansPage() {
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [favoritesSaving, setFavoritesSaving] = useState(false);
   const [favoritesError, setFavoritesError] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [focusedPlanByGroup, setFocusedPlanByGroup] = useState<Record<string, string>>({});
 
   const plans = useMemo(() => data?.plans || [], [data]);
   const selectedCountryName = countryOptions.find(country => country.code === selectedCountry)?.name || '韓國';
@@ -312,6 +348,7 @@ export default function MicroesimPlansPage() {
         plan.data_amount,
         plan.carrier,
         plan.networks,
+        plan.apn,
         plan.customer_note,
         plan.internal_warning
       ].join(' ').toLowerCase();
@@ -329,6 +366,20 @@ export default function MicroesimPlansPage() {
   }, [plans, search, search2, day, gbAmount, hideKyc, hideNoHotspot, hideNoGpt, hideNoReinstall, planTypeFilters, favoritesOnly, favoritePlanIds, sortField, sortDirection]);
 
   const selectedPlans = plans.filter(plan => selected.has(plan.supplier_plan_id));
+  const groupedPlans = useMemo<PlanGroup[]>(() => {
+    const groups = new Map<string, PlanGroup>();
+    for (const plan of filteredPlans) {
+      const family = getPlanFamily(plan);
+      const key = `${family.supplierBaseName}||${family.groupCode}`;
+      const current = groups.get(key);
+      if (current) current.plans.push(plan);
+      else groups.set(key, { key, ...family, plans: [plan] });
+    }
+    return Array.from(groups.values()).map(group => ({
+      ...group,
+      plans: [...group.plans].sort((a, b) => a.validity_days - b.validity_days || a.cost_twd - b.cost_twd)
+    }));
+  }, [filteredPlans]);
   const favoriteVisibleCount = plans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
   const favoriteFilteredCount = filteredPlans.filter(plan => favoritePlanIds.has(plan.supplier_plan_id)).length;
   const favoriteTotalCount = favoritePlanIds.size;
@@ -394,6 +445,22 @@ export default function MicroesimPlansPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const toggleCardDay = (groupKey: string, plan: SupplierPlan) => {
+    setFocusedPlanByGroup(prev => ({ ...prev, [groupKey]: plan.supplier_plan_id }));
+    toggleSelected(plan.supplier_plan_id);
+  };
+
+  const toggleGroupFavorite = (group: PlanGroup) => {
+    const next = new Set(favoritePlanIds);
+    const allFavorite = group.plans.every(plan => next.has(plan.supplier_plan_id));
+    group.plans.forEach(plan => {
+      if (allFavorite) next.delete(plan.supplier_plan_id);
+      else next.add(plan.supplier_plan_id);
+    });
+    setFavoritePlanIds(next);
+    void persistFavoritePlanIds(next);
   };
 
   const selectFiltered = () => {
@@ -500,7 +567,7 @@ export default function MicroesimPlansPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-white">MicroEsim 方案庫</h1>
-          <p className="mt-1 text-sm text-white/45">選擇國家後同步方案，轉成一飛通商品名稱與中文注意事項，再勾選一鍵上架。</p>
+          <p className="mt-1 text-sm text-white/45">選擇國家後同步方案；卡片會將相同名稱與分組的所有天數集中顯示，點選天數即可準備上架。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -662,9 +729,9 @@ export default function MicroesimPlansPage() {
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoHotspot} onChange={(event) => setHideNoHotspot(event.target.checked)} /> 排除不可熱點</label>
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoGpt} onChange={(event) => setHideNoGpt(event.target.checked)} /> 排除不可 GPT</label>
           <label className="inline-flex items-center gap-2"><input type="checkbox" checked={hideNoReinstall} onChange={(event) => setHideNoReinstall(event.target.checked)} /> 排除不可重複安裝</label>
-          <button onClick={selectFiltered} disabled={filteredPlans.length === 0} className="ml-auto rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold text-white/75 hover:bg-white/10 disabled:opacity-40">勾選目前篩選 {filteredPlans.length}</button>
-          <button onClick={selectFavoritePlans} disabled={favoriteFilteredCount === 0} className="rounded-md border border-yellow-300/30 px-3 py-1.5 text-xs font-bold text-yellow-100/80 hover:bg-yellow-400/10 disabled:opacity-40">勾選我的最愛 {favoriteFilteredCount}</button>
-          <button onClick={clearSelected} className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold text-white/55 hover:bg-white/10">清除勾選</button>
+          <button onClick={selectFiltered} disabled={filteredPlans.length === 0} className="ml-auto rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold text-white/75 hover:bg-white/10 disabled:opacity-40">選取目前篩選 {filteredPlans.length}</button>
+          <button onClick={selectFavoritePlans} disabled={favoriteFilteredCount === 0} className="rounded-md border border-yellow-300/30 px-3 py-1.5 text-xs font-bold text-yellow-100/80 hover:bg-yellow-400/10 disabled:opacity-40">選取我的最愛 {favoriteFilteredCount}</button>
+          <button onClick={clearSelected} className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold text-white/55 hover:bg-white/10">清除選取</button>
         </div>
       </div>
 
@@ -672,6 +739,77 @@ export default function MicroesimPlansPage() {
       {error && <div className="rounded-lg border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
       {favoritesError && <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">我的最愛資料庫同步失敗，已先保留在本機備份：{favoritesError}</div>}
 
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-white/45">卡片 {groupedPlans.length} 組，共 {filteredPlans.length} 個天數方案</p>
+        <div className="inline-flex h-10 rounded-md border border-white/10 bg-white/[0.04] p-1">
+          <button type="button" onClick={() => setViewMode('cards')} className={`inline-flex items-center gap-1.5 rounded px-3 text-xs font-bold ${viewMode === 'cards' ? 'bg-cyan-500 text-[#071317]' : 'text-white/50 hover:text-white'}`}><LayoutGrid size={14} />卡片</button>
+          <button type="button" onClick={() => setViewMode('table')} className={`inline-flex items-center gap-1.5 rounded px-3 text-xs font-bold ${viewMode === 'table' ? 'bg-cyan-500 text-[#071317]' : 'text-white/50 hover:text-white'}`}><List size={14} />表格</button>
+        </div>
+      </div>
+
+      {viewMode === 'cards' ? (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {loading ? (
+            <div className="col-span-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-14 text-center text-white/45"><Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />同步中...</div>
+          ) : groupedPlans.length === 0 ? (
+            <div className="col-span-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-14 text-center text-white/35">尚未同步，或目前篩選沒有資料</div>
+          ) : groupedPlans.map(group => {
+            const focusedPlan = group.plans.find(plan => plan.supplier_plan_id === focusedPlanByGroup[group.key])
+              || group.plans.find(plan => selected.has(plan.supplier_plan_id))
+              || group.plans[0];
+            const allFavorite = group.plans.every(plan => favoritePlanIds.has(plan.supplier_plan_id));
+            const selectedCount = group.plans.filter(plan => selected.has(plan.supplier_plan_id)).length;
+            const apn = focusedPlan.apn || String(focusedPlan.raw?.apn || '').trim();
+            return (
+              <section key={group.key} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
+                <div className="flex items-start justify-between gap-4 border-b border-white/10 p-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-bold text-white">{getPlanFamilyTitle(focusedPlan)}</h2>
+                      <span className="rounded border border-cyan-300/25 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-100">{group.groupCode}</span>
+                    </div>
+                    <p className="mt-1 break-all text-xs text-white/35">{group.supplierBaseName}</p>
+                  </div>
+                  <button type="button" onClick={() => toggleGroupFavorite(group)} title={allFavorite ? '整組移除我的最愛' : '整組加入我的最愛'} className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border ${allFavorite ? 'border-yellow-300/50 bg-yellow-400/15 text-yellow-200' : 'border-white/10 text-white/30 hover:text-yellow-200'}`}><Star size={17} className={allFavorite ? 'fill-yellow-300' : ''} /></button>
+                </div>
+
+                <div className="p-4">
+                  <div className="mb-2 flex items-center justify-between text-xs"><span className="font-bold text-white/60">選擇上架天數</span><span className="text-cyan-200/70">已選 {selectedCount}/{group.plans.length}</span></div>
+                  <div className="flex flex-wrap gap-2">
+                    {group.plans.map(plan => {
+                      const checked = selected.has(plan.supplier_plan_id);
+                      const focused = plan.supplier_plan_id === focusedPlan.supplier_plan_id;
+                      return <button key={plan.supplier_plan_id} type="button" onClick={() => toggleCardDay(group.key, plan)} title={`${plan.validity_days}天，成本 ${money(plan.cost_twd)}`} className={`min-w-14 rounded-md border px-3 py-2 text-sm font-bold transition-colors ${checked ? 'border-cyan-300 bg-cyan-500 text-[#071317]' : focused ? 'border-white/35 bg-white/10 text-white' : 'border-white/15 bg-black/10 text-white/55 hover:border-cyan-300/50 hover:text-white'}`}>{plan.validity_days}天</button>;
+                    })}
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/10 pt-4 text-sm sm:grid-cols-4">
+                    <div><p className="text-[11px] text-white/35">成本</p><p className="mt-0.5 font-bold text-white">{money(focusedPlan.cost_twd)}</p><p className="text-[10px] text-white/30">{focusedPlan.cost_original} {focusedPlan.cost_currency}</p></div>
+                    <div><p className="text-[11px] text-white/35">建議售價</p><p className="mt-0.5 font-bold text-emerald-200">{money(focusedPlan.suggested_price)}</p><p className="text-[10px] text-white/30">毛利 {money(focusedPlan.margin_twd)}</p></div>
+                    <div><p className="text-[11px] text-white/35">電信商</p><p className="mt-0.5 font-semibold text-white/75">{/local\s*iij/i.test(focusedPlan.supplier_plan_name) ? 'Docomo' : focusedPlan.carrier || '未標示'}</p></div>
+                    <div><p className="text-[11px] text-white/35">APN</p><p className="mt-0.5 break-all font-mono text-white/75">{apn || '未提供'}</p></div>
+                  </div>
+
+                  <div className="mt-4 space-y-2 rounded-md bg-black/15 p-3 text-xs leading-5">
+                    <p className="break-all text-white/45"><span className="text-white/30">Micro 原名稱：</span>{focusedPlan.supplier_plan_name}</p>
+                    <p className="break-all font-mono text-[10px] text-white/25">ID {focusedPlan.supplier_plan_id}</p>
+                    <p className="text-white/60"><span className="text-white/30">客戶備註：</span>{focusedPlan.customer_note || '無'}</p>
+                    <p className="text-white/45"><span className="text-white/30">內部備註：</span>{focusedPlan.internal_warning || focusedPlan.active_type_note || '無'}</p>
+                    <p className="break-all text-white/35"><span className="text-white/30">支援網路：</span>{focusedPlan.networks || '未提供'}</p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {yesNoBadge(focusedPlan.flags.kyc, 'KYC')}
+                      {yesNoBadge(focusedPlan.flags.noHotspot, '不可熱點')}
+                      {yesNoBadge(focusedPlan.flags.noGpt, '不可 GPT')}
+                      {yesNoBadge(focusedPlan.flags.noReinstall, '不可重複安裝')}
+                      {yesNoBadge(focusedPlan.flags.speedLimit, '限速', 'bg-amber-500/15 text-amber-100 border-amber-400/30')}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="text-sm text-white/60">顯示 {filteredPlans.length} 筆，已選 {selectedPlans.length} 筆</div>
@@ -779,6 +917,7 @@ export default function MicroesimPlansPage() {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }
