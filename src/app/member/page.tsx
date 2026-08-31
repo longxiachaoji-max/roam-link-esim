@@ -62,7 +62,9 @@ export default function MemberCenter() {
   const [usageByItemId, setUsageByItemId] = useState<Record<string, any>>({});
   const [usageLoadingId, setUsageLoadingId] = useState<string | null>(null);
   const [purchaseReminderOpen, setPurchaseReminderOpen] = useState(false);
-  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'qr'; lpa: string } | null>(null);
+  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'android' | 'qr'; lpa: string; installUrl?: string | null } | null>(null);
+  const [detectedPlatform, setDetectedPlatform] = useState<'ios' | 'android' | 'other'>('other');
+  const [installPlatformOverride, setInstallPlatformOverride] = useState<'ios' | 'android' | null>(null);
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [smoothnessRating, setSmoothnessRating] = useState(0);
@@ -87,6 +89,19 @@ export default function MemberCenter() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
   };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const userAgent = navigator.userAgent || '';
+      const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+      if (/iPhone|iPad|iPod/i.test(userAgent) || isIPadOS) {
+        setDetectedPlatform('ios');
+      } else if (/Android/i.test(userAgent)) {
+        setDetectedPlatform('android');
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const fetchOrders = async (_email: string) => {
     const res = await authenticatedFetch('/api/member/orders');
@@ -318,7 +333,10 @@ export default function MemberCenter() {
   const continueInstallation = () => {
     if (!installConfirmation) return;
     if (installConfirmation.type === 'ios') {
-      window.location.href = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(installConfirmation.lpa)}`;
+      window.location.href = installConfirmation.installUrl
+        || `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(installConfirmation.lpa)}`;
+    } else if (installConfirmation.type === 'android' && installConfirmation.installUrl) {
+      window.location.href = installConfirmation.installUrl;
     } else {
       setQrCodeData(installConfirmation.lpa);
     }
@@ -855,13 +873,25 @@ export default function MemberCenter() {
                       </p>
                     </div>
                     <div className="flex gap-3 mb-3">
+                       {(() => {
+                         const platform = installPlatformOverride || detectedPlatform;
+                         const lpa = `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`;
+                         const isAndroid = platform === 'android';
+                         const installUrl = isAndroid
+                           ? item.e_sim_inventory.android_install_url
+                           : item.e_sim_inventory.ios_install_url;
+                         return (
                        <button
                          type="button"
-                         onClick={() => setInstallConfirmation({ type: 'ios', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}` })}
+                         onClick={() => setInstallConfirmation({ type: isAndroid ? 'android' : 'ios', lpa, installUrl })}
                          className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
                        >
-                         <Smartphone size={16} /> iOS 17.4+ 一鍵安裝
+                         <Smartphone size={16} /> {isAndroid
+                           ? (installUrl ? 'Android 一鍵安裝' : 'Android 安裝 QR Code')
+                           : 'iPhone 一鍵安裝'}
                        </button>
+                         );
+                       })()}
                        <button 
                          className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
                          onClick={() => setInstallConfirmation({ type: 'qr', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}` })}
@@ -869,6 +899,16 @@ export default function MemberCenter() {
                          <QrCode size={16} /> 顯示 QRCODE
                        </button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const platform = installPlatformOverride || detectedPlatform;
+                        setInstallPlatformOverride(platform === 'android' ? 'ios' : 'android');
+                      }}
+                      className="mb-3 text-xs font-semibold text-white/40 underline decoration-white/20 underline-offset-4 hover:text-cyan"
+                    >
+                      {(installPlatformOverride || detectedPlatform) === 'android' ? '改用 iPhone 安裝方式' : '改用 Android 安裝方式'}
+                    </button>
 
                     <div className="mb-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3">
                       <div className="flex items-center justify-between gap-3">

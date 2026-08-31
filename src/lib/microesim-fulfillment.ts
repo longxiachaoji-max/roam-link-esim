@@ -89,6 +89,8 @@ async function saveInventory(
     iccid: esim.iccid,
     smdp_address: esim.smdp_address,
     activation_code: esim.activation_code,
+    ios_install_url: esim.ios_install_url,
+    android_install_url: esim.android_install_url,
     status: 'SOLD',
     sold_at: checkedAt,
     expiry_date: installationDeadline,

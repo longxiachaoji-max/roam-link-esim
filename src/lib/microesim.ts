@@ -153,6 +153,8 @@ export interface MicroesimInventoryPayload {
   activation_code: string;
   raw_lpa: string;
   qr_code_url: string | null;
+  ios_install_url: string | null;
+  android_install_url: string | null;
   topup_id: string;
   cost: number;
 }
@@ -734,6 +736,8 @@ export function createMicroesimInventoryFromDetail(
     topup_id: topupId,
     iccid: detail.device_ids?.[0] || null,
     qr_code_url: detail.qrcode?.[0] || null,
+    ios_install_url: detail.ios_esim_install_link?.[0] || null,
+    android_install_url: detail.android_esim_install_link?.[0] || null,
     cost
   };
 }

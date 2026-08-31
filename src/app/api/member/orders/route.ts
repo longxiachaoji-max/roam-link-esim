@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
-import { getMicroesimInstallationDeadline } from '@/lib/microesim';
+import { fetchMicroesimTopupDetail, getMicroesimInstallationDeadline } from '@/lib/microesim';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -19,7 +19,16 @@ interface MemberProductResult {
 }
 
 interface MemberInventoryResult extends Record<string, unknown> {
+  id: string;
   expiry_date: string | null;
+  microesim_topup_id: string | null;
+  ios_install_url: string | null;
+  android_install_url: string | null;
+}
+
+function safeInstallLink(value: unknown) {
+  const link = String(value || '').trim();
+  return /^(https:\/\/|intent:|lpa:)/i.test(link) ? link : null;
 }
 
 interface MemberOrderItemResult extends Record<string, unknown> {
@@ -89,6 +98,8 @@ export async function GET(request: Request) {
             iccid,
             smdp_address,
             activation_code,
+            ios_install_url,
+            android_install_url,
             status,
             expiry_date,
             microesim_topup_id,
@@ -105,6 +116,34 @@ export async function GET(request: Request) {
     if (ordersError) {
       throw ordersError;
     }
+
+    const missingInstallLinks = ((orders || []) as unknown as MemberOrderResult[])
+      .flatMap(order => order.order_items || [])
+      .map(item => Array.isArray(item.e_sim_inventory) ? item.e_sim_inventory[0] : item.e_sim_inventory)
+      .filter((inventory): inventory is MemberInventoryResult => Boolean(
+        inventory?.id
+        && inventory.microesim_topup_id
+        && (!inventory.ios_install_url || !inventory.android_install_url)
+      ))
+      .slice(0, 8);
+
+    await Promise.allSettled(missingInstallLinks.map(async inventory => {
+      const detail = await fetchMicroesimTopupDetail(inventory.microesim_topup_id!);
+      const iosInstallUrl = safeInstallLink(detail.ios_esim_install_link?.[0]);
+      const androidInstallUrl = safeInstallLink(detail.android_esim_install_link?.[0]);
+      if (!iosInstallUrl && !androidInstallUrl) return;
+
+      const updates = {
+        ios_install_url: iosInstallUrl || inventory.ios_install_url,
+        android_install_url: androidInstallUrl || inventory.android_install_url
+      };
+      const { error: installLinkError } = await supabase
+        .from('e_sim_inventory')
+        .update(updates)
+        .eq('id', inventory.id);
+      if (installLinkError) throw installLinkError;
+      Object.assign(inventory, updates);
+    }));
 
     const normalizedOrders = ((orders || []) as unknown as MemberOrderResult[]).map(order => ({
       ...order,
