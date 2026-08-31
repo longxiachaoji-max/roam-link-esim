@@ -144,8 +144,10 @@ function getPlanFamily(plan: SupplierPlan) {
 }
 
 function getPlanFamilyTitle(plan: SupplierPlan) {
-  const isLocalIij = /local\s*iij/i.test(plan.supplier_plan_name);
-  const networkLabel = isLocalIij ? 'Docomo 本地網路' : '';
+  const isLocalPlan = /local/i.test(plan.supplier_plan_name);
+  const networkLabel = isLocalPlan
+    ? `${plan.carrier || (/local\s*iij/i.test(plan.supplier_plan_name) ? 'Docomo' : '未標示電信商')} 本地網路`
+    : '';
   return [plan.country, networkLabel, plan.data_amount].filter(Boolean).join('｜');
 }
 
