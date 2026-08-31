@@ -454,6 +454,18 @@ export default function MicroesimPlansPage() {
     toggleSelected(plan.supplier_plan_id);
   };
 
+  const toggleGroupSelected = (group: PlanGroup) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      const allSelected = group.plans.every(plan => next.has(plan.supplier_plan_id));
+      group.plans.forEach(plan => {
+        if (allSelected) next.delete(plan.supplier_plan_id);
+        else next.add(plan.supplier_plan_id);
+      });
+      return next;
+    });
+  };
+
   const toggleGroupFavorite = (group: PlanGroup) => {
     const next = new Set(favoritePlanIds);
     const allFavorite = group.plans.every(plan => next.has(plan.supplier_plan_id));
@@ -761,6 +773,7 @@ export default function MicroesimPlansPage() {
               || group.plans[0];
             const allFavorite = group.plans.every(plan => favoritePlanIds.has(plan.supplier_plan_id));
             const selectedCount = group.plans.filter(plan => selected.has(plan.supplier_plan_id)).length;
+            const allSelected = selectedCount === group.plans.length;
             const apn = focusedPlan.apn || String(focusedPlan.raw?.apn || '').trim();
             return (
               <section key={group.key} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
@@ -772,7 +785,10 @@ export default function MicroesimPlansPage() {
                     </div>
                     <p className="mt-1 break-all text-xs text-white/35">{group.supplierBaseName}</p>
                   </div>
-                  <button type="button" onClick={() => toggleGroupFavorite(group)} title={allFavorite ? '整組移除我的最愛' : '整組加入我的最愛'} className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border ${allFavorite ? 'border-yellow-300/50 bg-yellow-400/15 text-yellow-200' : 'border-white/10 text-white/30 hover:text-yellow-200'}`}><Star size={17} className={allFavorite ? 'fill-yellow-300' : ''} /></button>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" onClick={() => toggleGroupSelected(group)} title={allSelected ? '取消選取全部天數' : '選取全部天數'} aria-label={allSelected ? '取消選取全部天數' : '選取全部天數'} className={`grid h-9 w-9 place-items-center rounded-md border ${allSelected ? 'border-cyan-300 bg-cyan-500 text-[#071317]' : 'border-white/10 text-white/30 hover:border-cyan-300/50 hover:text-cyan-200'}`}><Check size={18} /></button>
+                    <button type="button" onClick={() => toggleGroupFavorite(group)} title={allFavorite ? '整組移除我的最愛' : '整組加入我的最愛'} className={`grid h-9 w-9 place-items-center rounded-md border ${allFavorite ? 'border-yellow-300/50 bg-yellow-400/15 text-yellow-200' : 'border-white/10 text-white/30 hover:text-yellow-200'}`}><Star size={17} className={allFavorite ? 'fill-yellow-300' : ''} /></button>
+                  </div>
                 </div>
 
                 <div className="p-4">
