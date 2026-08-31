@@ -66,7 +66,9 @@ export async function sendDealerEsimDeliveryEmail(supabase: SupabaseClient, orde
     if (!smdpAddress || !activationCode) throw new Error('eSIM 安裝資料尚未完整');
 
     const lpa = `LPA:1$${smdpAddress}$${activationCode}`;
-    const oneClickUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(lpa)}`;
+    const encodedLpa = encodeURIComponent(lpa);
+    const androidInstallUrl = `https://esimsetup.android.com/esim_qrcode_provisioning?carddata=${encodedLpa}`;
+    const iphoneInstallUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodedLpa}`;
     const qrBuffer = await QRCode.toBuffer(lpa, { type: 'png', width: 520, margin: 2, errorCorrectionLevel: 'M' });
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://firstesim.space').replace(/\/$/, '');
     const memberUrl = `${siteUrl}/member`;
@@ -101,9 +103,12 @@ export async function sendDealerEsimDeliveryEmail(supabase: SupabaseClient, orde
 
               <div style="padding:26px 0 10px;text-align:center">
                 <h2 style="margin:0 0 6px;font-size:20px">eSIM 安裝 QR Code</h2>
-                <p style="margin:0 0 16px;font-size:13px;color:#6d6d78">請使用要安裝 eSIM 的手機掃描，或點選下方一鍵安裝</p>
+                <p style="margin:0 0 16px;font-size:13px;color:#6d6d78">請使用要安裝 eSIM 的手機掃描，或依手機系統點選快速安裝</p>
                 <img src="cid:firstroamlink-esim-qr" width="280" height="280" alt="eSIM 安裝 QR Code" style="display:block;max-width:100%;height:auto;margin:0 auto;border:1px solid #eeeeF2;border-radius:12px">
-                <p style="margin:20px 0 0"><a href="${oneClickUrl}" style="display:inline-block;padding:13px 22px;border-radius:7px;background:#ff4f73;color:#ffffff;text-decoration:none;font-weight:700">iPhone 一鍵安裝 eSIM</a></p>
+                <div style="margin-top:20px;text-align:center">
+                  <a href="${androidInstallUrl}" style="display:inline-block;margin:4px;padding:13px 18px;border-radius:7px;background:#3ddc84;color:#102018;text-decoration:none;font-weight:700">Android 一鍵安裝</a>
+                  <a href="${iphoneInstallUrl}" style="display:inline-block;margin:4px;padding:13px 18px;border-radius:7px;background:#101020;color:#ffffff;text-decoration:none;font-weight:700">iPhone 一鍵安裝</a>
+                </div>
               </div>
 
               <div style="margin-top:18px;padding:16px;border-left:4px solid #55d5ea;background:#f1fbfd">
