@@ -49,7 +49,7 @@ export async function sendDealerEsimDeliveryEmail(supabase: SupabaseClient, orde
         .from('order_items')
         .select(`
           id,
-          products ( name, country, validity_days ),
+          products ( name, country, validity_days, supplier_raw ),
           e_sim_inventory ( iccid, smdp_address, activation_code )
         `)
         .eq('id', orderItemId)
@@ -63,6 +63,11 @@ export async function sendDealerEsimDeliveryEmail(supabase: SupabaseClient, orde
     const order = first(dealerOrder.orders as Record<string, unknown> | Record<string, unknown>[] | null);
     const smdpAddress = String(inventory?.smdp_address || '').trim();
     const activationCode = String(inventory?.activation_code || '').trim();
+    const iccid = String(inventory?.iccid || '').trim() || '-';
+    const supplierRaw = product?.supplier_raw && typeof product.supplier_raw === 'object'
+      ? product.supplier_raw as Record<string, unknown>
+      : null;
+    const apn = String(supplierRaw?.apn || '').trim() || '自動設定（無需手動輸入）';
     if (!smdpAddress || !activationCode) throw new Error('eSIM 安裝資料尚未完整');
 
     const lpa = `LPA:1$${smdpAddress}$${activationCode}`;
@@ -98,7 +103,9 @@ export async function sendDealerEsimDeliveryEmail(supabase: SupabaseClient, orde
               <p style="margin:0 0 18px">${escapeHtml(dealerOrder.customer_name || '您好')}，感謝您選擇一飛通全球漫遊，以下是本次訂購的 eSIM 安裝資料。</p>
               <div style="padding:16px;border-radius:10px;background:#f7f7fa">
                 <p style="margin:0 0 5px"><strong>商品：</strong>${escapeHtml(product?.name || 'eSIM 方案')}</p>
-                <p style="margin:0"><strong>訂單：</strong>${escapeHtml(order?.order_number || dealerOrder.fulfillment_order_id)}</p>
+                <p style="margin:0 0 5px"><strong>訂單：</strong>${escapeHtml(order?.order_number || dealerOrder.fulfillment_order_id)}</p>
+                <p style="margin:0 0 5px"><strong>ICCID：</strong><span style="font-family:Menlo,Consolas,monospace;word-break:break-all">${escapeHtml(iccid)}</span></p>
+                <p style="margin:0"><strong>APN：</strong><span style="font-family:Menlo,Consolas,monospace;word-break:break-all">${escapeHtml(apn)}</span></p>
               </div>
 
               <div style="padding:26px 0 10px;text-align:center">
@@ -112,7 +119,15 @@ export async function sendDealerEsimDeliveryEmail(supabase: SupabaseClient, orde
               </div>
 
               <div style="margin-top:18px;padding:16px;border-left:4px solid #55d5ea;background:#f1fbfd">
-                <p style="margin:0"><strong>安裝提醒：</strong>請於啟用日前或旅程出發前完成安裝，並先連接穩定的 Wi-Fi 或行動網路。請勿使用同一支手機掃描自己畫面中的 QR Code，可改用一鍵安裝或另一台裝置顯示 QR Code。</p>
+                <p style="margin:0 0 8px"><strong>安裝注意事項</strong></p>
+                <ol style="margin:0;padding-left:20px">
+                  <li style="margin-bottom:6px">請於啟用日前或旅程出發前，在穩定的 Wi-Fi 或行動網路環境完成安裝。</li>
+                  <li style="margin-bottom:6px">同一支手機無法掃描自己畫面中的 QR Code，請使用快速安裝按鈕，或用另一台裝置顯示 QR Code。</li>
+                  <li style="margin-bottom:6px">抵達目的地後，請將此 eSIM 設為行動數據門號，並開啟「行動數據」及「數據漫遊」。</li>
+                  <li style="margin-bottom:6px">APN 通常會自動設定；若無法連線，請依上方 APN 資料手動確認。</li>
+                  <li style="margin-bottom:6px">eSIM 安裝後請勿自行刪除，刪除後可能無法再次安裝。如有問題請先聯繫客服。</li>
+                  <li>QR Code 與快速安裝連結僅供本次 eSIM 使用，請勿轉傳他人。</li>
+                </ol>
               </div>
 
               <p style="margin:20px 0 0">已有一飛通帳號的客戶，也可前往 <a href="${memberUrl}" style="color:#147d91;font-weight:700">會員中心</a> 查看訂單與安裝資料。</p>
