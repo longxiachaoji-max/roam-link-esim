@@ -100,6 +100,7 @@ export async function POST(request: Request) {
     const supabase = getServerSupabase();
     const body = await request.json();
     const { name, productIds, discountCode } = parseTokenCheckoutRequest(body);
+    const effectiveDiscountCode = discountCode || String(authUser.user_metadata?.referral_code || '').trim();
     const email = authUser.email.toLowerCase();
 
     // 1. Get or create customer
@@ -145,8 +146,8 @@ export async function POST(request: Request) {
     const originalTotalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
     let discountQuote: CheckoutDiscountQuote | null = null;
 
-    if (discountCode) {
-      discountQuote = await resolveCheckoutDiscount(supabase, email, String(discountCode), originalTotalAmount);
+    if (effectiveDiscountCode) {
+      discountQuote = await resolveCheckoutDiscount(supabase, email, effectiveDiscountCode, originalTotalAmount);
     }
     const tokensUsed = discountQuote?.payableTotal ?? originalTotalAmount;
 

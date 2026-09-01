@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 import { serializeJsonLd } from "@/lib/json-ld";
+import ReferralLinkCapture from "@/components/referral-link-capture";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -103,6 +104,7 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className={spaceGrotesk.variable}>
       <body className="font-sans bg-[#0D0D1A] text-[#F0F0FF] overflow-x-hidden antialiased">
+        <ReferralLinkCapture />
         {googleAnalyticsId ? (
           <>
             <Script

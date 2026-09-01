@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       customer = createdCustomer;
     }
 
-    const referralCode = String(body.referralCode || '').trim();
+    const referralCode = String(body.referralCode || authUser.user_metadata?.referral_code || '').trim();
     let referralQuote: ReturnType<typeof buildReferralRewardQuote> | null = null;
     if (referralCode) {
       const { config } = await readReferralConfig(supabase);

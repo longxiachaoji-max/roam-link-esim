@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, Copy, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
+import { buildReferralShareUrl, readRememberedReferralCode, validReferralCode } from '@/lib/referral-link';
 import PhysicalOrdersPanel from './physical-orders-panel';
 import BarcodeOrdersPanel from './barcode-orders-panel';
 
@@ -147,6 +148,8 @@ export default function MemberCenter() {
             setReferralRule(referralJson.referral);
             setReferralCode(referralJson.referral?.code || '');
           }
+          const savedReferral = validReferralCode(latestSession.user.user_metadata?.referral_code) || readRememberedReferralCode();
+          if (savedReferral) setTopupReferralCode(savedReferral);
         }
         await fetchOrders(session.user.email);
       } else {
@@ -673,6 +676,27 @@ export default function MemberCenter() {
               {isSavingReferral ? '儲存中' : '儲存'}
             </button>
           </div>
+          {referralRule?.enabled && buildReferralShareUrl(referralCode) && (
+            <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
+              <p className="mb-2 text-xs font-bold text-cyan-100">我的專屬分享網址</p>
+              <p className="break-all text-xs leading-5 text-white/55">{buildReferralShareUrl(referralCode)}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button type="button" onClick={async () => {
+                  await navigator.clipboard.writeText(buildReferralShareUrl(referralCode));
+                  showToast('✅ 已複製專屬分享網址');
+                }} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-white/75 hover:bg-white/10"><Copy size={15} />複製網址</button>
+                <button type="button" onClick={async () => {
+                  const url = buildReferralShareUrl(referralCode);
+                  if (navigator.share) {
+                    await navigator.share({ title: '一飛通全球漫遊', text: '透過我的推薦網址註冊，完成結帳可享有專屬優惠。', url });
+                  } else {
+                    await navigator.clipboard.writeText(url);
+                    showToast('✅ 已複製專屬分享網址');
+                  }
+                }} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-500 text-xs font-black text-[#071317] hover:bg-cyan-400"><Share2 size={15} />分享</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Promo Code Redeem */}
