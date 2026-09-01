@@ -584,6 +584,10 @@ export default function MicroesimPlansPage() {
           <p className="mt-1 text-sm text-white/45">選擇國家後同步方案；卡片會將相同名稱與分組的所有天數集中顯示，點選天數即可準備上架。</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <div className="inline-flex h-10 rounded-lg border border-cyan-300/35 bg-black/25 p-1">
+            <button type="button" onClick={() => setViewMode('cards')} className={`inline-flex items-center gap-1.5 rounded-md px-3 text-xs font-bold transition-colors ${viewMode === 'cards' ? 'bg-cyan-500 text-[#071317]' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}><LayoutGrid size={15} />卡片</button>
+            <button type="button" onClick={() => setViewMode('table')} className={`inline-flex items-center gap-1.5 rounded-md px-3 text-xs font-bold transition-colors ${viewMode === 'table' ? 'bg-cyan-500 text-[#071317]' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}><List size={15} />表格</button>
+          </div>
           <button
             onClick={fetchPlans}
             disabled={loading}
@@ -753,13 +757,7 @@ export default function MicroesimPlansPage() {
       {error && <div className="rounded-lg border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
       {favoritesError && <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">我的最愛資料庫同步失敗，已先保留在本機備份：{favoritesError}</div>}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-white/45">卡片 {groupedPlans.length} 組，共 {filteredPlans.length} 個天數方案</p>
-        <div className="inline-flex h-10 rounded-md border border-white/10 bg-white/[0.04] p-1">
-          <button type="button" onClick={() => setViewMode('cards')} className={`inline-flex items-center gap-1.5 rounded px-3 text-xs font-bold ${viewMode === 'cards' ? 'bg-cyan-500 text-[#071317]' : 'text-white/50 hover:text-white'}`}><LayoutGrid size={14} />卡片</button>
-          <button type="button" onClick={() => setViewMode('table')} className={`inline-flex items-center gap-1.5 rounded px-3 text-xs font-bold ${viewMode === 'table' ? 'bg-cyan-500 text-[#071317]' : 'text-white/50 hover:text-white'}`}><List size={14} />表格</button>
-        </div>
-      </div>
+      <p className="text-sm text-white/45">卡片 {groupedPlans.length} 組，共 {filteredPlans.length} 個天數方案</p>
 
       {viewMode === 'cards' ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
