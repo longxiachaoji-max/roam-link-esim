@@ -785,9 +785,9 @@ export default function MicroesimPlansPage() {
                     </div>
                     <p className="mt-1 break-all text-xs text-white/35">{group.supplierBaseName}</p>
                   </div>
-                  <div className="flex shrink-0 gap-2">
-                    <button type="button" onClick={() => toggleGroupSelected(group)} title={allSelected ? '取消選取全部天數' : '選取全部天數'} aria-label={allSelected ? '取消選取全部天數' : '選取全部天數'} className={`grid h-9 w-9 place-items-center rounded-md border ${allSelected ? 'border-cyan-300 bg-cyan-500 text-[#071317]' : 'border-white/10 text-white/30 hover:border-cyan-300/50 hover:text-cyan-200'}`}><Check size={18} /></button>
+                  <div className="flex shrink-0 items-center gap-2">
                     <button type="button" onClick={() => toggleGroupFavorite(group)} title={allFavorite ? '整組移除我的最愛' : '整組加入我的最愛'} className={`grid h-9 w-9 place-items-center rounded-md border ${allFavorite ? 'border-yellow-300/50 bg-yellow-400/15 text-yellow-200' : 'border-white/10 text-white/30 hover:text-yellow-200'}`}><Star size={17} className={allFavorite ? 'fill-yellow-300' : ''} /></button>
+                    <button type="button" onClick={() => toggleGroupSelected(group)} title={allSelected ? '取消選取全部天數' : '選取全部天數'} aria-label={allSelected ? '取消選取全部天數' : '選取全部天數'} className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs font-bold transition-colors ${allSelected ? 'border-cyan-300 bg-cyan-500 text-[#071317]' : 'border-cyan-300/60 bg-cyan-400/10 text-cyan-100 hover:border-cyan-200 hover:bg-cyan-400/20'}`}><Check size={17} /><span>{allSelected ? '已全選' : '全選'}</span></button>
                   </div>
                 </div>
 
