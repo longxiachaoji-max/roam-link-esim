@@ -404,8 +404,10 @@ function parseDataLabel(plan: MicroesimPlan) {
   }
 
   if (lower.includes('unlimited')) {
-    const speed = lower.match(/(\d+(?:\.\d+)?)\s*(mbps|kbps|kb)/i);
-    const speedText = speed ? `${speed[1]}${speed[2].toLowerCase() === 'kb' ? 'kbps' : speed[2]}` : '';
+    const speed = lower.match(/(\d+(?:\.\d+)?)\s*(mbps|kbps|kb)\b/i)
+      || normalizeText(plan.rule_desc).match(/(\d+(?:\.\d+)?)\s*m\b/i);
+    const rawUnit = speed?.[2]?.toLowerCase() || 'mbps';
+    const speedText = speed ? `${speed[1]}${rawUnit === 'kb' ? 'kbps' : rawUnit === 'm' ? 'mbps' : rawUnit}` : '';
     return {
       dataAmount: speedText ? `吃到飽，最高速率${speedText}` : '吃到飽',
       nameData: speedText ? `${speedText}吃到飽` : '吃到飽',
@@ -444,9 +446,11 @@ function translateRule(ruleDesc?: string | null) {
   if (!raw) return '';
   if (lower.includes('terminate')) return '流量用完即停用';
   if (lower.includes('unlimited')) {
-    const speed = raw.match(/(\d+(?:\.\d+)?)\s*(mbps|kbps|kb)/i);
+    const speed = raw.match(/(\d+(?:\.\d+)?)\s*(mbps|kbps|kb)\b/i)
+      || raw.match(/(\d+(?:\.\d+)?)\s*m\b/i);
     if (speed) {
-      const unit = speed[2].toLowerCase() === 'kb' ? 'kbps' : speed[2];
+      const rawUnit = speed[2]?.toLowerCase() || 'mbps';
+      const unit = rawUnit === 'kb' ? 'kbps' : rawUnit === 'm' ? 'mbps' : rawUnit;
       return `吃到飽，最高速率 ${speed[1]}${unit}`;
     }
     return '吃到飽方案';
@@ -522,7 +526,8 @@ export function transformMicroesimPlan(
   const special = translateSpecial(plan.special_desc);
   const flags = {
     ...special.flags,
-    speedLimit: /(\d+(?:\.\d+)?)\s*(mbps|kbps|kb)/i.test(`${plan.rule_desc || ''} ${plan.channel_dataplan_name}`),
+    speedLimit: /(\d+(?:\.\d+)?)\s*(mbps|kbps|kb)\b/i.test(`${plan.rule_desc || ''} ${plan.channel_dataplan_name}`)
+      || (/unlimited/i.test(plan.rule_desc || '') && /(\d+(?:\.\d+)?)\s*m\b/i.test(plan.rule_desc || '')),
     terminateAfterUse: normalizeText(plan.rule_desc).toLowerCase().includes('terminate')
   };
   const hotspot = getHotspotSharing(plan, flags.noHotspot);

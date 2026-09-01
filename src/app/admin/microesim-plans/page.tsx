@@ -2,6 +2,7 @@
 
 import { adminFetch } from '@/lib/admin-fetch';
 import { compareEsimPlanOrder } from '@/lib/esim-plan-sort';
+import { getMicroesimPlanSpeedTier } from '@/lib/microesim-plan-group';
 
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Check, DownloadCloud, Filter, LayoutGrid, List, Loader2, Search, Star, UploadCloud } from 'lucide-react';
@@ -96,6 +97,7 @@ type PlanGroup = {
   key: string;
   supplierBaseName: string;
   groupCode: string;
+  speedTier: string;
   plans: SupplierPlan[];
 };
 
@@ -372,10 +374,11 @@ export default function MicroesimPlansPage() {
     const groups = new Map<string, PlanGroup>();
     for (const plan of filteredPlans) {
       const family = getPlanFamily(plan);
-      const key = `${family.supplierBaseName}||${family.groupCode}`;
+      const speedTier = getMicroesimPlanSpeedTier(plan);
+      const key = `${family.supplierBaseName}||${family.groupCode}||${speedTier}`;
       const current = groups.get(key);
       if (current) current.plans.push(plan);
-      else groups.set(key, { key, ...family, plans: [plan] });
+      else groups.set(key, { key, ...family, speedTier, plans: [plan] });
     }
     return Array.from(groups.values()).map(group => ({
       ...group,
@@ -780,6 +783,7 @@ export default function MicroesimPlansPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-base font-bold text-white">{getPlanFamilyTitle(focusedPlan)}</h2>
                       <span className="rounded border border-cyan-300/25 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-100">{group.groupCode}</span>
+                      {group.speedTier && <span className={`rounded border px-2 py-0.5 text-[11px] font-bold ${group.speedTier === '高速不限速' ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100' : 'border-amber-300/30 bg-amber-400/10 text-amber-100'}`}>{group.speedTier}</span>}
                     </div>
                     <p className="mt-1 break-all text-xs text-white/35">{group.supplierBaseName}</p>
                   </div>

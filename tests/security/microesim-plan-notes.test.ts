@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { transformMicroesimPlan, type MicroesimPlan } from '../../src/lib/microesim.ts';
+import { getMicroesimPlanSpeedTier } from '../../src/lib/microesim-plan-group.ts';
 
 function createPlan(overrides: Partial<MicroesimPlan> = {}): MicroesimPlan {
   return {
@@ -40,4 +41,28 @@ test('keeps an explicit no-hotspot warning', () => {
   });
 
   assert.equal(plan.hotspot_sharing, '不支援熱點分享');
+});
+
+test('recognizes the supplier Unlimited 10M shorthand as a 10Mbps capped plan', () => {
+  const plan = transformMicroesimPlan(createPlan({
+    channel_dataplan_name: 'Thailand-Local-unlimited-7-D0',
+    data: 'Unlimited',
+    rule_desc: 'Unlimited 10M'
+  }), { countryCode: 'TH', countryName: '泰國' });
+
+  assert.equal(plan.data_amount, '吃到飽，最高速率10mbps');
+  assert.equal(plan.flags.speedLimit, true);
+  assert.equal(getMicroesimPlanSpeedTier(plan), '最高 10mbps');
+});
+
+test('keeps Unlimited High Speed in a separate uncapped group', () => {
+  const plan = transformMicroesimPlan(createPlan({
+    channel_dataplan_name: 'Thailand-Local-unlimited-8-D0',
+    data: 'Unlimited',
+    rule_desc: 'Unlimited High Speed'
+  }), { countryCode: 'TH', countryName: '泰國' });
+
+  assert.equal(plan.data_amount, '吃到飽');
+  assert.equal(plan.flags.speedLimit, false);
+  assert.equal(getMicroesimPlanSpeedTier(plan), '高速不限速');
 });
