@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const supabase = getServerSupabase();
     const { data: existingByEmail, error: existingError } = await supabase
       .from('dealers')
-      .select('*')
+      .select('id, user_id, email, store_name, contact_name, phone, status, balance')
       .eq('email', user.email.toLowerCase())
       .maybeSingle();
     if (existingError) throw existingError;
@@ -29,7 +29,17 @@ export async function POST(request: Request) {
     }
 
     if (existingByEmail?.status === 'approved' || existingByEmail?.status === 'suspended') {
-      return NextResponse.json({ dealer: existingByEmail });
+      return NextResponse.json({
+        dealer: {
+          id: existingByEmail.id,
+          email: existingByEmail.email,
+          store_name: existingByEmail.store_name,
+          contact_name: existingByEmail.contact_name,
+          phone: existingByEmail.phone,
+          status: existingByEmail.status,
+          balance: existingByEmail.balance
+        }
+      });
     }
 
     const payload = {
@@ -44,7 +54,9 @@ export async function POST(request: Request) {
     const query = existingByEmail
       ? supabase.from('dealers').update(payload).eq('id', existingByEmail.id)
       : supabase.from('dealers').insert(payload);
-    const { data, error } = await query.select('*').single();
+    const { data, error } = await query
+      .select('id, email, store_name, contact_name, phone, status, balance')
+      .single();
     if (error) throw error;
     return NextResponse.json({ dealer: data });
   } catch (error) {

@@ -16,8 +16,6 @@ export async function GET(request: Request) {
     const pricingMode = dealer.pricing_mode || 'fixed_markup';
     const pricingValue = Number(dealer.pricing_value ?? 10);
     return NextResponse.json({
-      pricingMode,
-      pricingValue,
       products: (data || []).map(({ supplier_cost_twd, ...product }) => ({
         ...product,
         retail_price: Math.round(Number(product.price)),

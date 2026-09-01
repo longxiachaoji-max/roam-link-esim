@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const supabase = getServerSupabase();
     const { data: dealer, error } = await supabase
       .from('dealers')
-      .select('*')
+      .select('id, email, store_name, contact_name, phone, status, balance')
       .eq('user_id', user.id)
       .maybeSingle();
     if (error) throw error;

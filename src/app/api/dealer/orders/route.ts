@@ -89,7 +89,7 @@ export async function GET(request: Request) {
       .from('dealer_orders')
       .select(`
         id, fulfillment_order_id, customer_email, customer_name,
-        retail_total, dealer_total, price_rate_percent, created_at,
+        dealer_total, created_at,
         orders ( order_number, order_status, payment_status ),
         dealer_order_items (
           id, order_item_id, retail_price, dealer_price,
