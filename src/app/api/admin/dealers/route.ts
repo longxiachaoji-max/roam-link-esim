@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, getServerSupabase, requireAdminUser } from '@/lib/server-auth';
 
 const DEALER_STATUSES = new Set(['pending', 'approved', 'rejected', 'suspended']);
+const PRICING_MODES = new Set(['percentage_markup', 'fixed_markup']);
 
 export async function GET(request: Request) {
   try {
@@ -38,15 +39,20 @@ export async function PATCH(request: Request) {
     if (action === 'updateDealer') {
       const dealerId = String(body.dealerId || '');
       const status = String(body.status || '');
-      const rate = Number(body.priceRatePercent);
-      if (!DEALER_STATUSES.has(status) || !Number.isFinite(rate) || rate <= 0 || rate > 100) {
+      const pricingMode = String(body.pricingMode || '');
+      const pricingValue = Number(body.pricingValue);
+      const validValue = pricingMode === 'percentage_markup'
+        ? pricingValue >= 0 && pricingValue <= 500
+        : pricingValue >= 0 && pricingValue <= 100000;
+      if (!DEALER_STATUSES.has(status) || !PRICING_MODES.has(pricingMode) || !Number.isFinite(pricingValue) || !validValue) {
         return NextResponse.json({ error: '經銷商設定不正確' }, { status: 400 });
       }
       const { data, error } = await supabase
         .from('dealers')
         .update({
           status,
-          price_rate_percent: Math.round(rate * 100) / 100,
+          pricing_mode: pricingMode,
+          pricing_value: Math.round(pricingValue * 100) / 100,
           admin_note: String(body.adminNote || '').trim().slice(0, 500) || null,
           reviewed_by: admin.id,
           reviewed_at: new Date().toISOString()

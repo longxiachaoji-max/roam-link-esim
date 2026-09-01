@@ -10,6 +10,8 @@ export interface DealerAccount {
   tax_id: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'suspended';
   price_rate_percent: number;
+  pricing_mode: 'percentage_markup' | 'fixed_markup';
+  pricing_value: number;
   balance: number;
   admin_note: string | null;
   created_at: string;

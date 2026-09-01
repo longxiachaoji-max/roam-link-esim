@@ -15,6 +15,8 @@ interface Dealer {
   phone: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'suspended';
   price_rate_percent: number;
+  pricing_mode: 'percentage_markup' | 'fixed_markup';
+  pricing_value: number;
   balance: number;
 }
 interface Product {
@@ -94,6 +96,9 @@ export default function DealerPage() {
   const [sendingOrderId, setSendingOrderId] = useState('');
   const customerEmailRef = useRef<HTMLInputElement>(null);
   const salesCatalogRef = useRef<HTMLElement>(null);
+  const pricingLabel = dealer?.pricing_mode === 'percentage_markup'
+    ? `成本＋${Number(dealer.pricing_value || 0).toLocaleString('zh-TW')}%`
+    : `成本＋${money(Number(dealer?.pricing_value ?? 10))}`;
 
   const loadOrders = useCallback(async () => {
     const response = await authenticatedFetch('/api/dealer/orders', { cache: 'no-store' });
@@ -405,7 +410,7 @@ export default function DealerPage() {
                       {filteredProducts.map(product => (
                         <article key={product.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
                           <div><p className="font-semibold">{product.name}</p><p className="mt-1 text-sm text-white/40">{product.country} · {product.validity_days} 天{product.data_amount ? ` · ${product.data_amount}` : ''}</p></div>
-                          <div className="flex items-center justify-between gap-4 sm:justify-end"><div className="text-right"><p className="font-black text-[#55d5ea]">{money(product.dealer_price)}</p><p className="text-xs text-white/35">成本＋NT$10</p><p className="text-xs text-white/25 line-through">官網售價 {money(product.retail_price)}</p></div><button onClick={() => changeQuantity(product.id, 1)} title={`加入 ${product.name}`} className="grid size-10 place-items-center rounded-md bg-[#ff4f73]"><Plus size={20}/></button></div>
+                          <div className="flex items-center justify-between gap-4 sm:justify-end"><div className="text-right"><p className="font-black text-[#55d5ea]">{money(product.dealer_price)}</p><p className="text-xs text-white/35">{pricingLabel}</p><p className="text-xs text-white/25 line-through">官網售價 {money(product.retail_price)}</p></div><button onClick={() => changeQuantity(product.id, 1)} title={`加入 ${product.name}`} className="grid size-10 place-items-center rounded-md bg-[#ff4f73]"><Plus size={20}/></button></div>
                         </article>
                       ))}
                     </div>

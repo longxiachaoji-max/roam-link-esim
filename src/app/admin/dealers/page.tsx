@@ -7,6 +7,7 @@ import { adminFetch } from '@/lib/admin-fetch';
 interface Dealer {
   id: string; email: string; store_name: string; contact_name: string | null; phone: string | null; tax_id: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'suspended'; price_rate_percent: number; balance: number;
+  pricing_mode: 'percentage_markup' | 'fixed_markup'; pricing_value: number;
   admin_note: string | null; created_at: string;
 }
 interface TopupRequest {
@@ -26,7 +27,8 @@ export default function AdminDealersPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('全部');
   const [editing, setEditing] = useState<Dealer | null>(null);
-  const [rate, setRate] = useState('60');
+  const [pricingMode, setPricingMode] = useState<Dealer['pricing_mode']>('fixed_markup');
+  const [pricingValue, setPricingValue] = useState('10');
   const [adminNote, setAdminNote] = useState('');
   const [balanceDealer, setBalanceDealer] = useState<Dealer | null>(null);
   const [balanceAmount, setBalanceAmount] = useState('');
@@ -54,12 +56,18 @@ export default function AdminDealersPage() {
   }).sort((a, b) => (a.status === 'pending' ? -1 : 0) - (b.status === 'pending' ? -1 : 0)), [dealers, search, status]);
   const pendingTopups = topups.filter(item => item.status === 'pending');
 
-  const updateDealer = async (dealer: Dealer, nextStatus: Dealer['status'], nextRate = Number(rate), note = adminNote) => {
+  const updateDealer = async (
+    dealer: Dealer,
+    nextStatus: Dealer['status'],
+    note = adminNote,
+    nextPricingMode = pricingMode,
+    nextPricingValue = Number(pricingValue)
+  ) => {
     setBusy(true); setMessage('');
     try {
       const response = await adminFetch('/api/admin/dealers', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'updateDealer', dealerId: dealer.id, status: nextStatus, priceRatePercent: nextRate, adminNote: note })
+        body: JSON.stringify({ action: 'updateDealer', dealerId: dealer.id, status: nextStatus, pricingMode: nextPricingMode, pricingValue: nextPricingValue, adminNote: note })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '更新失敗');
@@ -98,20 +106,28 @@ export default function AdminDealersPage() {
     finally { setBusy(false); }
   };
 
-  const openEdit = (dealer: Dealer) => { setEditing(dealer); setRate(String(dealer.price_rate_percent)); setAdminNote(dealer.admin_note || ''); };
+  const openEdit = (dealer: Dealer, approve = false) => {
+    setEditing(approve ? { ...dealer, status: 'approved' } : dealer);
+    setPricingMode(dealer.pricing_mode || 'fixed_markup');
+    setPricingValue(String(dealer.pricing_value ?? 10));
+    setAdminNote(dealer.admin_note || '');
+  };
+  const pricingDescription = (dealer: Dealer) => dealer.pricing_mode === 'percentage_markup'
+    ? `成本＋${Number(dealer.pricing_value || 0).toLocaleString('zh-TW')}%`
+    : `成本＋${money(Number(dealer.pricing_value ?? 10))}`;
   const openBalance = (dealer: Dealer) => { setBalanceDealer(dealer); setBalanceAmount(''); setCashReceived(''); setBalanceReason('現金加值'); };
 
   return <div className="mx-auto max-w-7xl pb-20">
-    <div className="mb-7"><h1 className="text-2xl font-black">經銷商專區</h1><p className="mt-1 text-sm text-white/45">審核帳號、現金加值與帳戶狀態；經銷價統一為成本＋NT$10</p></div>
+    <div className="mb-7"><h1 className="text-2xl font-black">經銷商專區</h1><p className="mt-1 text-sm text-white/45">審核帳號、設定每家經銷計價方式、現金加值與帳戶狀態</p></div>
     {message && <div className="mb-5 border-l-2 border-cyan bg-white/5 px-4 py-3 text-sm">{message}</div>}
 
     {pendingTopups.length > 0 && <section className="mb-9"><div className="mb-3 flex items-center gap-2"><Banknote className="text-amber-300" size={21}/><h2 className="text-lg font-bold">待核准現金加值</h2><span className="rounded-full bg-amber-300 px-2 py-0.5 text-xs font-black text-black">{pendingTopups.length}</span></div><div className="divide-y divide-white/8 border-y border-white/10">{pendingTopups.map(request => { const dealer = first(request.dealers); return <div key={request.id} className="grid gap-3 py-4 md:grid-cols-[1fr_150px_1fr_auto] md:items-center"><div><p className="font-semibold">{dealer?.store_name}</p><p className="text-sm text-white/40">{dealer?.email}</p></div><p className="text-lg font-black text-amber-300">{money(request.amount)}</p><div><p className="text-sm">{request.note || '無備註'}</p><p className="text-xs text-white/35">{new Date(request.created_at).toLocaleString('zh-TW')}</p></div><div className="flex gap-2"><button disabled={busy} onClick={() => reviewTopup(request,'approved')} className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-black text-black">確認收款</button><button disabled={busy} onClick={() => reviewTopup(request,'rejected')} className="rounded-md border border-white/15 px-3 py-2 text-sm">拒絕</button></div></div>})}</div></section>}
 
     <section><div className="mb-4 flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search className="absolute left-3 top-3.5 text-white/30" size={18}/><input value={search} onChange={e => setSearch(e.target.value)} className="field pl-10" placeholder="搜尋店家、Email、電話"/></label><select value={status} onChange={e => setStatus(e.target.value)} className="field sm:w-44"><option>全部</option>{Object.entries(STATUS_LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></div>
-      <div className="divide-y divide-white/8 border-y border-white/10">{loading ? <p className="py-16 text-center text-white/35">載入中...</p> : filtered.length ? filtered.map(dealer => <article key={dealer.id} className="grid gap-4 py-5 lg:grid-cols-[minmax(220px,1fr)_140px_120px_150px_auto] lg:items-center"><div><div className="flex items-center gap-2"><Building2 size={18} className="text-cyan"/><p className="font-bold">{dealer.store_name}</p></div><p className="mt-1 text-sm text-white/45">{dealer.email}</p><p className="text-xs text-white/30">{dealer.contact_name || '-'} · {dealer.phone || '-'}</p></div><div><p className="text-xs text-white/35">帳號狀態</p><p className={`mt-1 font-semibold ${dealer.status === 'approved' ? 'text-emerald-300' : dealer.status === 'pending' ? 'text-amber-300' : 'text-rose-300'}`}>{STATUS_LABELS[dealer.status]}</p></div><div><p className="text-xs text-white/35">經銷價格</p><p className="mt-1 font-black">成本＋NT$10</p></div><div><p className="text-xs text-white/35">可用餘額</p><p className="mt-1 font-black text-amber-300">{money(dealer.balance)}</p></div><div className="flex flex-wrap gap-2 lg:justify-end">{dealer.status === 'pending' && <><button onClick={() => updateDealer(dealer,'approved',Number(dealer.price_rate_percent),dealer.admin_note || '')} className="inline-flex items-center gap-1 rounded-md bg-emerald-400 px-3 py-2 text-sm font-black text-black"><BadgeCheck size={16}/>開通</button><button onClick={() => updateDealer(dealer,'rejected',Number(dealer.price_rate_percent),dealer.admin_note || '')} className="rounded-md border border-rose-400/30 px-3 py-2 text-sm text-rose-300">拒絕</button></>}<button onClick={() => openBalance(dealer)} className="inline-flex items-center gap-1 rounded-md border border-amber-300/25 px-3 py-2 text-sm font-black text-amber-200"><WalletCards size={16}/>餘額</button><button onClick={() => openEdit(dealer)} className="rounded-md border border-white/15 px-3 py-2 text-sm">設定</button></div></article>) : <p className="py-16 text-center text-white/35">沒有符合條件的經銷商</p>}</div>
+      <div className="divide-y divide-white/8 border-y border-white/10">{loading ? <p className="py-16 text-center text-white/35">載入中...</p> : filtered.length ? filtered.map(dealer => <article key={dealer.id} className="grid gap-4 py-5 lg:grid-cols-[minmax(220px,1fr)_140px_150px_150px_auto] lg:items-center"><div><div className="flex items-center gap-2"><Building2 size={18} className="text-cyan"/><p className="font-bold">{dealer.store_name}</p></div><p className="mt-1 text-sm text-white/45">{dealer.email}</p><p className="text-xs text-white/30">{dealer.contact_name || '-'} · {dealer.phone || '-'}</p></div><div><p className="text-xs text-white/35">帳號狀態</p><p className={`mt-1 font-semibold ${dealer.status === 'approved' ? 'text-emerald-300' : dealer.status === 'pending' ? 'text-amber-300' : 'text-rose-300'}`}>{STATUS_LABELS[dealer.status]}</p></div><div><p className="text-xs text-white/35">經銷價格</p><p className="mt-1 font-black">{pricingDescription(dealer)}</p></div><div><p className="text-xs text-white/35">可用餘額</p><p className="mt-1 font-black text-amber-300">{money(dealer.balance)}</p></div><div className="flex flex-wrap gap-2 lg:justify-end">{dealer.status === 'pending' && <><button onClick={() => openEdit(dealer, true)} className="inline-flex items-center gap-1 rounded-md bg-emerald-400 px-3 py-2 text-sm font-black text-black"><BadgeCheck size={16}/>設定並開通</button><button onClick={() => void updateDealer(dealer,'rejected',dealer.admin_note || '',dealer.pricing_mode || 'fixed_markup',Number(dealer.pricing_value ?? 10))} className="rounded-md border border-rose-400/30 px-3 py-2 text-sm text-rose-300">拒絕</button></>}<button onClick={() => openBalance(dealer)} className="inline-flex items-center gap-1 rounded-md border border-amber-300/25 px-3 py-2 text-sm font-black text-amber-200"><WalletCards size={16}/>餘額</button><button onClick={() => openEdit(dealer)} className="rounded-md border border-white/15 px-3 py-2 text-sm">設定</button></div></article>) : <p className="py-16 text-center text-white/35">沒有符合條件的經銷商</p>}</div>
     </section>
 
-    {editing && <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><div className="w-full max-w-md rounded-md border border-white/12 bg-[#17172a] p-6"><h2 className="text-xl font-black">店家設定</h2><p className="mt-1 text-sm text-white/40">{editing.store_name}</p><p className="mt-6 rounded-md border border-cyan/20 bg-cyan/5 px-3 py-2 text-sm text-cyan">經銷價統一為商品成本＋NT$10</p><label className="mt-4 block text-sm text-white/50">內部備註<textarea rows={3} value={adminNote} onChange={e => setAdminNote(e.target.value)} className="field mt-2 py-3"/></label><label className="mt-4 block text-sm text-white/50">帳號狀態<select value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value as Dealer['status'] })} className="field mt-2">{Object.entries(STATUS_LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="mt-6 flex justify-end gap-2"><button onClick={() => setEditing(null)} className="rounded-md border border-white/15 px-4 py-2">取消</button><button disabled={busy} onClick={() => updateDealer(editing,editing.status,Number(editing.price_rate_percent))} className="rounded-md bg-cyan px-4 py-2 font-black text-black">儲存設定</button></div></div></div>}
+    {editing && <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><div className="w-full max-w-md rounded-md border border-white/12 bg-[#17172a] p-6"><h2 className="text-xl font-black">店家設定</h2><p className="mt-1 text-sm text-white/40">{editing.store_name}</p><label className="mt-6 block text-sm text-white/50">經銷計價方式<select value={pricingMode} onChange={e => setPricingMode(e.target.value as Dealer['pricing_mode'])} className="field mt-2"><option value="percentage_markup">成本加成百分比</option><option value="fixed_markup">成本加固定金額</option></select></label><label className="mt-4 block text-sm text-white/50">{pricingMode === 'percentage_markup' ? '加成比例（%）' : '每張固定加價（NT$）'}<input type="number" min="0" max={pricingMode === 'percentage_markup' ? 500 : 100000} step="0.01" value={pricingValue} onChange={e => setPricingValue(e.target.value)} className="field mt-2"/></label><p className="mt-2 text-xs text-cyan">預覽：{pricingMode === 'percentage_markup' ? `商品成本＋${Number(pricingValue || 0).toLocaleString('zh-TW')}%` : `商品成本＋${money(Number(pricingValue || 0))}`}</p><label className="mt-4 block text-sm text-white/50">內部備註<textarea rows={3} value={adminNote} onChange={e => setAdminNote(e.target.value)} className="field mt-2 py-3"/></label><label className="mt-4 block text-sm text-white/50">帳號狀態<select value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value as Dealer['status'] })} className="field mt-2">{Object.entries(STATUS_LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="mt-6 flex justify-end gap-2"><button onClick={() => setEditing(null)} className="rounded-md border border-white/15 px-4 py-2">取消</button><button disabled={busy} onClick={() => updateDealer(editing,editing.status)} className="rounded-md bg-cyan px-4 py-2 font-black text-black">儲存設定</button></div></div></div>}
 
     {balanceDealer && <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><div className="w-full max-w-md rounded-md border border-white/12 bg-[#17172a] p-6"><h2 className="text-xl font-black">調整經銷餘額</h2><p className="mt-1 text-sm text-white/40">{balanceDealer.store_name} · 目前 {money(balanceDealer.balance)}</p><label className="mt-6 block text-sm text-white/50">加減金額<input type="number" value={balanceAmount} onChange={e => { setBalanceAmount(e.target.value); if (Number(e.target.value) > 0) setCashReceived(e.target.value); }} className="field mt-2" placeholder="加值輸入正數，扣除輸入負數"/></label><label className="mt-4 block text-sm text-white/50">實際收到現金<input type="number" min="0" value={cashReceived} onChange={e => setCashReceived(e.target.value)} className="field mt-2"/></label><label className="mt-4 block text-sm text-white/50">原因<input value={balanceReason} onChange={e => setBalanceReason(e.target.value)} className="field mt-2"/></label><p className="mt-3 text-xs text-white/35">現金收入會記在經銷商加值帳本；經銷商使用餘額購買時不重複列入收入。</p><div className="mt-6 flex justify-end gap-2"><button onClick={() => setBalanceDealer(null)} className="rounded-md border border-white/15 px-4 py-2">取消</button><button disabled={busy} onClick={adjustBalance} className="rounded-md bg-amber-300 px-4 py-2 font-black text-black">確認調整</button></div></div></div>}
   </div>;

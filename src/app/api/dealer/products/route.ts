@@ -4,7 +4,7 @@ import { requireDealerUser } from '@/lib/dealer-auth';
 
 export async function GET(request: Request) {
   try {
-    const { supabase } = await requireDealerUser(request, true);
+    const { dealer, supabase } = await requireDealerUser(request, true);
     const { data, error } = await supabase
       .from('products')
       .select('id, name, country, description, data_amount, validity_days, price, supplier_cost_twd')
@@ -13,12 +13,17 @@ export async function GET(request: Request) {
       .order('country')
       .order('validity_days');
     if (error) throw error;
+    const pricingMode = dealer.pricing_mode || 'fixed_markup';
+    const pricingValue = Number(dealer.pricing_value ?? 10);
     return NextResponse.json({
-      pricingRule: 'cost_plus_10',
+      pricingMode,
+      pricingValue,
       products: (data || []).map(({ supplier_cost_twd, ...product }) => ({
         ...product,
         retail_price: Math.round(Number(product.price)),
-        dealer_price: Math.round(Number(supplier_cost_twd)) + 10
+        dealer_price: pricingMode === 'percentage_markup'
+          ? Math.round(Number(supplier_cost_twd) * (1 + pricingValue / 100))
+          : Math.round(Number(supplier_cost_twd) + pricingValue)
       }))
     });
   } catch (error) {
