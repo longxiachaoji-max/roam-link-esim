@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
+import { normalizeDealerSalesMode } from '@/lib/dealer-sales-mode';
 
 function text(value: unknown, max: number) {
   return String(value ?? '').trim().slice(0, max);
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
     const contactName = text(body.contactName, 80);
     const phone = text(body.phone, 40);
     const taxId = text(body.taxId, 20);
+    const salesMode = normalizeDealerSalesMode(body.salesMode);
     if (!storeName || !contactName || !phone) {
       return NextResponse.json({ error: '請填寫店家名稱、聯絡人與電話' }, { status: 400 });
     }
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
       contact_name: contactName,
       phone,
       tax_id: taxId || null,
+      sales_mode: salesMode,
       status: 'pending'
     };
     const query = existingByEmail

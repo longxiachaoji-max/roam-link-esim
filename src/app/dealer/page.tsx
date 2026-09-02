@@ -6,6 +6,7 @@ import { ArrowLeft, Building2, ChevronRight, Copy, HandCoins, LogOut, Mail, Minu
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getEsimCountryInfo } from '@/lib/esim-country-info';
+import type { DealerSalesMode } from '@/lib/dealer-sales-mode';
 
 interface Dealer {
   id: string;
@@ -69,6 +70,14 @@ interface ReferralSummary { totalOrders: number; pendingAmount: number; availabl
 
 const APPLICATION_KEY = 'firstroamlink-dealer-application';
 
+interface DealerApplication {
+  storeName: string;
+  contactName: string;
+  phone: string;
+  taxId: string;
+  salesMode: DealerSalesMode;
+}
+
 function money(value: number | undefined) { return `NT$${Number(value || 0).toLocaleString('zh-TW')}`; }
 function first<T>(value: T | T[]) { return Array.isArray(value) ? value[0] : value; }
 function installStatus(item: DealerOrder['dealer_order_items'][number]) {
@@ -94,7 +103,7 @@ export default function DealerPage() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [application, setApplication] = useState({ storeName: '', contactName: '', phone: '', taxId: '' });
+  const [application, setApplication] = useState<DealerApplication>({ storeName: '', contactName: '', phone: '', taxId: '', salesMode: 'direct' });
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedDays, setSelectedDays] = useState<number | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -170,9 +179,10 @@ export default function DealerPage() {
     };
   }, [dealer?.sales_mode, dealer?.status, loadOrders, loadReferrals, view]);
 
-  const submitApplication = async (form = application) => {
+  const submitApplication = async (form: Partial<DealerApplication> = application) => {
+    const normalizedForm = { ...form, salesMode: form.salesMode === 'referral' ? 'referral' : 'direct' };
     const response = await authenticatedFetch('/api/dealer/register', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form)
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(normalizedForm)
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || '送出申請失敗');
@@ -594,7 +604,11 @@ function ReferralPayoutPanel({ summary, payouts, note, busy, onNoteChange, onReq
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-2 block text-sm text-white/50">{label}</span>{children}</label>; }
-function ApplicationFields({ value, onChange }: { value: { storeName: string; contactName: string; phone: string; taxId: string }; onChange: (value: { storeName: string; contactName: string; phone: string; taxId: string }) => void }) {
-  const update = (key: keyof typeof value, next: string) => onChange({ ...value, [key]: next });
-  return <><Field label="店家／公司名稱"><input required value={value.storeName} onChange={e => update('storeName', e.target.value)} className="field"/></Field><div className="grid grid-cols-2 gap-3"><Field label="聯絡人"><input required value={value.contactName} onChange={e => update('contactName', e.target.value)} className="field"/></Field><Field label="電話"><input required value={value.phone} onChange={e => update('phone', e.target.value)} className="field"/></Field></div><Field label="統一編號（選填）"><input value={value.taxId} onChange={e => update('taxId', e.target.value)} className="field"/></Field></>;
+function ApplicationFields({ value, onChange }: { value: DealerApplication; onChange: (value: DealerApplication) => void }) {
+  const update = <K extends keyof DealerApplication>(key: K, next: DealerApplication[K]) => onChange({ ...value, [key]: next });
+  const options: Array<{ mode: DealerSalesMode; title: string; description: string }> = [
+    { mode: 'direct', title: '經銷模式', description: '從經銷專區代客下單，自行向客戶報價' },
+    { mode: 'referral', title: '推薦碼模式', description: '客戶到官網結帳輸入推薦碼，依成交取得分潤' }
+  ];
+  return <><Field label="店家／公司名稱"><input required value={value.storeName} onChange={e => update('storeName', e.target.value)} className="field"/></Field><fieldset><legend className="mb-2 text-sm text-white/50">希望合作方式</legend><div className="grid gap-3 sm:grid-cols-2">{options.map(option => <label key={option.mode} className={`cursor-pointer rounded-xl border p-4 transition ${value.salesMode === option.mode ? 'border-[#55d5ea] bg-[#55d5ea]/10' : 'border-white/12 bg-white/[0.02]'}`}><input type="radio" name="dealer-sales-mode" value={option.mode} checked={value.salesMode === option.mode} onChange={() => update('salesMode', option.mode)} className="sr-only"/><span className="flex items-center gap-2 font-black"><span className={`size-3 rounded-full border ${value.salesMode === option.mode ? 'border-[#55d5ea] bg-[#55d5ea]' : 'border-white/40'}`}/>{option.title}</span><span className="mt-2 block text-xs leading-5 text-white/45">{option.description}</span></label>)}</div><p className="mt-2 text-xs leading-5 text-white/35">送出後由管理員審核並設定經銷價格或推薦分潤，開通前仍可調整。</p></fieldset><div className="grid grid-cols-2 gap-3"><Field label="聯絡人"><input required value={value.contactName} onChange={e => update('contactName', e.target.value)} className="field"/></Field><Field label="電話"><input required value={value.phone} onChange={e => update('phone', e.target.value)} className="field"/></Field></div><Field label="統一編號（選填）"><input value={value.taxId} onChange={e => update('taxId', e.target.value)} className="field"/></Field></>;
 }
