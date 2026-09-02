@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { isDealerReferralDiscount, isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
 import { recordDealerReferralCommission } from '@/lib/dealer-referrals';
@@ -6,6 +6,8 @@ import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
 import { parseTokenCheckoutRequest, TokenCheckoutRequestError } from '@/lib/token-checkout';
+
+export const maxDuration = 300;
 
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
     const supabase = getServerSupabase();
     const body = await request.json();
     const { name, productIds, discountCode } = parseTokenCheckoutRequest(body);
+    const effectiveDiscountCode = discountCode || String(authUser.user_metadata?.referral_code || '').trim();
     const email = authUser.email.toLowerCase();
 
     // 1. Get or create customer
@@ -146,8 +149,8 @@ export async function POST(request: Request) {
     const originalTotalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
     let discountQuote: CheckoutDiscountQuote | null = null;
 
-    if (discountCode) {
-      discountQuote = await resolveCheckoutDiscount(supabase, email, String(discountCode), originalTotalAmount);
+    if (effectiveDiscountCode) {
+      discountQuote = await resolveCheckoutDiscount(supabase, email, effectiveDiscountCode, originalTotalAmount);
     }
     const tokensUsed = discountQuote?.payableTotal ?? originalTotalAmount;
 
@@ -188,91 +191,102 @@ export async function POST(request: Request) {
       await recordDealerReferralCommission(supabase, order.id, discountQuote, products.length, true);
     }
 
-    // 5. Claim inventory or ask the supplier to fulfill each paid item.
-    const { data: orderItems, error: orderItemsError } = await supabase
-      .from('order_items')
-      .select('id, product_id')
-      .eq('order_id', order.id)
-      .order('created_at', { ascending: true });
-    if (orderItemsError) throw orderItemsError;
-
-    const pendingProducts: typeof products = [];
-    for (const orderItem of orderItems || []) {
-      const product = productMap.get(orderItem.product_id);
-      if (!product) continue;
-      let fulfilled = false;
-
-      const { data: inventoryCandidates } = await supabase
-        .from('e_sim_inventory')
-        .select('id')
-        .eq('product_id', product.id)
-        .eq('status', 'AVAILABLE')
-        .limit(3);
-      for (const candidate of inventoryCandidates || []) {
-        const { data: claimedInventory, error: claimError } = await supabase
-          .from('e_sim_inventory')
-          .update({ status: 'SOLD', sold_at: new Date().toISOString() })
-          .eq('id', candidate.id)
-          .eq('status', 'AVAILABLE')
-          .select('id')
-          .maybeSingle();
-        if (claimError) throw claimError;
-        if (!claimedInventory) continue;
-
-        const { data: boundItem, error: bindError } = await supabase
+    // The payment is already complete. Fulfillment can take minutes when several
+    // supplier eSIMs are purchased, so keep it out of the customer response.
+    after(async () => {
+      try {
+        // 5. Claim inventory or ask the supplier to fulfill each paid item.
+        const { data: orderItems, error: orderItemsError } = await supabase
           .from('order_items')
-          .update({ inventory_id: claimedInventory.id })
-          .eq('id', orderItem.id)
-          .is('inventory_id', null)
-          .select('id')
-          .maybeSingle();
-        if (bindError) throw bindError;
-        if (boundItem) {
-          fulfilled = true;
-          break;
-        }
-        await supabase.from('e_sim_inventory').update({ status: 'AVAILABLE', sold_at: null }).eq('id', candidate.id);
-      }
+          .select('id, product_id')
+          .eq('order_id', order.id)
+          .order('created_at', { ascending: true });
+        if (orderItemsError) throw orderItemsError;
 
-      if (!fulfilled) {
+        const pendingProducts: typeof products = [];
+        const items = orderItems || [];
+        for (let start = 0; start < items.length; start += 3) {
+          const batchPendingProducts = await Promise.all(items.slice(start, start + 3).map(async orderItem => {
+            const product = productMap.get(orderItem.product_id);
+            if (!product) return null;
+            let fulfilled = false;
+
+            const { data: inventoryCandidates } = await supabase
+              .from('e_sim_inventory')
+              .select('id')
+              .eq('product_id', product.id)
+              .eq('status', 'AVAILABLE')
+              .limit(3);
+            for (const candidate of inventoryCandidates || []) {
+              const { data: claimedInventory, error: claimError } = await supabase
+                .from('e_sim_inventory')
+                .update({ status: 'SOLD', sold_at: new Date().toISOString() })
+                .eq('id', candidate.id)
+                .eq('status', 'AVAILABLE')
+                .select('id')
+                .maybeSingle();
+              if (claimError) throw claimError;
+              if (!claimedInventory) continue;
+
+              const { data: boundItem, error: bindError } = await supabase
+                .from('order_items')
+                .update({ inventory_id: claimedInventory.id })
+                .eq('id', orderItem.id)
+                .is('inventory_id', null)
+                .select('id')
+                .maybeSingle();
+              if (bindError) throw bindError;
+              if (boundItem) {
+                fulfilled = true;
+                break;
+              }
+              await supabase.from('e_sim_inventory').update({ status: 'AVAILABLE', sold_at: null }).eq('id', candidate.id);
+            }
+
+            if (!fulfilled) {
+              try {
+                fulfilled = Boolean(await fulfillMicroesimOrderItem(supabase, orderItem.id, product.id, product));
+              } catch (microError) {
+                console.error('MicroEsim token checkout fulfillment failed:', {
+                  productId: product.id,
+                  supplierPlanId: product.supplier_plan_id,
+                  error: microError
+                });
+                await sendMicroesimFulfillmentFailureAlert(supabase, {
+                  source: '儲值金結帳自動配發',
+                  orderId: order.id,
+                  orderItemId: orderItem.id,
+                  customerEmail: email,
+                  productName: product.name,
+                  country: product.country,
+                  validityDays: product.validity_days,
+                  supplierPlanId: product.supplier_plan_id,
+                  error: microError
+                });
+              }
+            }
+            return fulfilled ? null : product;
+          }));
+
+          for (const pendingProduct of batchPendingProducts) {
+            if (pendingProduct) pendingProducts.push(pendingProduct);
+          }
+        }
+
+        const fullyAssigned = pendingProducts.length === 0;
+        await supabase
+          .from('orders')
+          .update({ order_status: fullyAssigned ? 'COMPLETED' : 'PENDING', updated_at: new Date().toISOString() })
+          .eq('id', order.id);
+
+        // 6. Send customer and pending-fulfillment notifications.
+        const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+        const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
+        const productNames = products.map(product => product.name).join('、');
         try {
-          fulfilled = Boolean(await fulfillMicroesimOrderItem(supabase, orderItem.id, product.id, product));
-        } catch (microError) {
-          console.error('MicroEsim token checkout fulfillment failed:', {
-            productId: product.id,
-            supplierPlanId: product.supplier_plan_id,
-            error: microError
-          });
-          await sendMicroesimFulfillmentFailureAlert(supabase, {
-            source: '儲值金結帳自動配發',
-            orderId: order.id,
-            orderItemId: orderItem.id,
-            customerEmail: email,
-            productName: product.name,
-            country: product.country,
-            validityDays: product.validity_days,
-            supplierPlanId: product.supplier_plan_id,
-            error: microError
-          });
-        }
-      }
-      if (!fulfilled) pendingProducts.push(product);
-    }
-
-    const fullyAssigned = pendingProducts.length === 0;
-    await supabase
-      .from('orders')
-      .update({ order_status: fullyAssigned ? 'COMPLETED' : 'PENDING', updated_at: new Date().toISOString() })
-      .eq('id', order.id);
-
-    // 6. Send customer and pending-fulfillment notifications.
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-    const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
-    const productNames = products.map(product => product.name).join('、');
-    try {
-      const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
+          const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
       await resend.emails.send({
-        from: `Roam Link eSIM <${fromEmail}>`,
+        from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
         to: [email],
         subject: fullyAssigned ? '付款成功，eSIM 已可安裝' : '付款成功，eSIM 正在準備中',
         html: fullyAssigned ? `
@@ -292,7 +306,7 @@ export async function POST(request: Request) {
       const notifyEmail = notificationSettings?.order_notify_email || '';
       if (!fullyAssigned && notificationSettings?.notify_email_enabled && notifyEmail) {
         await resend.emails.send({
-          from: `Roam Link eSIM <${fromEmail}>`,
+          from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
           to: [notifyEmail],
           subject: `待補 eSIM 訂單：${pendingProducts.map(product => product.name).join('、')}`,
           html: `
@@ -305,38 +319,38 @@ export async function POST(request: Request) {
           `,
         });
       }
-    } catch (emailError) {
-      console.error('Failed to send email:', emailError);
-      // We don't throw here, order is still successful, but email failed.
-    }
+        } catch (emailError) {
+          console.error('Failed to send email:', emailError);
+          // The order remains valid even if a notification cannot be sent.
+        }
 
-    if (!fullyAssigned) {
-      const notificationSettings = await getNotificationSettings();
-      if (!notificationSettings.notify_telegram_enabled) {
-        return NextResponse.json({
-          success: true,
+        if (!fullyAssigned) {
+          const notificationSettings = await getNotificationSettings();
+          if (notificationSettings.notify_telegram_enabled) {
+            await sendTelegramNotification([
+              '<b>有一筆訂單需要補 eSIM</b>',
+              `訂單：<code>${escapeTelegramHtml(order.order_number || order.id)}</code>`,
+              `客戶：${escapeTelegramHtml(email)}`,
+              `商品：${escapeTelegramHtml(pendingProducts.map(product => product.name).join('、'))}`,
+              `實付：NT$${tokensUsed}`,
+              `後台：${adminUrl}`
+            ].join('\n'), notificationSettings.telegram_bot_token, notificationSettings.telegram_chat_id);
+          }
+        }
+      } catch (fulfillmentError) {
+        console.error('Token checkout background fulfillment failed:', {
           orderId: order.id,
-          inventoryStatus: 'PENDING',
-          message: 'Checkout successful, eSIM pending fulfillment.',
+          error: fulfillmentError
         });
       }
-
-      await sendTelegramNotification([
-        '<b>有一筆訂單需要補 eSIM</b>',
-        `訂單：<code>${escapeTelegramHtml(order.order_number || order.id)}</code>`,
-        `客戶：${escapeTelegramHtml(email)}`,
-        `商品：${escapeTelegramHtml(pendingProducts.map(product => product.name).join('、'))}`,
-        `實付：NT$${tokensUsed}`,
-        `後台：${adminUrl}`
-      ].join('\n'), notificationSettings.telegram_bot_token, notificationSettings.telegram_chat_id);
-    }
+    });
 
     return NextResponse.json({
       success: true,
       orderId: order.id,
       orderNumber: order.order_number,
-      inventoryStatus: fullyAssigned ? 'ASSIGNED' : 'PENDING',
-      message: fullyAssigned ? 'Checkout successful, eSIM provisioned.' : 'Checkout successful, eSIM pending fulfillment.',
+      inventoryStatus: 'PENDING',
+      message: 'Checkout successful, eSIM fulfillment started.',
     });
 
   } catch (error: unknown) {

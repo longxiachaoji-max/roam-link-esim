@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, Barcode, CreditCard, KeyRound, LockKeyhole, LogOut, Plane, ShieldCheck, UserPlus, UserRound } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { trackAnalyticsEvent, trackPageView } from '@/lib/analytics';
+import { readRememberedReferralCode } from '@/lib/referral-link';
 
 interface CustomerProfile {
   email: string;
@@ -100,7 +101,12 @@ export default function TopupPage() {
     }
 
     setIsLoggingIn(true);
-    const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+    const rememberedReferralCode = readRememberedReferralCode();
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: rememberedReferralCode ? { data: { referral_code: rememberedReferralCode } } : undefined
+    });
     if (error) {
       setMessage(error.message || '註冊失敗');
       setIsLoggingIn(false);

@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       customer = newCustomer;
     }
 
-    const discountCode = String(body.discountCode || '').trim();
+    const discountCode = String(body.discountCode || authUser.user_metadata?.referral_code || '').trim();
     if (discountCode) {
       discountQuote = await resolveCheckoutDiscount(supabase, authUser.email, discountCode, originalTotalAmount);
       totalAmount = discountQuote.payableTotal;

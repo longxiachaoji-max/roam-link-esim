@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
+import { readRememberedReferralCode, rememberReferralCode, validReferralCode } from '@/lib/referral-link';
 import {
   createAutomaticEsimDestination,
   ESIM_DESTINATIONS,
@@ -65,6 +66,7 @@ export default function Home() {
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<EcpayPaymentMethod | null>(null);
   const [isTokenCheckoutSubmitting, setIsTokenCheckoutSubmitting] = useState(false);
   const tokenCheckoutLock = useRef(false);
+  const autoReferralApplyKey = useRef('');
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -138,6 +140,14 @@ export default function Home() {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
+    const sharedReferralCode = validReferralCode(searchParams.get('ref')) || readRememberedReferralCode();
+    if (sharedReferralCode) {
+      rememberReferralCode(sharedReferralCode);
+      window.setTimeout(() => {
+        setAuthPromoCode(sharedReferralCode);
+        setCheckoutCode(sharedReferralCode);
+      }, 0);
+    }
     const requestedCountry = searchParams.get('country');
     if (requestedCountry) {
       const destinationHref = getCountryDestinationHref(requestedCountry);
@@ -371,6 +381,12 @@ export default function Home() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        const savedReferral = validReferralCode(session.user.user_metadata?.referral_code) || readRememberedReferralCode();
+        if (savedReferral) {
+          rememberReferralCode(savedReferral);
+          setAuthPromoCode(savedReferral);
+          setCheckoutCode(savedReferral);
+        }
         await fetchCustomerProfile(session.user.email);
       }
     };
@@ -378,6 +394,12 @@ export default function Home() {
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
+        const savedReferral = validReferralCode(session.user.user_metadata?.referral_code) || readRememberedReferralCode();
+        if (savedReferral) {
+          rememberReferralCode(savedReferral);
+          setAuthPromoCode(savedReferral);
+          setCheckoutCode(savedReferral);
+        }
         fetchCustomerProfile(session.user.email);
       } else {
         setUser(null);
@@ -422,6 +444,12 @@ export default function Home() {
     if (error) {
       showToast("❌ 登入失敗: " + error.message);
     } else {
+      const savedReferral = validReferralCode(data.user.user_metadata?.referral_code) || readRememberedReferralCode();
+      if (savedReferral) {
+        rememberReferralCode(savedReferral);
+        setAuthPromoCode(savedReferral);
+        setCheckoutCode(savedReferral);
+      }
       setIsLoginOpen(false);
       showToast("✅ 登入成功");
     }
@@ -433,9 +461,13 @@ export default function Home() {
       showToast("❌ 兩次密碼輸入不一致");
       return;
     }
-    const { data, error } = await supabase.auth.signUp({
+    const registrationReferralCode = validReferralCode(authPromoCode);
+    const { error } = await supabase.auth.signUp({
       email: authEmail,
       password: authPassword,
+      options: registrationReferralCode
+        ? { data: { referral_code: registrationReferralCode } }
+        : undefined,
     });
     if (error) {
       showToast("❌ 註冊失敗: " + error.message);
@@ -443,27 +475,12 @@ export default function Home() {
       // 這裡如果 Supabase 開啟了 Email Confirm，會需要收信驗證。
       // 開發期建議到 Supabase 關閉 Confirm email 功能。
       showToast("✅ 註冊成功，請登入測試。");
-      // 如果有填推薦碼，嘗試兑換
-      if (authPromoCode.trim()) {
-        try {
-          const promoRes = await authenticatedFetch('/api/promo', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: authPromoCode.trim() }),
-          });
-          const promoJson = await promoRes.json();
-          if (promoRes.ok && promoJson.success) {
-            showToast(`✅ 註冊成功！推薦碼已兑換 NT$${promoJson.addedTokens}`);
-          } else {
-            showToast("✅ 註冊成功！推薦碼無效或已過期，但不影響註冊");
-          }
-        } catch {
-          showToast("✅ 註冊成功！推薦碼兑換失敗，但不影響註冊");
-        }
+      if (registrationReferralCode) {
+        rememberReferralCode(registrationReferralCode);
+        showToast("✅ 註冊成功，推薦碼已記錄；完成付款後會依規則回饋");
       }
       setIsRegisterMode(false);
       setAuthConfirmPassword("");
-      setAuthPromoCode(""); // 清空
     }
   };
 
@@ -519,14 +536,15 @@ export default function Home() {
     }
   };
 
-  const applyCheckoutCode = async () => {
+  const applyCheckoutCode = async (requestedCode = checkoutCode) => {
     if (!user) {
       showToast("請先登入再使用折扣碼");
       setDiscountMessage('請先登入會員，再套用折扣碼');
       setIsLoginOpen(true);
       return;
     }
-    if (!checkoutCode.trim() || isApplyingDiscount) return;
+    const normalizedRequestedCode = normalizeReferralCode(requestedCode);
+    if (!normalizedRequestedCode || isApplyingDiscount) return;
     setIsApplyingDiscount(true);
     setDiscountMessage('正在確認折扣碼...');
     try {
@@ -540,7 +558,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           productIds: cart.map(item => item.id),
-          code: checkoutCode
+          code: normalizedRequestedCode
         })
       });
       const result = await response.json();
@@ -558,6 +576,18 @@ export default function Home() {
       setIsApplyingDiscount(false);
     }
   };
+
+  useEffect(() => {
+    if (!isCheckoutOpen || !user || cart.length === 0 || appliedDiscount || isApplyingDiscount) return;
+    const savedReferral = validReferralCode(checkoutCode);
+    if (!savedReferral || savedReferral !== readRememberedReferralCode()) return;
+    const cartSignature = cart.map(item => item.id).join(',');
+    const applyKey = `${user.id || user.email}:${cartSignature}:${savedReferral}`;
+    if (autoReferralApplyKey.current === applyKey) return;
+    autoReferralApplyKey.current = applyKey;
+    const timer = window.setTimeout(() => void applyCheckoutCode(savedReferral), 0);
+    return () => window.clearTimeout(timer);
+  }, [isCheckoutOpen, user, cart, checkoutCode, appliedDiscount, isApplyingDiscount]);
 
   const startEcpayCheckout = async (paymentMethod: EcpayPaymentMethod) => {
     if (!user) {

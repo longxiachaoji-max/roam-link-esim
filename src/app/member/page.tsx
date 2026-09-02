@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, Copy, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star, RefreshCw } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
+import { buildReferralShareUrl, readRememberedReferralCode, validReferralCode } from '@/lib/referral-link';
 import PhysicalOrdersPanel from './physical-orders-panel';
 import BarcodeOrdersPanel from './barcode-orders-panel';
 
@@ -70,6 +71,7 @@ export default function MemberCenter() {
   const [smoothnessRating, setSmoothnessRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [ordersRefreshing, setOrdersRefreshing] = useState(false);
 
   // Credit card topup
   const [isTopupOpen, setIsTopupOpen] = useState(false);
@@ -103,8 +105,8 @@ export default function MemberCenter() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const fetchOrders = async (_email: string) => {
-    const res = await authenticatedFetch('/api/member/orders');
+  const fetchOrders = async (_email: string, refresh = false) => {
+    const res = await authenticatedFetch(`/api/member/orders${refresh ? '?refresh=1' : ''}`);
     if (res.ok) {
       const data = await res.json();
       setOrders(data.orders || []);
@@ -121,6 +123,21 @@ export default function MemberCenter() {
         }
       }
       setUsageByItemId(cachedUsage);
+      return true;
+    }
+    return false;
+  };
+
+  const refreshOrders = async () => {
+    if (!user?.email || ordersRefreshing) return;
+    setOrdersRefreshing(true);
+    try {
+      const refreshed = await fetchOrders(user.email, true);
+      showToast(refreshed ? '訂單狀態已更新' : '訂單更新失敗，請稍後再試');
+    } catch {
+      showToast('訂單更新失敗，請稍後再試');
+    } finally {
+      setOrdersRefreshing(false);
     }
   };
 
@@ -147,6 +164,8 @@ export default function MemberCenter() {
             setReferralRule(referralJson.referral);
             setReferralCode(referralJson.referral?.code || '');
           }
+          const savedReferral = validReferralCode(latestSession.user.user_metadata?.referral_code) || readRememberedReferralCode();
+          if (savedReferral) setTopupReferralCode(savedReferral);
         }
         await fetchOrders(session.user.email);
       } else {
@@ -673,6 +692,27 @@ export default function MemberCenter() {
               {isSavingReferral ? '儲存中' : '儲存'}
             </button>
           </div>
+          {referralRule?.enabled && buildReferralShareUrl(referralCode) && (
+            <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
+              <p className="mb-2 text-xs font-bold text-cyan-100">我的專屬分享網址</p>
+              <p className="break-all text-xs leading-5 text-white/55">{buildReferralShareUrl(referralCode)}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button type="button" onClick={async () => {
+                  await navigator.clipboard.writeText(buildReferralShareUrl(referralCode));
+                  showToast('✅ 已複製專屬分享網址');
+                }} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-white/75 hover:bg-white/10"><Copy size={15} />複製網址</button>
+                <button type="button" onClick={async () => {
+                  const url = buildReferralShareUrl(referralCode);
+                  if (navigator.share) {
+                    await navigator.share({ title: '一飛通全球漫遊', text: '透過我的推薦網址註冊，完成結帳可享有專屬優惠。', url });
+                  } else {
+                    await navigator.clipboard.writeText(url);
+                    showToast('✅ 已複製專屬分享網址');
+                  }
+                }} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-500 text-xs font-black text-[#071317] hover:bg-cyan-400"><Share2 size={15} />分享</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Promo Code Redeem */}
@@ -762,7 +802,19 @@ export default function MemberCenter() {
           {/* eSIM List */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold">我的 eSIM</h2>
-            <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
+              <button
+                type="button"
+                onClick={refreshOrders}
+                disabled={ordersRefreshing}
+                aria-label="重新整理 eSIM 訂單狀態"
+                title="重新整理訂單狀態"
+                className="grid h-9 w-9 place-items-center rounded-md border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-50"
+              >
+                <RefreshCw size={17} className={ordersRefreshing ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">

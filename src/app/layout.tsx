@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 import { serializeJsonLd } from "@/lib/json-ld";
+import ReferralLinkCapture from "@/components/referral-link-capture";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -29,6 +30,8 @@ export const metadata: Metadata = {
     "KDDI eSIM",
     "韓國 eSIM",
     "泰國 eSIM",
+    "印尼 eSIM",
+    "巴厘島 eSIM",
     "越南 eSIM",
     "中國 eSIM",
     "中港澳 eSIM",
@@ -103,6 +106,7 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className={spaceGrotesk.variable}>
       <body className="font-sans bg-[#0D0D1A] text-[#F0F0FF] overflow-x-hidden antialiased">
+        <ReferralLinkCapture />
         {googleAnalyticsId ? (
           <>
             <Script
