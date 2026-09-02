@@ -19,8 +19,16 @@ export function generateStaticParams() {
   return ESIM_DESTINATIONS.map(destination => ({ slug: destination.slug }));
 }
 
+function decodeDestinationSlug(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
+  const slug = decodeDestinationSlug((await params).slug);
   const destination = getEsimDestination(slug) || getEsimDestinationForCountry(slug) || createAutomaticEsimDestination(slug);
   if (!destination) return { title: '找不到 eSIM 目的地' };
 
@@ -72,7 +80,7 @@ function planStructuredData(destination: NonNullable<ReturnType<typeof getEsimDe
 }
 
 export default async function EsimDestinationPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+  const slug = decodeDestinationSlug((await params).slug);
   const curatedDestination = getEsimDestination(slug);
   const countryDestination = getEsimDestinationForCountry(slug);
   if (!curatedDestination && countryDestination) redirect(getEsimDestinationHref(countryDestination));
