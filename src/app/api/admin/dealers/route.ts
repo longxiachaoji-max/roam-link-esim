@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         .limit(100),
       supabase
         .from('dealer_referral_payouts')
-        .select('id, dealer_id, amount, status, dealer_note, admin_note, requested_at, dealers ( store_name, email )')
+        .select('id, dealer_id, code_snapshot, amount, status, dealer_note, admin_note, requested_at, dealers ( store_name, email )')
         .order('requested_at', { ascending: false })
         .limit(100)
     ]);
@@ -73,13 +73,14 @@ export async function PATCH(request: Request) {
         if (referralCodeLength(referralCode) < MIN_REFERRAL_CODE_LENGTH) {
           return NextResponse.json({ error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字` }, { status: 400 });
         }
-        const [{ data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([
+        const [{ data: codeConflict }, { data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([
+          supabase.from('dealer_referral_codes').select('dealer_id').eq('code', referralCode).maybeSingle(),
           supabase.from('dealers').select('id').eq('referral_code', referralCode).neq('id', dealerId).maybeSingle(),
           supabase.from('promo_codes').select('id').eq('code', referralCode).maybeSingle(),
           readReferralConfig(supabase)
         ]);
         const memberConflict = Object.values(referral.config.customers).some(rule => rule.code === referralCode);
-        if (dealerConflict || promoConflict || memberConflict) {
+        if ((codeConflict && codeConflict.dealer_id !== dealerId) || dealerConflict || promoConflict || memberConflict) {
           return NextResponse.json({ error: '此推薦碼已被使用，請換一個' }, { status: 409 });
         }
       }
@@ -102,6 +103,14 @@ export async function PATCH(request: Request) {
         .select('*')
         .single();
       if (error) throw error;
+      if (salesMode === 'referral') {
+        const { error: codeError } = await supabase.from('dealer_referral_codes').upsert({
+          dealer_id: dealerId,
+          code: referralCode,
+          is_active: true
+        }, { onConflict: 'code' });
+        if (codeError) throw codeError;
+      }
       return NextResponse.json({ dealer: data });
     }
 

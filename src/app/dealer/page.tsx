@@ -65,7 +65,8 @@ interface ReferralCommission {
   commission_amount: number; status: 'pending' | 'available' | 'requested' | 'paid' | 'cancelled'; created_at: string;
   orders: { order_number: string; payment_status: string; order_status: string } | { order_number: string; payment_status: string; order_status: string }[];
 }
-interface ReferralPayout { id: string; amount: number; status: string; dealer_note: string | null; admin_note: string | null; requested_at: string; paid_at: string | null; }
+interface DealerReferralCode { id: string; code: string; is_active: boolean; created_at: string; }
+interface ReferralPayout { id: string; code_snapshot: string | null; amount: number; status: string; dealer_note: string | null; admin_note: string | null; requested_at: string; paid_at: string | null; }
 interface ReferralSummary { totalOrders: number; pendingAmount: number; availableAmount: number; requestedAmount: number; paidAmount: number; }
 
 const APPLICATION_KEY = 'firstroamlink-dealer-application';
@@ -86,6 +87,11 @@ function installStatus(item: DealerOrder['dealer_order_items'][number]) {
   if (!orderItem?.inventory_id) return 'eSIM 準備中';
   return inventory?.microesim_usage_cache?.status || '尚未安裝';
 }
+function summarizeReferrals(commissions: ReferralCommission[], code = ''): ReferralSummary {
+  const rows = code ? commissions.filter(item => item.code_snapshot === code) : commissions;
+  const amountFor = (status: ReferralCommission['status']) => rows.filter(item => item.status === status).reduce((sum, item) => sum + Number(item.commission_amount || 0), 0);
+  return { totalOrders: rows.filter(item => item.status !== 'cancelled').length, pendingAmount: amountFor('pending'), availableAmount: amountFor('available'), requestedAmount: amountFor('requested'), paidAmount: amountFor('paid') };
+}
 
 export default function DealerPage() {
   const [checking, setChecking] = useState(true);
@@ -96,7 +102,8 @@ export default function DealerPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [referralCommissions, setReferralCommissions] = useState<ReferralCommission[]>([]);
   const [referralPayouts, setReferralPayouts] = useState<ReferralPayout[]>([]);
-  const [referralSummary, setReferralSummary] = useState<ReferralSummary>({ totalOrders: 0, pendingAmount: 0, availableAmount: 0, requestedAmount: 0, paidAmount: 0 });
+  const [referralCodes, setReferralCodes] = useState<DealerReferralCode[]>([]);
+  const [selectedReferralCode, setSelectedReferralCode] = useState('');
   const [view, setView] = useState<'sale' | 'orders' | 'balance'>('sale');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -127,9 +134,11 @@ export default function DealerPage() {
     const response = await authenticatedFetch('/api/dealer/referrals', { cache: 'no-store' });
     const result = await response.json();
     if (response.ok) {
+      const nextCodes: DealerReferralCode[] = result.codes || [];
+      setReferralCodes(nextCodes);
+      setSelectedReferralCode(current => nextCodes.some(item => item.code === current) ? current : (nextCodes[0]?.code || ''));
       setReferralCommissions(result.commissions || []);
       setReferralPayouts(result.payouts || []);
-      setReferralSummary(result.summary || { totalOrders: 0, pendingAmount: 0, availableAmount: 0, requestedAmount: 0, paidAmount: 0 });
     }
   }, []);
 
@@ -147,7 +156,7 @@ export default function DealerPage() {
       setMessage(result.error || '讀取帳號失敗'); setChecking(false); return;
     }
     setDealer(result.dealer || null);
-    setReferralCodeDraft(result.dealer?.referral_code || '');
+    setReferralCodeDraft('');
     setTransactions(result.transactions || []);
     if (result.dealer?.status === 'approved') {
       const productResponse = await authenticatedFetch('/api/dealer/products', { cache: 'no-store' });
@@ -337,19 +346,20 @@ export default function DealerPage() {
     finally { setBusy(false); }
   };
 
-  const updateReferralCode = async () => {
+  const createReferralCode = async () => {
     setBusy(true); setMessage('');
     try {
       const response = await authenticatedFetch('/api/dealer/referrals', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'updateCode', code: referralCodeDraft })
+        body: JSON.stringify({ action: 'createCode', code: referralCodeDraft })
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || '更新推薦碼失敗');
-      setReferralCodeDraft(result.referralCode);
-      setDealer(current => current ? { ...current, referral_code: result.referralCode } : current);
-      setMessage('推薦碼已更新，新訂單會使用新的推薦碼');
-    } catch (error) { setMessage(error instanceof Error ? error.message : '更新推薦碼失敗'); }
+      if (!response.ok) throw new Error(result.error || '新增推薦碼失敗');
+      await loadReferrals();
+      setReferralCodeDraft('');
+      setSelectedReferralCode(result.code.code);
+      setMessage(`推薦碼 ${result.code.code} 已新增`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : '新增推薦碼失敗'); }
     finally { setBusy(false); }
   };
 
@@ -358,11 +368,11 @@ export default function DealerPage() {
     try {
       const response = await authenticatedFetch('/api/dealer/referrals', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'requestPayout', note: payoutNote })
+        body: JSON.stringify({ action: 'requestPayout', code: selectedReferralCode, note: payoutNote })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '申請撥款失敗');
-      setPayoutNote(''); setMessage(`已申請撥款 ${money(result.payout?.amount || 0)}`);
+      setPayoutNote(''); setMessage(`推薦碼 ${selectedReferralCode} 已申請撥款 ${money(result.payout?.amount || 0)}`);
       await loadReferrals();
     } catch (error) { setMessage(error instanceof Error ? error.message : '申請撥款失敗'); }
     finally { setBusy(false); }
@@ -400,13 +410,13 @@ export default function DealerPage() {
 
   return (
     <main className="min-h-screen bg-[#090916] text-white">
-      <header className="border-b border-white/10 bg-[#101020] px-4 py-4"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3"><div><p className="text-xs text-white/40">一飛通經銷商</p><h1 className="font-bold">{dealer.store_name}</h1></div><div className="flex items-center gap-3"><div className={`rounded-md border px-3 py-2 text-right ${dealer.sales_mode === 'referral' ? 'border-emerald-300/25 bg-emerald-300/8' : 'border-amber-300/25 bg-amber-300/8'}`}><p className="text-[11px] text-white/40">{dealer.sales_mode === 'referral' ? '推薦碼' : '可用餘額'}</p><p className={`font-black ${dealer.sales_mode === 'referral' ? 'text-emerald-300' : 'text-amber-300'}`}>{dealer.sales_mode === 'referral' ? dealer.referral_code || '未設定' : money(dealer.balance)}</p></div><button onClick={logout} title="登出" className="p-3 text-white/45"><LogOut size={20}/></button></div></div></header>
+      <header className="border-b border-white/10 bg-[#101020] px-4 py-4"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3"><div><p className="text-xs text-white/40">一飛通經銷商</p><h1 className="font-bold">{dealer.store_name}</h1></div><div className="flex items-center gap-3"><div className={`rounded-md border px-3 py-2 text-right ${dealer.sales_mode === 'referral' ? 'border-emerald-300/25 bg-emerald-300/8' : 'border-amber-300/25 bg-amber-300/8'}`}><p className="text-[11px] text-white/40">{dealer.sales_mode === 'referral' ? '推薦碼數量' : '可用餘額'}</p><p className={`font-black ${dealer.sales_mode === 'referral' ? 'text-emerald-300' : 'text-amber-300'}`}>{dealer.sales_mode === 'referral' ? `${referralCodes.length} 個` : money(dealer.balance)}</p></div><button onClick={logout} title="登出" className="p-3 text-white/45"><LogOut size={20}/></button></div></div></header>
       <nav className="sticky top-0 z-20 border-b border-white/10 bg-[#090916]/95 px-4 backdrop-blur"><div className="mx-auto flex max-w-7xl gap-6">{(dealer.sales_mode === 'referral' ? [['sale','推薦方案'],['orders','成交分潤'],['balance','撥款紀錄']] as const : [['sale','代客販售'],['orders','經銷訂單'],['balance','加值與帳本']] as const).map(([key,label]) => <button key={key} onClick={() => setView(key)} className={`py-4 text-sm font-bold ${view === key ? 'border-b-2 border-[#ff4f73]' : 'text-white/40'}`}>{label}</button>)}</div></nav>
       <div className={`mx-auto max-w-7xl px-4 pt-7 ${dealer.sales_mode !== 'referral' && view === 'sale' && cartItems.length ? 'pb-28 lg:pb-7' : 'pb-7'}`}>
         {message && <div className="mb-6 border-l-2 border-[#55d5ea] bg-white/5 px-4 py-3 text-sm">{message}</div>}
-        {dealer.sales_mode === 'referral' && view === 'sale' && <ReferralCatalog dealer={dealer} products={products} selectedCountry={selectedCountry} selectedDays={selectedDays} referralCodeDraft={referralCodeDraft} busy={busy} onCodeChange={setReferralCodeDraft} onUpdateCode={() => void updateReferralCode()} onChooseCountry={chooseCountry} onReturn={returnToCountries} onChooseDays={setSelectedDays} />}
-        {dealer.sales_mode === 'referral' && view === 'orders' && <ReferralEarnings summary={referralSummary} commissions={referralCommissions} />}
-        {dealer.sales_mode === 'referral' && view === 'balance' && <ReferralPayoutPanel summary={referralSummary} payouts={referralPayouts} note={payoutNote} busy={busy} onNoteChange={setPayoutNote} onRequest={() => void requestReferralPayout()} />}
+        {dealer.sales_mode === 'referral' && view === 'sale' && <MultiReferralCatalog dealer={dealer} products={products} codes={referralCodes} selectedCountry={selectedCountry} selectedDays={selectedDays} referralCodeDraft={referralCodeDraft} busy={busy} onCodeChange={setReferralCodeDraft} onCreateCode={() => void createReferralCode()} onChooseCountry={chooseCountry} onReturn={returnToCountries} onChooseDays={setSelectedDays} />}
+        {dealer.sales_mode === 'referral' && view === 'orders' && <MultiReferralEarnings codes={referralCodes} selectedCode={selectedReferralCode} onSelectCode={setSelectedReferralCode} commissions={referralCommissions} />}
+        {dealer.sales_mode === 'referral' && view === 'balance' && <MultiReferralPayoutPanel codes={referralCodes} selectedCode={selectedReferralCode} onSelectCode={setSelectedReferralCode} commissions={referralCommissions} payouts={referralPayouts} note={payoutNote} busy={busy} onNoteChange={setPayoutNote} onRequest={() => void requestReferralPayout()} />}
         {dealer.sales_mode !== 'referral' && view === 'sale' && <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
           <section ref={salesCatalogRef} className="scroll-mt-20">
             {!selectedCountry ? (
@@ -583,6 +593,44 @@ export default function DealerPage() {
   );
 }
 
+function ReferralCodeTabs({ codes, selectedCode, onSelectCode }: { codes: DealerReferralCode[]; selectedCode: string; onSelectCode: (code: string) => void }) {
+  if (!codes.length) return <p className="rounded-xl border border-dashed border-white/15 p-5 text-sm text-white/45">尚未建立推薦碼，請先到「推薦方案」新增。</p>;
+  return <div className="flex flex-wrap gap-2">{codes.map(item => <button key={item.id} type="button" onClick={() => onSelectCode(item.code)} className={`rounded-md border px-4 py-2 font-mono text-sm font-black ${selectedCode === item.code ? 'border-emerald-300 bg-emerald-300 text-black' : 'border-white/15 bg-white/5 text-white/65'}`}>{item.code}</button>)}</div>;
+}
+
+function MultiReferralCatalog({ dealer, products, codes, selectedCountry, selectedDays, referralCodeDraft, busy, onCodeChange, onCreateCode, onChooseCountry, onReturn, onChooseDays }: {
+  dealer: Dealer; products: Product[]; codes: DealerReferralCode[]; selectedCountry: string; selectedDays: number | null; referralCodeDraft: string; busy: boolean;
+  onCodeChange: (value: string) => void; onCreateCode: () => void; onChooseCountry: (country: string) => void; onReturn: () => void; onChooseDays: (days: number) => void;
+}) {
+  const countries = Array.from(new Set(products.map(item => item.country))).sort((a, b) => a.localeCompare(b, 'zh-TW'));
+  const days = Array.from(new Set(products.filter(item => item.country === selectedCountry).map(item => item.validity_days))).sort((a, b) => a - b);
+  const filtered = products.filter(item => item.country === selectedCountry && item.validity_days === selectedDays);
+  return <div>
+    <section className="border-b border-white/10 pb-7">
+      <p className="text-sm font-bold text-emerald-300">官網推薦成交</p><h2 className="mt-1 text-2xl font-black">我的推薦碼</h2>
+      <p className="mt-2 text-sm leading-6 text-white/45">可自行新增多個推薦碼，每個推薦碼的成交、分潤與撥款分開統計。所有推薦碼套用相同的合作分潤設定。</p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{codes.map(item => <div key={item.id} className="flex items-center justify-between rounded-xl border border-emerald-300/20 bg-emerald-300/[0.05] p-4"><div><p className="font-mono text-lg font-black text-emerald-300">{item.code}</p><p className="mt-1 text-xs text-white/35">客戶折扣 {Number(dealer.referral_discount_percent || 0)}%</p></div><button type="button" title="複製推薦碼" onClick={() => void navigator.clipboard.writeText(item.code)} className="grid size-10 place-items-center rounded-md border border-white/15"><Copy size={17}/></button></div>)}</div>
+      <div className="mt-4 flex max-w-lg gap-2"><input value={referralCodeDraft} onChange={event => onCodeChange(event.target.value.toUpperCase())} maxLength={24} className="field min-w-0" aria-label="新增推薦碼" placeholder="輸入新的推薦碼"/><button type="button" onClick={onCreateCode} disabled={busy || !referralCodeDraft.trim()} className="shrink-0 rounded-md bg-emerald-300 px-5 font-black text-black disabled:opacity-40"><Plus size={17} className="mr-1 inline"/>新增</button></div>
+    </section>
+    <section className="pt-7">{!selectedCountry ? <><h3 className="text-xl font-black">選擇 eSIM 國家</h3><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{countries.map(item => { const info = getEsimCountryInfo(item); const dayCount = new Set(products.filter(product => product.country === item).map(product => product.validity_days)).size; return <button key={item} type="button" onClick={() => onChooseCountry(item)} className="group flex min-h-28 flex-col items-start justify-between rounded-xl border border-white/10 bg-[#121222] p-4 text-left transition hover:border-emerald-300/50"><span className="text-3xl" aria-hidden="true">{info.flag}</span><span className="mt-4 flex w-full items-end justify-between gap-2"><span><span className="block font-black">{item}</span><span className="text-xs text-white/35">{dayCount} 種天數</span></span><ChevronRight size={18} className="text-white/30"/></span></button>; })}</div></> : <><button type="button" onClick={onReturn} className="inline-flex items-center gap-2 text-sm font-bold text-white/50"><ArrowLeft size={17}/>返回選擇國家</button><div className="mt-5 flex items-center gap-4 border-b border-white/10 pb-5"><span className="text-4xl">{getEsimCountryInfo(selectedCountry).flag}</span><div><p className="text-sm text-emerald-300">推薦分潤</p><h2 className="text-2xl font-black">{selectedCountry} eSIM</h2></div></div><div className="py-6"><h3 className="font-black">選擇使用天數</h3><div className="mt-3 flex flex-wrap gap-2">{days.map(value => <button key={value} type="button" onClick={() => onChooseDays(value)} className={`min-w-20 rounded-md border px-4 py-3 font-black ${selectedDays === value ? 'border-emerald-300 bg-emerald-300 text-black' : 'border-white/12 bg-white/5 text-white/65'}`}>{value} 天</button>)}</div></div>{selectedDays === null ? <div className="rounded-xl border border-dashed border-white/12 px-5 py-10 text-center text-sm text-white/35">請先選擇天數</div> : <div className="divide-y divide-white/8 border-y border-white/10">{filtered.map(product => <article key={product.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="font-semibold">{product.name}</p><p className="mt-1 text-sm text-white/40">{product.country} · {product.validity_days} 天{product.data_amount ? ` · ${product.data_amount}` : ''}</p><p className="mt-1 text-xs text-white/30">官網售價 {money(product.retail_price)}</p></div><div className="sm:text-right"><p className="text-xs text-white/40">每張成交分潤</p><p className="text-xl font-black text-emerald-300">{money(product.commission_amount || 0)}</p></div></article>)}</div>}</>}</section>
+  </div>;
+}
+
+function MultiReferralEarnings({ codes, selectedCode, onSelectCode, commissions }: { codes: DealerReferralCode[]; selectedCode: string; onSelectCode: (code: string) => void; commissions: ReferralCommission[] }) {
+  const rows = commissions.filter(item => item.code_snapshot === selectedCode);
+  const summary = summarizeReferrals(rows);
+  const labels: Record<string, string> = { pending: '待付款', available: '可撥款', requested: '撥款申請中', paid: '已撥款', cancelled: '已取消' };
+  const cards: Array<[string, string | number]> = [['成交筆數', summary.totalOrders], ['待付款', money(summary.pendingAmount)], ['可撥款', money(summary.availableAmount)], ['申請中', money(summary.requestedAmount)], ['已撥款', money(summary.paidAmount)]];
+  return <section><h2 className="text-2xl font-black">依推薦碼查看成交</h2><div className="mt-4"><ReferralCodeTabs codes={codes} selectedCode={selectedCode} onSelectCode={onSelectCode}/></div>{selectedCode && <><div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{cards.map(([label,value]) => <div key={label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><p className="text-xs text-white/40">{label}</p><p className="mt-2 text-xl font-black text-emerald-300">{value}</p></div>)}</div><h3 className="mt-8 text-xl font-black">{selectedCode} 成交明細</h3><div className="mt-4 divide-y divide-white/8 border-y border-white/10">{rows.length ? rows.map(item => { const order = first(item.orders); return <div key={item.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_120px_120px_120px] sm:items-center"><div><p className="font-mono text-sm">{order?.order_number || item.code_snapshot}</p><p className="mt-1 text-xs text-white/35">{new Date(item.created_at).toLocaleString('zh-TW')} · {item.item_count} 張</p></div><div><p className="text-xs text-white/35">客戶實付</p><p className="font-bold">{money(item.paid_amount)}</p></div><div><p className="text-xs text-white/35">分潤</p><p className="font-black text-emerald-300">{money(item.commission_amount)}</p></div><p className="text-sm font-bold text-white/60">{labels[item.status] || item.status}</p></div>; }) : <p className="py-12 text-center text-white/35">這個推薦碼尚無成交</p>}</div></>}</section>;
+}
+
+function MultiReferralPayoutPanel({ codes, selectedCode, onSelectCode, commissions, payouts, note, busy, onNoteChange, onRequest }: { codes: DealerReferralCode[]; selectedCode: string; onSelectCode: (code: string) => void; commissions: ReferralCommission[]; payouts: ReferralPayout[]; note: string; busy: boolean; onNoteChange: (value: string) => void; onRequest: () => void }) {
+  const summary = summarizeReferrals(commissions, selectedCode);
+  const codePayouts = payouts.filter(item => item.code_snapshot === selectedCode);
+  return <section><h2 className="text-2xl font-black">依推薦碼申請撥款</h2><div className="mt-4"><ReferralCodeTabs codes={codes} selectedCode={selectedCode} onSelectCode={onSelectCode}/></div>{selectedCode && <div className="mt-7 grid gap-8 lg:grid-cols-[360px_1fr]"><div><HandCoins className="text-emerald-300"/><h3 className="mt-4 text-xl font-black">{selectedCode} 分潤撥款</h3><p className="mt-2 text-sm leading-6 text-white/45">此推薦碼目前可申請 {money(summary.availableAmount)}，不會合併其他推薦碼的分潤。</p><textarea rows={3} value={note} onChange={event => onNoteChange(event.target.value)} className="field mt-5 py-3" placeholder="撥款備註（選填）"/><button type="button" onClick={onRequest} disabled={busy || summary.availableAmount <= 0 || summary.requestedAmount > 0} className="mt-3 h-12 w-full rounded-md bg-emerald-300 font-black text-black disabled:opacity-40">申請撥款 {money(summary.availableAmount)}</button>{summary.requestedAmount > 0 && <p className="mt-3 text-sm text-amber-200">此推薦碼已有 {money(summary.requestedAmount)} 撥款申請處理中</p>}</div><div><h3 className="text-xl font-black">{selectedCode} 撥款紀錄</h3><div className="mt-5 divide-y divide-white/8 border-y border-white/10">{codePayouts.length ? codePayouts.map(item => <div key={item.id} className="grid grid-cols-[1fr_auto] gap-3 py-4"><div><p>{item.status === 'paid' ? '已完成撥款' : item.status === 'requested' ? '撥款申請處理中' : item.status === 'rejected' ? '已退回可撥款' : '已取消'}</p><p className="mt-1 text-xs text-white/35">{new Date(item.requested_at).toLocaleString('zh-TW')}{item.admin_note ? ` · ${item.admin_note}` : ''}</p></div><p className="font-black text-emerald-300">{money(item.amount)}</p></div>) : <p className="py-10 text-center text-white/35">這個推薦碼尚無撥款紀錄</p>}</div></div></div>}</section>;
+}
+
+/* Legacy single-code components retained here temporarily for reference.
 function ReferralCatalog({ dealer, products, selectedCountry, selectedDays, referralCodeDraft, busy, onCodeChange, onUpdateCode, onChooseCountry, onReturn, onChooseDays }: {
   dealer: Dealer; products: Product[]; selectedCountry: string; selectedDays: number | null; referralCodeDraft: string; busy: boolean;
   onCodeChange: (value: string) => void; onUpdateCode: () => void; onChooseCountry: (country: string) => void; onReturn: () => void; onChooseDays: (days: number) => void;
@@ -602,6 +650,7 @@ function ReferralEarnings({ summary, commissions }: { summary: ReferralSummary; 
 function ReferralPayoutPanel({ summary, payouts, note, busy, onNoteChange, onRequest }: { summary: ReferralSummary; payouts: ReferralPayout[]; note: string; busy: boolean; onNoteChange: (value: string) => void; onRequest: () => void }) {
   return <div className="grid gap-8 lg:grid-cols-[360px_1fr]"><section><HandCoins className="text-emerald-300"/><h2 className="mt-4 text-2xl font-black">申請分潤撥款</h2><p className="mt-2 text-sm leading-6 text-white/45">目前可申請 {money(summary.availableAmount)}。送出後由一飛通後台確認撥款。</p><textarea rows={3} value={note} onChange={event => onNoteChange(event.target.value)} className="field mt-5 py-3" placeholder="撥款備註（選填）"/><button type="button" onClick={onRequest} disabled={busy || summary.availableAmount <= 0 || summary.requestedAmount > 0} className="mt-3 h-12 w-full rounded-md bg-emerald-300 font-black text-black disabled:opacity-40">申請撥款 {money(summary.availableAmount)}</button>{summary.requestedAmount > 0 && <p className="mt-3 text-sm text-amber-200">已有 {money(summary.requestedAmount)} 撥款申請處理中</p>}</section><section><h2 className="text-2xl font-black">撥款紀錄</h2><div className="mt-5 divide-y divide-white/8 border-y border-white/10">{payouts.length ? payouts.map(item => <div key={item.id} className="grid grid-cols-[1fr_auto] gap-3 py-4"><div><p>{item.status === 'paid' ? '已完成撥款' : item.status === 'requested' ? '撥款申請處理中' : item.status === 'rejected' ? '已退回可撥款' : '已取消'}</p><p className="mt-1 text-xs text-white/35">{new Date(item.requested_at).toLocaleString('zh-TW')}{item.admin_note ? ` · ${item.admin_note}` : ''}</p></div><p className="font-black text-emerald-300">{money(item.amount)}</p></div>) : <p className="py-10 text-center text-white/35">尚無撥款紀錄</p>}</div></section></div>;
 }
+*/
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-2 block text-sm text-white/50">{label}</span>{children}</label>; }
 function ApplicationFields({ value, onChange }: { value: DealerApplication; onChange: (value: DealerApplication) => void }) {

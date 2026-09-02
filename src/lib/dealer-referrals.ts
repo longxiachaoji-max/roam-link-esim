@@ -31,12 +31,21 @@ export async function findDealerReferralQuote(
   const code = normalizeReferralCode(rawCode);
   if (!code) return null;
 
+  const { data: referralCode, error: codeError } = await supabase
+    .from('dealer_referral_codes')
+    .select('dealer_id, code')
+    .eq('code', code)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (codeError) throw codeError;
+  if (!referralCode) return null;
+
   const { data: dealer, error } = await supabase
     .from('dealers')
-    .select('id, email, store_name, referral_code, referral_discount_percent, referral_commission_mode, referral_commission_value')
+    .select('id, email, store_name, referral_discount_percent, referral_commission_mode, referral_commission_value')
+    .eq('id', referralCode.dealer_id)
     .eq('status', 'approved')
     .eq('sales_mode', 'referral')
-    .eq('referral_code', code)
     .maybeSingle();
   if (error) throw error;
   if (!dealer) return null;

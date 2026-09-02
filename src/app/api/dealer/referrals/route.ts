@@ -11,7 +11,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: '此帳號不是推薦碼合作模式' }, { status: 403 });
     }
 
-    const [{ data: commissions, error: commissionError }, { data: payouts, error: payoutError }] = await Promise.all([
+    const [{ data: codes, error: codeError }, { data: commissions, error: commissionError }, { data: payouts, error: payoutError }] = await Promise.all([
+      supabase
+        .from('dealer_referral_codes')
+        .select('id, code, is_active, created_at')
+        .eq('dealer_id', dealer.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true }),
       supabase
         .from('dealer_referral_commissions')
         .select('id, code_snapshot, original_amount, discount_amount, paid_amount, item_count, commission_amount, status, available_at, paid_at, created_at, orders ( order_number, payment_status, order_status )')
@@ -20,11 +26,12 @@ export async function GET(request: Request) {
         .limit(100),
       supabase
         .from('dealer_referral_payouts')
-        .select('id, amount, status, dealer_note, admin_note, requested_at, reviewed_at, paid_at')
+        .select('id, code_snapshot, amount, status, dealer_note, admin_note, requested_at, reviewed_at, paid_at')
         .eq('dealer_id', dealer.id)
         .order('requested_at', { ascending: false })
         .limit(50)
     ]);
+    if (codeError) throw codeError;
     if (commissionError) throw commissionError;
     if (payoutError) throw payoutError;
 
@@ -41,6 +48,7 @@ export async function GET(request: Request) {
         requestedAmount: amountFor(['requested']),
         paidAmount: amountFor(['paid'])
       },
+      codes: codes || [],
       commissions: rows,
       payouts: payouts || []
     });
@@ -60,36 +68,45 @@ export async function POST(request: Request) {
     const body = await request.json();
     const action = String(body.action || '');
 
-    if (action === 'updateCode') {
+    if (action === 'createCode') {
       const code = normalizeReferralCode(String(body.code || ''));
       if (referralCodeLength(code) < MIN_REFERRAL_CODE_LENGTH) {
         return NextResponse.json({ error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字` }, { status: 400 });
       }
-      const [{ data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([
+      const [{ data: codeConflict }, { data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([
+        supabase.from('dealer_referral_codes').select('id').eq('code', code).maybeSingle(),
         supabase.from('dealers').select('id').eq('referral_code', code).neq('id', dealer.id).maybeSingle(),
         supabase.from('promo_codes').select('id').eq('code', code).maybeSingle(),
         readReferralConfig(supabase)
       ]);
       const memberConflict = Object.values(referral.config.customers).some(rule => rule.code === code);
-      if (dealerConflict || promoConflict || memberConflict) {
+      if (codeConflict || dealerConflict || promoConflict || memberConflict) {
         return NextResponse.json({ error: '此推薦碼已被使用，請換一個' }, { status: 409 });
       }
 
       const { data, error } = await supabase
-        .from('dealers')
-        .update({ referral_code: code })
-        .eq('id', dealer.id)
-        .eq('sales_mode', 'referral')
-        .select('referral_code')
+        .from('dealer_referral_codes')
+        .insert({ dealer_id: dealer.id, code })
+        .select('id, code, is_active, created_at')
         .single();
+      if (error?.code === '23505') {
+        return NextResponse.json({ error: '此推薦碼已被使用，請換一個' }, { status: 409 });
+      }
       if (error) throw error;
-      return NextResponse.json({ success: true, referralCode: data.referral_code });
+      if (!dealer.referral_code) {
+        const { error: primaryError } = await supabase.from('dealers').update({ referral_code: code }).eq('id', dealer.id);
+        if (primaryError) throw primaryError;
+      }
+      return NextResponse.json({ success: true, code: data });
     }
 
     if (action === 'requestPayout') {
       const note = String(body.note || '').trim().slice(0, 300);
+      const code = normalizeReferralCode(String(body.code || ''));
+      if (!code) return NextResponse.json({ error: '請選擇要申請撥款的推薦碼' }, { status: 400 });
       const { data, error } = await supabase.rpc('request_dealer_referral_payout', {
         p_dealer_id: dealer.id,
+        p_code: code,
         p_dealer_note: note || null
       });
       if (error?.message.includes('PAYOUT_ALREADY_REQUESTED')) {

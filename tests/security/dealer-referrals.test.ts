@@ -25,3 +25,17 @@ test('public checkout quote does not expose dealer commission settings', async (
   const publicQuote = route.slice(route.indexOf('quote: {'), route.indexOf('quote: {') + 350);
   assert.doesNotMatch(publicQuote, /commissionMode|commissionValue|dealerId/);
 });
+
+test('dealers can own multiple private referral codes with payouts separated by code', async () => {
+  const migration = await readFile(new URL('../../supabase/migrations/20260903100000_dealer_multiple_referral_codes.sql', import.meta.url), 'utf8');
+  const referralRoute = await readFile(new URL('../../src/app/api/dealer/referrals/route.ts', import.meta.url), 'utf8');
+  const checkout = await readFile(new URL('../../src/lib/dealer-referrals.ts', import.meta.url), 'utf8');
+
+  assert.match(migration, /create table if not exists public\.dealer_referral_codes/i);
+  assert.match(migration, /dealer_referral_codes enable row level security/i);
+  assert.match(migration, /unique index[\s\S]+dealer_id, coalesce\(upper\(code_snapshot\)/i);
+  assert.match(migration, /upper\(code_snapshot\) = v_code and status = 'available'/i);
+  assert.match(referralRoute, /action === 'createCode'/);
+  assert.match(referralRoute, /p_code: code/);
+  assert.match(checkout, /from\('dealer_referral_codes'\)/);
+});
