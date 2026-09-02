@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, Wifi } from 'lucide-react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
   ESIM_DESTINATIONS,
   getEsimDestination,
+  getEsimDestinationForCountry,
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
 import { getEsimDestinationPlanSummary } from '@/lib/esim-seo-products';
@@ -20,7 +21,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const destination = getEsimDestination(slug) || createAutomaticEsimDestination(slug);
+  const destination = getEsimDestination(slug) || getEsimDestinationForCountry(slug) || createAutomaticEsimDestination(slug);
   if (!destination) return { title: '找不到 eSIM 目的地' };
 
   return {
@@ -73,6 +74,8 @@ function planStructuredData(destination: NonNullable<ReturnType<typeof getEsimDe
 export default async function EsimDestinationPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const curatedDestination = getEsimDestination(slug);
+  const countryDestination = getEsimDestinationForCountry(slug);
+  if (!curatedDestination && countryDestination) redirect(getEsimDestinationHref(countryDestination));
   const destination = curatedDestination || createAutomaticEsimDestination(slug);
   if (!destination) notFound();
 

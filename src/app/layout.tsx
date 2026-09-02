@@ -30,6 +30,8 @@ export const metadata: Metadata = {
     "KDDI eSIM",
     "韓國 eSIM",
     "泰國 eSIM",
+    "印尼 eSIM",
+    "巴厘島 eSIM",
     "越南 eSIM",
     "中國 eSIM",
     "中港澳 eSIM",
