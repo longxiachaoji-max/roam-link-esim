@@ -10,7 +10,7 @@ import {
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Barcode, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
+import { ArrowRight, AtSign, Barcode, Camera, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
@@ -26,6 +26,7 @@ import {
 } from '@/lib/esim-destinations';
 import type { HomeCarouselItem } from '@/lib/home-carousel-types';
 import { DEFAULT_HOME_FAQS, type HomeFaqItem } from '@/lib/home-faq-types';
+import { OFFICIAL_INSTAGRAM_URL, OFFICIAL_THREADS_URL } from '@/lib/social-profiles';
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
@@ -1087,6 +1088,32 @@ export default function Home() {
                 className="h-9 w-auto"
               />
             </a>
+            <div className="mt-5">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-white/40">官方社群</p>
+              <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                <a
+                  href={OFFICIAL_INSTAGRAM_URL}
+                  target="_blank"
+                  rel="me noopener noreferrer"
+                  aria-label="前往一飛通官方 Instagram @first_esim"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-4 text-sm font-bold text-white/70 transition-colors hover:border-[#E1306C]/60 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E1306C]"
+                >
+                  <Camera size={18} aria-hidden="true" />
+                  Instagram
+                </a>
+                <a
+                  href={OFFICIAL_THREADS_URL}
+                  target="_blank"
+                  rel="me noopener noreferrer"
+                  aria-label="前往一飛通官方 Threads @first_esim"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-4 text-sm font-bold text-white/70 transition-colors hover:border-white/50 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <AtSign size={18} aria-hidden="true" />
+                  Threads
+                </a>
+              </div>
+              <p className="mt-2 text-xs text-white/35">@first_esim</p>
+            </div>
           </div>
         </div>
       </footer>

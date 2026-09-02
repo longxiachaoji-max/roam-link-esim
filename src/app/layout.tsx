@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 import { serializeJsonLd } from "@/lib/json-ld";
+import { OFFICIAL_SOCIAL_PROFILE_URLS } from "@/lib/social-profiles";
 import ReferralLinkCapture from "@/components/referral-link-capture";
 import "./globals.css";
 
@@ -96,6 +97,7 @@ const organizationStructuredData = {
   url: "https://firstesim.space",
   logo: "https://firstesim.space/icon.png",
   email: "roamlinktw@gmail.com",
+  sameAs: OFFICIAL_SOCIAL_PROFILE_URLS,
 };
 
 export default function RootLayout({
