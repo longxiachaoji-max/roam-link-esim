@@ -13,7 +13,7 @@ import { getEsimDestinationPlanSummary } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
 import EsimPageHeader from '../esim-page-header';
 
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
 
 export function generateStaticParams() {
   return ESIM_DESTINATIONS.map(destination => ({ slug: destination.slug }));
