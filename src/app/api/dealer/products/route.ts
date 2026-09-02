@@ -16,20 +16,13 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     if (dealer.sales_mode === 'referral') {
-      const discountPercent = Math.max(0, Number(dealer.referral_discount_percent) || 0);
-      const commissionMode = dealer.referral_commission_mode === 'fixed' ? 'fixed' : 'percentage';
-      const commissionValue = Math.max(0, Number(dealer.referral_commission_value) || 0);
       return NextResponse.json({
         salesMode: 'referral',
         products: (data || []).map(({ supplier_cost_twd: _supplierCost, ...product }) => {
           const retailPrice = Math.round(Number(product.price));
-          const payablePrice = Math.max(0, retailPrice - Math.round(retailPrice * discountPercent / 100));
           return {
             ...product,
-            retail_price: retailPrice,
-            commission_amount: commissionMode === 'fixed'
-              ? Math.round(commissionValue)
-              : Math.round(payablePrice * commissionValue / 100)
+            retail_price: retailPrice
           };
         })
       });

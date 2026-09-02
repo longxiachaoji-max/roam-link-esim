@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const [{ data: codes, error: codeError }, { data: commissions, error: commissionError }, { data: payouts, error: payoutError }] = await Promise.all([
       supabase
         .from('dealer_referral_codes')
-        .select('id, code, is_active, created_at')
+        .select('id, code, is_active, customer_discount_percent, owner_commission_percent, created_at')
         .eq('dealer_id', dealer.id)
         .eq('is_active', true)
         .order('created_at', { ascending: true }),
@@ -70,8 +70,16 @@ export async function POST(request: Request) {
 
     if (action === 'createCode') {
       const code = normalizeReferralCode(String(body.code || ''));
+      const customerDiscountPercent = Math.round(Number(body.customerDiscountPercent) * 100) / 100;
+      const ownerCommissionPercent = Math.round(Number(body.ownerCommissionPercent) * 100) / 100;
       if (referralCodeLength(code) < MIN_REFERRAL_CODE_LENGTH) {
         return NextResponse.json({ error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字` }, { status: 400 });
+      }
+      const allowedShare = Math.min(30, Math.max(0, Number(dealer.referral_share_percent) || 0));
+      if (!Number.isFinite(customerDiscountPercent) || !Number.isFinite(ownerCommissionPercent)
+        || customerDiscountPercent < 0 || ownerCommissionPercent < 0
+        || customerDiscountPercent + ownerCommissionPercent > allowedShare) {
+        return NextResponse.json({ error: `客戶折扣與本人分潤合計不可超過 ${allowedShare}%` }, { status: 400 });
       }
       const [{ data: codeConflict }, { data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([
         supabase.from('dealer_referral_codes').select('id').eq('code', code).maybeSingle(),
@@ -86,8 +94,8 @@ export async function POST(request: Request) {
 
       const { data, error } = await supabase
         .from('dealer_referral_codes')
-        .insert({ dealer_id: dealer.id, code })
-        .select('id, code, is_active, created_at')
+        .insert({ dealer_id: dealer.id, code, customer_discount_percent: customerDiscountPercent, owner_commission_percent: ownerCommissionPercent })
+        .select('id, code, is_active, customer_discount_percent, owner_commission_percent, created_at')
         .single();
       if (error?.code === '23505') {
         return NextResponse.json({ error: '此推薦碼已被使用，請換一個' }, { status: 409 });
@@ -97,6 +105,25 @@ export async function POST(request: Request) {
         const { error: primaryError } = await supabase.from('dealers').update({ referral_code: code }).eq('id', dealer.id);
         if (primaryError) throw primaryError;
       }
+      return NextResponse.json({ success: true, code: data });
+    }
+
+    if (action === 'updateCodeSettings') {
+      const codeId = String(body.codeId || '');
+      const customerDiscountPercent = Math.round(Number(body.customerDiscountPercent) * 100) / 100;
+      const ownerCommissionPercent = Math.round(Number(body.ownerCommissionPercent) * 100) / 100;
+      const allowedShare = Math.min(30, Math.max(0, Number(dealer.referral_share_percent) || 0));
+      if (!Number.isFinite(customerDiscountPercent) || !Number.isFinite(ownerCommissionPercent)
+        || customerDiscountPercent < 0 || ownerCommissionPercent < 0
+        || customerDiscountPercent + ownerCommissionPercent > allowedShare) {
+        return NextResponse.json({ error: `客戶折扣與本人分潤合計不可超過 ${allowedShare}%` }, { status: 400 });
+      }
+      const { data, error } = await supabase.from('dealer_referral_codes').update({
+        customer_discount_percent: customerDiscountPercent,
+        owner_commission_percent: ownerCommissionPercent
+      }).eq('id', codeId).eq('dealer_id', dealer.id).select('id, code, customer_discount_percent, owner_commission_percent').maybeSingle();
+      if (error) throw error;
+      if (!data) return NextResponse.json({ error: '找不到這個推薦碼' }, { status: 404 });
       return NextResponse.json({ success: true, code: data });
     }
 

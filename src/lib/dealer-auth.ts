@@ -17,6 +17,7 @@ export interface DealerAccount {
   referral_discount_percent: number;
   referral_commission_mode: 'percentage' | 'fixed';
   referral_commission_value: number;
+  referral_share_percent: number;
   balance: number;
   admin_note: string | null;
   created_at: string;

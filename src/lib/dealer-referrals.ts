@@ -33,7 +33,7 @@ export async function findDealerReferralQuote(
 
   const { data: referralCode, error: codeError } = await supabase
     .from('dealer_referral_codes')
-    .select('dealer_id, code')
+    .select('dealer_id, code, customer_discount_percent, owner_commission_percent')
     .eq('code', code)
     .eq('is_active', true)
     .maybeSingle();
@@ -42,7 +42,7 @@ export async function findDealerReferralQuote(
 
   const { data: dealer, error } = await supabase
     .from('dealers')
-    .select('id, email, store_name, referral_discount_percent, referral_commission_mode, referral_commission_value')
+    .select('id, email, store_name, referral_share_percent')
     .eq('id', referralCode.dealer_id)
     .eq('status', 'approved')
     .eq('sales_mode', 'referral')
@@ -53,10 +53,11 @@ export async function findDealerReferralQuote(
     throw new Error('不可輸入自己的推薦碼');
   }
 
-  const discountPercent = percent(dealer.referral_discount_percent);
+  const allowedShare = Math.min(30, Math.max(0, Number(dealer.referral_share_percent) || 0));
+  const discountPercent = Math.min(allowedShare, percent(referralCode.customer_discount_percent));
   const discountAmount = Math.min(originalTotal, Math.round(originalTotal * discountPercent / 100));
-  const commissionMode: DealerCommissionMode = dealer.referral_commission_mode === 'fixed' ? 'fixed' : 'percentage';
-  const commissionValue = Math.max(0, Number(dealer.referral_commission_value) || 0);
+  const commissionMode: DealerCommissionMode = 'percentage';
+  const commissionValue = Math.min(Math.max(0, allowedShare - discountPercent), percent(referralCode.owner_commission_percent));
 
   return {
     source: 'dealer_referral',
@@ -73,7 +74,7 @@ export async function findDealerReferralQuote(
 }
 
 export function calculateDealerCommission(quote: DealerReferralQuote, itemCount: number) {
-  return calculateDealerCommissionAmount(quote.payableTotal, quote.commissionMode, quote.commissionValue, itemCount);
+  return calculateDealerCommissionAmount(quote.originalTotal, quote.commissionMode, quote.commissionValue, itemCount);
 }
 
 export async function recordDealerReferralCommission(

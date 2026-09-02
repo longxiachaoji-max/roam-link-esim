@@ -56,6 +56,7 @@ export async function PATCH(request: Request) {
       const referralDiscountPercent = Number(body.referralDiscountPercent);
       const referralCommissionMode = String(body.referralCommissionMode || 'percentage');
       const referralCommissionValue = Number(body.referralCommissionValue);
+      const referralSharePercent = Number(body.referralSharePercent);
       const validValue = pricingMode === 'percentage_markup'
         ? pricingValue >= 0 && pricingValue <= 500
         : pricingValue >= 0 && pricingValue <= 100000;
@@ -68,6 +69,9 @@ export async function PATCH(request: Request) {
         || !Number.isFinite(referralCommissionValue) || !validReferralValue
         || !Number.isFinite(referralDiscountPercent) || referralDiscountPercent < 0 || referralDiscountPercent >= 100) {
         return NextResponse.json({ error: '經銷商設定不正確' }, { status: 400 });
+      }
+      if (!Number.isFinite(referralSharePercent) || referralSharePercent < 0 || referralSharePercent > 30) {
+        return NextResponse.json({ error: '推薦碼可分配總比例必須介於 0% 到 30%' }, { status: 400 });
       }
       if (salesMode === 'referral') {
         if (referralCodeLength(referralCode) < MIN_REFERRAL_CODE_LENGTH) {
@@ -95,6 +99,7 @@ export async function PATCH(request: Request) {
           referral_discount_percent: Math.round(referralDiscountPercent * 100) / 100,
           referral_commission_mode: referralCommissionMode,
           referral_commission_value: Math.round(referralCommissionValue * 100) / 100,
+          referral_share_percent: Math.round(referralSharePercent * 100) / 100,
           admin_note: String(body.adminNote || '').trim().slice(0, 500) || null,
           reviewed_by: admin.id,
           reviewed_at: new Date().toISOString()
