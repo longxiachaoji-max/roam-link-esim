@@ -99,7 +99,7 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
   if (customerEmail) {
     try {
       await resend.emails.send({
-        from: `Roam Link eSIM <${fromEmail}>`,
+        from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
         to: [customerEmail],
         subject: pendingItems.length ? '付款成功，eSIM 正在準備中' : '付款成功，eSIM 已可安裝',
         html: `
@@ -124,7 +124,7 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
   if (settings.notify_email_enabled && settings.order_notify_email) {
     try {
       await resend.emails.send({
-        from: `Roam Link eSIM <${fromEmail}>`,
+        from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
         to: [settings.order_notify_email],
         subject: `待補 eSIM 訂單：${pendingNames}`,
         html: `<h1>綠界付款成功，訂單需要補 eSIM</h1><p>訂單：${order.order_number || order.id}</p><p>客戶：${customerEmail}</p><p>商品：${pendingNames}</p><p><a href="${adminUrl}">前往訂單管理</a></p>`

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, Copy, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star } from "lucide-react";
+import { X, MoreHorizontal, QrCode, Smartphone, Trash2, Edit3, Check, Share2, Copy, CreditCard, Barcode, Activity, PackageSearch, Wifi, Clock3, MessageSquareText, Star, RefreshCw } from "lucide-react";
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
@@ -71,6 +71,7 @@ export default function MemberCenter() {
   const [smoothnessRating, setSmoothnessRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [ordersRefreshing, setOrdersRefreshing] = useState(false);
 
   // Credit card topup
   const [isTopupOpen, setIsTopupOpen] = useState(false);
@@ -104,8 +105,8 @@ export default function MemberCenter() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const fetchOrders = async (_email: string) => {
-    const res = await authenticatedFetch('/api/member/orders');
+  const fetchOrders = async (_email: string, refresh = false) => {
+    const res = await authenticatedFetch(`/api/member/orders${refresh ? '?refresh=1' : ''}`);
     if (res.ok) {
       const data = await res.json();
       setOrders(data.orders || []);
@@ -122,6 +123,21 @@ export default function MemberCenter() {
         }
       }
       setUsageByItemId(cachedUsage);
+      return true;
+    }
+    return false;
+  };
+
+  const refreshOrders = async () => {
+    if (!user?.email || ordersRefreshing) return;
+    setOrdersRefreshing(true);
+    try {
+      const refreshed = await fetchOrders(user.email, true);
+      showToast(refreshed ? '訂單狀態已更新' : '訂單更新失敗，請稍後再試');
+    } catch {
+      showToast('訂單更新失敗，請稍後再試');
+    } finally {
+      setOrdersRefreshing(false);
     }
   };
 
@@ -786,7 +802,19 @@ export default function MemberCenter() {
           {/* eSIM List */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold">我的 eSIM</h2>
-            <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-white/50">共 {visibleEsimCount} 筆</span>
+              <button
+                type="button"
+                onClick={refreshOrders}
+                disabled={ordersRefreshing}
+                aria-label="重新整理 eSIM 訂單狀態"
+                title="重新整理訂單狀態"
+                className="grid h-9 w-9 place-items-center rounded-md border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-50"
+              >
+                <RefreshCw size={17} className={ordersRefreshing ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">

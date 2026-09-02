@@ -166,7 +166,7 @@ export async function POST(request: Request) {
 
       const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
       await resend.emails.send({
-        from: `Roam Link eSIM <${fromEmail}>`,
+        from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
         to: [settings.order_notify_email],
         subject: 'Roam Link eSIM 訂單提醒測試',
         html: '<p>這是一封後台訂單提醒測試信。若你收到這封信，代表 Mail 提醒設定正常。</p>'
