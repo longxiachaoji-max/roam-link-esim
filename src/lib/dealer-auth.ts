@@ -12,6 +12,11 @@ export interface DealerAccount {
   price_rate_percent: number;
   pricing_mode: 'percentage_markup' | 'fixed_markup';
   pricing_value: number;
+  sales_mode: 'direct' | 'referral';
+  referral_code: string | null;
+  referral_discount_percent: number;
+  referral_commission_mode: 'percentage' | 'fixed';
+  referral_commission_value: number;
   balance: number;
   admin_note: string | null;
   created_at: string;

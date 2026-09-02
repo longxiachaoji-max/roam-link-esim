@@ -44,7 +44,17 @@ export async function POST(request: Request) {
     }
 
     const quote = await resolveCheckoutDiscount(supabase, authData.user.email, code, originalTotal);
-    return NextResponse.json({ success: true, quote });
+    return NextResponse.json({
+      success: true,
+      quote: {
+        source: quote.source,
+        label: quote.label,
+        code: quote.code,
+        originalTotal: quote.originalTotal,
+        discountAmount: quote.discountAmount,
+        payableTotal: quote.payableTotal
+      }
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : '折扣碼無法使用' }, { status: 400 });
   }

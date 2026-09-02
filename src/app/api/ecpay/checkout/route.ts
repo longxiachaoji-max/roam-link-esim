@@ -7,8 +7,9 @@ import {
   getEcpayConfig,
   sanitizeEcpayText
 } from '@/lib/ecpay';
-import { isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
+import { isDealerReferralDiscount, isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
 import { parseReferralConfig, saveReferralConfig, type ReferralQuote } from '@/lib/referrals';
+import { recordDealerReferralCommission, type DealerReferralQuote } from '@/lib/dealer-referrals';
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
@@ -30,6 +31,8 @@ interface PendingCheckoutOrder {
   discount_amount: number | string | null;
   promo_code_id: string | null;
   promo_code_snapshot: string | null;
+  dealer_referral_id: string | null;
+  dealer_referral_code_snapshot: string | null;
   ecpay_payment_method: string | null;
   ecpay_barcode_created_at: string | null;
   payment_proof_uploaded_at: string | null;
@@ -99,6 +102,7 @@ export async function POST(request: Request) {
     let totalAmount = originalTotalAmount;
     let discountQuote: CheckoutDiscountQuote | null = null;
     let referralQuote: ReferralQuote | null = null;
+    let dealerReferralQuote: DealerReferralQuote | null = null;
 
     let { data: customer } = await supabase.from('customers').select('*').eq('email', authUser.email).single();
     if (!customer) {
@@ -120,6 +124,7 @@ export async function POST(request: Request) {
       discountQuote = await resolveCheckoutDiscount(supabase, authUser.email, discountCode, originalTotalAmount);
       totalAmount = discountQuote.payableTotal;
       if (discountQuote.source === 'referral') referralQuote = discountQuote;
+      if (isDealerReferralDiscount(discountQuote)) dealerReferralQuote = discountQuote;
     }
     if (totalAmount <= 0) {
       return NextResponse.json({ error: '折扣後金額為 0，請改用儲值金結帳' }, { status: 400 });
@@ -153,7 +158,7 @@ export async function POST(request: Request) {
       .from('orders')
       .select(`
         id, order_number, total_amount, original_total_amount, discount_amount,
-        promo_code_id, promo_code_snapshot, ecpay_payment_method,
+        promo_code_id, promo_code_snapshot, dealer_referral_id, dealer_referral_code_snapshot, ecpay_payment_method,
         ecpay_barcode_created_at, payment_proof_uploaded_at,
         order_items ( product_id, price )
       `)
@@ -175,6 +180,8 @@ export async function POST(request: Request) {
         && Math.round(Number(candidate.discount_amount || 0)) === discountAmount
         && candidate.promo_code_id === promoCodeId
         && candidate.promo_code_snapshot === promoCodeSnapshot
+        && candidate.dealer_referral_id === (dealerReferralQuote?.dealerId || null)
+        && candidate.dealer_referral_code_snapshot === (dealerReferralQuote?.code || null)
         && pendingReferralCode === (referralQuote?.code || null)
         && checkoutItemSignature(candidate.order_items || []) === currentItemSignature;
     });
@@ -207,6 +214,8 @@ export async function POST(request: Request) {
           discount_amount: discountAmount,
           promo_code_id: promoCodeId,
           promo_code_snapshot: promoCodeSnapshot,
+          dealer_referral_id: dealerReferralQuote?.dealerId || null,
+          dealer_referral_code_snapshot: dealerReferralQuote?.code || null,
           tokens_used: 0,
           payment_method: 'ECPAY',
           ecpay_payment_method: paymentMethod,
@@ -249,6 +258,10 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString()
       };
       await saveReferralConfig(supabase, settings?.usage_guide || '', referralConfig);
+    }
+
+    if (dealerReferralQuote) {
+      await recordDealerReferralCommission(supabase, order.id, dealerReferralQuote, products.length, false);
     }
 
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;

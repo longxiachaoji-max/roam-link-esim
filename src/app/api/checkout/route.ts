@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
-import { isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
+import { isDealerReferralDiscount, isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
+import { recordDealerReferralCommission } from '@/lib/dealer-referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
@@ -182,6 +183,10 @@ export async function POST(request: Request) {
       order_status: 'PENDING'
     };
     customer.token_balance = checkout.new_balance;
+
+    if (isDealerReferralDiscount(discountQuote)) {
+      await recordDealerReferralCommission(supabase, order.id, discountQuote, products.length, true);
+    }
 
     // 5. Claim inventory or ask the supplier to fulfill each paid item.
     const { data: orderItems, error: orderItemsError } = await supabase

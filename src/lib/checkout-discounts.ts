@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeReferralCode } from '@/lib/referral-code';
 import { buildReferralQuote, readReferralConfig, type ReferralQuote } from '@/lib/referrals';
 import { calculatePromoDiscount } from '@/lib/promo-discount-math';
+import { findDealerReferralQuote, type DealerReferralQuote } from '@/lib/dealer-referrals';
 
 type DiscountType = 'percent' | 'fixed';
 type AudienceType = 'public' | 'personal' | 'company';
@@ -38,7 +39,7 @@ export interface PromoDiscountQuote {
   payableTotal: number;
 }
 
-export type CheckoutDiscountQuote = PromoDiscountQuote | (ReferralQuote & { source: 'referral'; label: string });
+export type CheckoutDiscountQuote = PromoDiscountQuote | (ReferralQuote & { source: 'referral'; label: string }) | DealerReferralQuote;
 
 function normalizeEmail(value: string) {
   return String(value || '').trim().toLowerCase();
@@ -132,6 +133,9 @@ export async function resolveCheckoutDiscount(
   if (error) throw error;
   if (promo) return buildPromoQuote(supabase, promo as CheckoutPromoRow, customerEmail, originalTotal);
 
+  const dealerReferral = await findDealerReferralQuote(supabase, customerEmail, code, originalTotal);
+  if (dealerReferral) return dealerReferral;
+
   const { config } = await readReferralConfig(supabase);
   const referral = buildReferralQuote(config, customerEmail, code, originalTotal);
   return { ...referral, source: 'referral', label: '會員推薦優惠' };
@@ -139,4 +143,8 @@ export async function resolveCheckoutDiscount(
 
 export function isPromoDiscount(quote: CheckoutDiscountQuote | null): quote is PromoDiscountQuote {
   return quote?.source === 'promo';
+}
+
+export function isDealerReferralDiscount(quote: CheckoutDiscountQuote | null): quote is DealerReferralQuote {
+  return quote?.source === 'dealer_referral';
 }
