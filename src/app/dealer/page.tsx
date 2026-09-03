@@ -918,6 +918,7 @@ export default function DealerPage() {
             dealer={dealer}
             products={products}
             codes={referralCodes}
+            commissions={referralCommissions}
             selectedCode={selectedReferralCode}
             selectedCountry={selectedCountry}
             selectedDays={selectedDays}
@@ -1466,6 +1467,7 @@ function MultiReferralCatalog({
   dealer,
   products,
   codes,
+  commissions,
   selectedCode,
   selectedCountry,
   selectedDays,
@@ -1487,6 +1489,7 @@ function MultiReferralCatalog({
   dealer: Dealer;
   products: Product[];
   codes: DealerReferralCode[];
+  commissions: ReferralCommission[];
   selectedCode: string;
   selectedCountry: string;
   selectedDays: number | null;
@@ -1550,6 +1553,9 @@ function MultiReferralCatalog({
             const total =
               Number(item.customer_discount_percent) +
               Number(item.owner_commission_percent);
+            const codeSummary = summarizeReferrals(commissions, item.code);
+            const hasUnrequestedCommission =
+              codeSummary.pendingAmount > 0 || codeSummary.availableAmount > 0;
             return (
               <div
                 key={item.id}
@@ -1582,6 +1588,7 @@ function MultiReferralCatalog({
                       min="0"
                       max="30"
                       step="0.01"
+                      disabled={hasUnrequestedCommission}
                       value={item.customer_discount_percent}
                       onChange={(event) =>
                         onChangeSplit(
@@ -1600,6 +1607,7 @@ function MultiReferralCatalog({
                       min="0"
                       max="30"
                       step="0.01"
+                      disabled={hasUnrequestedCommission}
                       value={item.owner_commission_percent}
                       onChange={(event) =>
                         onChangeSplit(
@@ -1621,7 +1629,9 @@ function MultiReferralCatalog({
                   <button
                     type="button"
                     disabled={
-                      busy || total > Number(dealer.referral_share_percent)
+                      busy ||
+                      hasUnrequestedCommission ||
+                      total > Number(dealer.referral_share_percent)
                     }
                     onClick={() => onSaveSplit(item)}
                     className="rounded-md bg-emerald-300 px-3 py-2 text-xs font-black text-black disabled:opacity-40"
@@ -1629,6 +1639,15 @@ function MultiReferralCatalog({
                     儲存設定
                   </button>
                 </div>
+                {hasUnrequestedCommission && (
+                  <p className="mt-3 rounded-md bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-200">
+                    尚有{" "}
+                    {money(
+                      codeSummary.pendingAmount + codeSummary.availableAmount,
+                    )}{" "}
+                    未請款分潤。請先到「撥款紀錄」全額申請撥款，後續才能修改比例。
+                  </p>
+                )}
               </div>
             );
           })}

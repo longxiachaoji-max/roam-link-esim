@@ -50,7 +50,10 @@ interface ReferralPayout {
   amount: number;
   status: string;
   dealer_note: string | null;
+  admin_note: string | null;
   requested_at: string;
+  reviewed_at: string | null;
+  paid_at: string | null;
   dealers:
     | { store_name: string; email: string }
     | { store_name: string; email: string }[];
@@ -431,6 +434,66 @@ export default function AdminDealersPage() {
         </section>
       )}
 
+      <section className="mb-9">
+        <div className="mb-3 flex items-center gap-2">
+          <WalletCards className="text-cyan" size={21} />
+          <h2 className="text-lg font-bold">推薦分潤撥款紀錄</h2>
+        </div>
+        <div className="divide-y divide-white/8 border-y border-white/10">
+          {referralPayouts.length ? (
+            referralPayouts.map((payout) => {
+              const dealer = first(payout.dealers);
+              const payoutStatus =
+                payout.status === "paid"
+                  ? "已完成撥款"
+                  : payout.status === "requested"
+                    ? "待處理"
+                    : payout.status === "rejected"
+                      ? "已退回"
+                      : "已取消";
+              return (
+                <div
+                  key={payout.id}
+                  className="grid gap-3 py-4 md:grid-cols-[1fr_150px_130px_1fr] md:items-center"
+                >
+                  <div>
+                    <p className="font-semibold">{dealer?.store_name}</p>
+                    <p className="text-xs text-white/40">{dealer?.email}</p>
+                    <p className="mt-1 font-mono text-xs text-emerald-300">
+                      {payout.code_snapshot || "舊制未記錄推薦碼"}
+                    </p>
+                  </div>
+                  <p className="font-black text-emerald-300">
+                    {money(payout.amount)}
+                  </p>
+                  <p
+                    className={`text-sm font-bold ${payout.status === "paid" ? "text-emerald-300" : payout.status === "requested" ? "text-amber-200" : "text-white/45"}`}
+                  >
+                    {payoutStatus}
+                  </p>
+                  <div className="text-xs leading-5 text-white/40">
+                    <p>
+                      申請：
+                      {new Date(payout.requested_at).toLocaleString("zh-TW")}
+                    </p>
+                    {payout.paid_at && (
+                      <p>
+                        撥款：{new Date(payout.paid_at).toLocaleString("zh-TW")}
+                      </p>
+                    )}
+                    <p>{payout.admin_note || payout.dealer_note || "無備註"}</p>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="py-10 text-center text-white/35">
+              尚無推薦分潤撥款紀錄
+            </p>
+          )}
+        </div>
+      </section>
+
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row">
           <label className="relative flex-1">
@@ -495,7 +558,9 @@ export default function AdminDealersPage() {
                 </div>
                 <div>
                   <p className="text-xs text-white/35">
-                    {dealer.sales_mode === "referral" ? "可分配總比例" : "可用餘額"}
+                    {dealer.sales_mode === "referral"
+                      ? "可分配總比例"
+                      : "可用餘額"}
                   </p>
                   <p
                     className={`mt-1 font-black ${dealer.sales_mode === "referral" ? "text-emerald-300" : "text-amber-300"}`}

@@ -40,9 +40,9 @@ test('dealers can own multiple private referral codes with payouts separated by 
   assert.match(migration, /dealer_referral_codes enable row level security/i);
   assert.match(migration, /unique index[\s\S]+dealer_id, coalesce\(upper\(code_snapshot\)/i);
   assert.match(migration, /upper\(code_snapshot\) = v_code and status = 'available'/i);
-  assert.match(referralRoute, /action === 'createCode'/);
+  assert.match(referralRoute, /action === ["']createCode["']/);
   assert.match(referralRoute, /p_code: code/);
-  assert.match(checkout, /from\('dealer_referral_codes'\)/);
+  assert.match(checkout, /from\(["']dealer_referral_codes["']\)/);
 });
 
 test('admin share is capped at 30 percent and each code controls its customer/owner split', async () => {
@@ -52,7 +52,20 @@ test('admin share is capped at 30 percent and each code controls its customer/ow
   assert.match(migration, /referral_share_percent >= 0 and referral_share_percent <= 30/i);
   assert.match(migration, /customer_discount_percent \+ owner_commission_percent <= 30/i);
   assert.match(route, /customerDiscountPercent \+ ownerCommissionPercent > allowedShare/);
-  assert.match(route, /action === 'updateCodeSettings'/);
+  assert.match(route, /action === ["']updateCodeSettings["']/);
   assert.match(adminPage, /可分配總比例（最高 30%）/);
   assert.doesNotMatch(adminPage, /客戶結帳折扣（%）/);
+});
+
+test('referral split changes require all unrequested commission to be paid out first', async () => {
+  const route = await readFile(new URL('../../src/app/api/dealer/referrals/route.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../../supabase/migrations/20260903033506_lock_referral_split_with_unrequested_commission.sql', import.meta.url), 'utf8');
+  const dealerPage = await readFile(new URL('../../src/app/dealer/page.tsx', import.meta.url), 'utf8');
+  const adminPage = await readFile(new URL('../../src/app/admin/dealers/page.tsx', import.meta.url), 'utf8');
+
+  assert.match(route, /\.in\(["']status["'], \[["']pending["'], ["']available["']\]\)/);
+  assert.match(route, /請先將可請款金額全額申請撥款後再修改/);
+  assert.match(migration, /UNREQUESTED_COMMISSION_EXISTS/);
+  assert.match(dealerPage, /未請款分潤/);
+  assert.match(adminPage, /推薦分潤撥款紀錄/);
 });

@@ -12,29 +12,21 @@ export async function GET(request: Request) {
   try {
     await requireAdminUser(request);
     const supabase = getServerSupabase();
-    const [{ data: dealers, error: dealerError }, { data: topups, error: topupError }, { data: payouts, error: payoutError }] = await Promise.all([
-      supabase
-        .from('dealers')
-        .select('*')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('dealer_topup_requests')
-        .select('*, dealers ( store_name, email, balance )')
-        .order('created_at', { ascending: false })
-        .limit(100),
-      supabase
-        .from('dealer_referral_payouts')
-        .select('id, dealer_id, code_snapshot, amount, status, dealer_note, admin_note, requested_at, dealers ( store_name, email )')
-        .order('requested_at', { ascending: false })
-        .limit(100)
-    ]);
+    const [{ data: dealers, error: dealerError }, { data: topups, error: topupError }, { data: payouts, error: payoutError }] = await Promise.all([supabase.from('dealers').select('*').order('created_at', { ascending: false }), supabase.from('dealer_topup_requests').select('*, dealers ( store_name, email, balance )').order('created_at', { ascending: false }).limit(100), supabase.from('dealer_referral_payouts').select('id, dealer_id, code_snapshot, amount, status, dealer_note, admin_note, requested_at, reviewed_at, paid_at, dealers ( store_name, email )').order('requested_at', { ascending: false }).limit(100)]);
     if (dealerError) throw dealerError;
     if (topupError) throw topupError;
     if (payoutError) throw payoutError;
-    return NextResponse.json({ dealers: dealers || [], topupRequests: topups || [], referralPayouts: payouts || [] });
+    return NextResponse.json({
+      dealers: dealers || [],
+      topupRequests: topups || [],
+      referralPayouts: payouts || [],
+    });
   } catch (error) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
+    if (error instanceof Error && error.message.includes('UNREQUESTED_COMMISSION_EXISTS')) {
+      return NextResponse.json({ error: '此推薦碼尚有未請款分潤，須先全額申請撥款才能調整比例' }, { status: 409 });
+    }
     return NextResponse.json({ error: '讀取經銷商資料失敗' }, { status: 500 });
   }
 }
@@ -57,17 +49,9 @@ export async function PATCH(request: Request) {
       const referralCommissionMode = String(body.referralCommissionMode || 'percentage');
       const referralCommissionValue = Number(body.referralCommissionValue);
       const referralSharePercent = Number(body.referralSharePercent);
-      const validValue = pricingMode === 'percentage_markup'
-        ? pricingValue >= 0 && pricingValue <= 500
-        : pricingValue >= 0 && pricingValue <= 100000;
-      const validReferralValue = referralCommissionMode === 'percentage'
-        ? referralCommissionValue >= 0 && referralCommissionValue <= 100
-        : referralCommissionValue >= 0 && referralCommissionValue <= 100000;
-      if (!DEALER_STATUSES.has(status) || !SALES_MODES.has(salesMode) || !PRICING_MODES.has(pricingMode)
-        || !Number.isFinite(pricingValue) || !validValue
-        || !COMMISSION_MODES.has(referralCommissionMode)
-        || !Number.isFinite(referralCommissionValue) || !validReferralValue
-        || !Number.isFinite(referralDiscountPercent) || referralDiscountPercent < 0 || referralDiscountPercent >= 100) {
+      const validValue = pricingMode === 'percentage_markup' ? pricingValue >= 0 && pricingValue <= 500 : pricingValue >= 0 && pricingValue <= 100000;
+      const validReferralValue = referralCommissionMode === 'percentage' ? referralCommissionValue >= 0 && referralCommissionValue <= 100 : referralCommissionValue >= 0 && referralCommissionValue <= 100000;
+      if (!DEALER_STATUSES.has(status) || !SALES_MODES.has(salesMode) || !PRICING_MODES.has(pricingMode) || !Number.isFinite(pricingValue) || !validValue || !COMMISSION_MODES.has(referralCommissionMode) || !Number.isFinite(referralCommissionValue) || !validReferralValue || !Number.isFinite(referralDiscountPercent) || referralDiscountPercent < 0 || referralDiscountPercent >= 100) {
         return NextResponse.json({ error: '經銷商設定不正確' }, { status: 400 });
       }
       if (!Number.isFinite(referralSharePercent) || referralSharePercent < 0 || referralSharePercent > 30) {
@@ -75,15 +59,15 @@ export async function PATCH(request: Request) {
       }
       if (salesMode === 'referral') {
         if (referralCodeLength(referralCode) < MIN_REFERRAL_CODE_LENGTH) {
-          return NextResponse.json({ error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字` }, { status: 400 });
+          return NextResponse.json(
+            {
+              error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字`,
+            },
+            { status: 400 },
+          );
         }
-        const [{ data: codeConflict }, { data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([
-          supabase.from('dealer_referral_codes').select('dealer_id').eq('code', referralCode).maybeSingle(),
-          supabase.from('dealers').select('id').eq('referral_code', referralCode).neq('id', dealerId).maybeSingle(),
-          supabase.from('promo_codes').select('id').eq('code', referralCode).maybeSingle(),
-          readReferralConfig(supabase)
-        ]);
-        const memberConflict = Object.values(referral.config.customers).some(rule => rule.code === referralCode);
+        const [{ data: codeConflict }, { data: dealerConflict }, { data: promoConflict }, referral] = await Promise.all([supabase.from('dealer_referral_codes').select('dealer_id').eq('code', referralCode).maybeSingle(), supabase.from('dealers').select('id').eq('referral_code', referralCode).neq('id', dealerId).maybeSingle(), supabase.from('promo_codes').select('id').eq('code', referralCode).maybeSingle(), readReferralConfig(supabase)]);
+        const memberConflict = Object.values(referral.config.customers).some((rule) => rule.code === referralCode);
         if ((codeConflict && codeConflict.dealer_id !== dealerId) || dealerConflict || promoConflict || memberConflict) {
           return NextResponse.json({ error: '此推薦碼已被使用，請換一個' }, { status: 409 });
         }
@@ -100,20 +84,26 @@ export async function PATCH(request: Request) {
           referral_commission_mode: referralCommissionMode,
           referral_commission_value: Math.round(referralCommissionValue * 100) / 100,
           referral_share_percent: Math.round(referralSharePercent * 100) / 100,
-          admin_note: String(body.adminNote || '').trim().slice(0, 500) || null,
+          admin_note:
+            String(body.adminNote || '')
+              .trim()
+              .slice(0, 500) || null,
           reviewed_by: admin.id,
-          reviewed_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString(),
         })
         .eq('id', dealerId)
         .select('*')
         .single();
       if (error) throw error;
       if (salesMode === 'referral') {
-        const { error: codeError } = await supabase.from('dealer_referral_codes').upsert({
-          dealer_id: dealerId,
-          code: referralCode,
-          is_active: true
-        }, { onConflict: 'code' });
+        const { error: codeError } = await supabase.from('dealer_referral_codes').upsert(
+          {
+            dealer_id: dealerId,
+            code: referralCode,
+            is_active: true,
+          },
+          { onConflict: 'code' },
+        );
         if (codeError) throw codeError;
       }
       return NextResponse.json({ dealer: data });
@@ -128,7 +118,10 @@ export async function PATCH(request: Request) {
         p_payout_id: String(body.payoutId || ''),
         p_decision: decision,
         p_admin_user_id: admin.id,
-        p_admin_note: String(body.adminNote || '').trim().slice(0, 300) || null
+        p_admin_note:
+          String(body.adminNote || '')
+            .trim()
+            .slice(0, 300) || null,
       });
       if (error?.message.includes('PAYOUT_ALREADY_REVIEWED')) {
         return NextResponse.json({ error: '此撥款申請已處理' }, { status: 409 });
@@ -140,7 +133,9 @@ export async function PATCH(request: Request) {
     if (action === 'adjustBalance') {
       const amount = Math.round(Number(body.amount));
       const cashReceived = Math.max(0, Math.round(Number(body.cashReceivedAmount) || 0));
-      const reason = String(body.reason || '').trim().slice(0, 300);
+      const reason = String(body.reason || '')
+        .trim()
+        .slice(0, 300);
       if (!Number.isFinite(amount) || amount === 0 || !reason) {
         return NextResponse.json({ error: '請填寫調整金額與原因' }, { status: 400 });
       }
@@ -149,7 +144,7 @@ export async function PATCH(request: Request) {
         p_amount: amount,
         p_cash_received_amount: cashReceived,
         p_reason: reason,
-        p_admin_user_id: admin.id
+        p_admin_user_id: admin.id,
       });
       if (error) {
         if (error.message.includes('INSUFFICIENT_BALANCE')) {
@@ -166,7 +161,7 @@ export async function PATCH(request: Request) {
       if (decision === 'approved') {
         const { data, error } = await supabase.rpc('approve_dealer_topup_request', {
           p_request_id: requestId,
-          p_admin_user_id: admin.id
+          p_admin_user_id: admin.id,
         });
         if (error) throw error;
         return NextResponse.json({ result: data?.[0] });
@@ -174,7 +169,11 @@ export async function PATCH(request: Request) {
       if (decision === 'rejected') {
         const { data, error } = await supabase
           .from('dealer_topup_requests')
-          .update({ status: 'rejected', reviewed_by: admin.id, reviewed_at: new Date().toISOString() })
+          .update({
+            status: 'rejected',
+            reviewed_by: admin.id,
+            reviewed_at: new Date().toISOString(),
+          })
           .eq('id', requestId)
           .eq('status', 'pending')
           .select('id')
