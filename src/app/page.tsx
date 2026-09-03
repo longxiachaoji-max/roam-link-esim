@@ -1002,12 +1002,62 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="border-b border-white/10 bg-[#0f1522] px-6 py-12" aria-labelledby="destination-request-heading">
-        <div className="mx-auto grid max-w-6xl gap-7 md:grid-cols-[minmax(0,0.8fr)_minmax(360px,1.2fr)] md:items-end">
+      {/* 頁尾聯絡資訊 */}
+      <footer className="border-t border-white/10 bg-[#0D0D1A] px-6 py-9">
+        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] lg:gap-14">
           <div>
-            <div className="mb-4 grid h-10 w-10 place-items-center rounded-md bg-cyan/10 text-cyan"><MapPin size={20} /></div>
-            <h2 id="destination-request-heading" className="text-2xl font-black text-white">找不到你要的國家？</h2>
-            <p className="mt-3 text-sm leading-7 text-white/50">在這邊輸入你想去的國家或地區，我們會參考需求評估新增方案。</p>
+            <p className="text-sm font-bold text-white">一飛通全球漫遊</p>
+            <div className="mt-1 bg-gradient-to-br from-coral to-yellow bg-clip-text font-display text-xl font-extrabold text-transparent">
+              FirstRoamLink
+            </div>
+            <p className="mt-3 max-w-md text-sm leading-6 text-muted">{siteSettings.contact_note}</p>
+            <h2 className="mt-4 text-sm font-bold text-white">{siteSettings.contact_title}</h2>
+            <div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 text-sm sm:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+              {siteSettings.contact_items.map((item) => (
+                item.href ? (
+                  <a key={item.id} href={item.href} className="min-w-0 break-words text-cyan transition-colors hover:text-white">
+                    {item.label}：{item.value}
+                  </a>
+                ) : (
+                  <p key={item.id} className="min-w-0 break-words text-cyan">
+                    {item.label}：{item.value}
+                  </p>
+                )
+              ))}
+            </div>
+            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <span className="text-white/45">企業優惠合作歡迎洽詢客服</span>
+              <Link href="/company-discount" className="font-bold text-cyan transition-colors hover:text-white">查詢企業優惠</Link>
+            </div>
+            <Link href="/dealer" className="mt-4 inline-flex text-sm text-white/45 transition-colors hover:text-white">經銷商專區</Link>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+            <a href="https://lin.ee/Td0EgHE" target="_blank" rel="noopener noreferrer" aria-label="加入一飛通 LINE 好友" className="inline-flex min-h-14 min-w-0 items-center gap-3 rounded-md border border-white/15 px-4 transition-colors hover:border-[#06c755]/70 hover:bg-white/[0.03] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]">
+              {/* eslint-disable-next-line @next/next/no-img-element -- LINE serves the official localized button. */}
+              <img src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png" alt="加入 LINE 好友" width="116" height="36" className="h-8 w-auto max-w-full object-contain" />
+              <span className="hidden text-sm text-white/45 lg:inline">加入官方 LINE 客服</span>
+            </a>
+            <a href={OFFICIAL_THREADS_URL} target="_blank" rel="me noopener noreferrer" aria-label="前往一飛通官方 Threads @first_esim" className="inline-flex min-h-14 min-w-0 items-center gap-3 rounded-md border border-white/15 px-4 text-sm font-bold text-white/70 transition-colors hover:border-white/50 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+              <AtSign size={19} className="shrink-0" aria-hidden="true" />
+              <span>Threads</span>
+              <span className="hidden font-normal text-white/35 lg:inline">官方社群 @first_esim</span>
+            </a>
+            <a href={OFFICIAL_INSTAGRAM_URL} target="_blank" rel="me noopener noreferrer" aria-label="前往一飛通官方 Instagram @first_esim" className="inline-flex min-h-14 min-w-0 items-center gap-3 rounded-md border border-white/15 px-4 text-sm font-bold text-white/70 transition-colors hover:border-[#E1306C]/60 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E1306C]">
+              <Camera size={19} className="shrink-0" aria-hidden="true" />
+              <span>Instagram</span>
+              <span className="hidden font-normal text-white/35 lg:inline">官方社群 @first_esim</span>
+            </a>
+          </div>
+        </div>
+      </footer>
+
+      <section className="border-y border-white/10 bg-[#0f1522] px-6 py-5" aria-labelledby="destination-request-heading">
+        <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[48px_minmax(280px,0.8fr)_minmax(420px,1.4fr)] lg:items-center">
+          <div className="grid h-12 w-12 place-items-center rounded-md bg-coral/15 text-coral"><MapPin size={22} /></div>
+          <div>
+            <h2 id="destination-request-heading" className="text-xl font-black text-white md:text-2xl">找不到你要的國家？</h2>
+            <p className="mt-2 text-sm leading-6 text-white/45">在這邊輸入你想去的國家或地區，我們會參考需求評估新增方案。</p>
           </div>
           <form onSubmit={submitDestinationRequest} className="w-full">
             <label htmlFor="destination-request" className="sr-only">想去的國家或地區</label>
@@ -1032,86 +1082,14 @@ export default function Home() {
                 <Send size={16} />{destinationRequestState === 'submitting' ? '送出中' : '送出需求'}
               </button>
             </div>
-            <p aria-live="polite" className={`mt-3 min-h-5 text-sm ${destinationRequestState === 'error' ? 'text-red-300' : destinationRequestState === 'success' ? 'text-emerald-300' : 'text-white/35'}`}>
-              {destinationRequestMessage || '不需要登入即可送出。'}
-            </p>
+            {destinationRequestMessage && (
+              <p aria-live="polite" className={`mt-2 text-sm ${destinationRequestState === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
+                {destinationRequestMessage}
+              </p>
+            )}
           </form>
         </div>
       </section>
-
-      {/* 頁尾聯絡資訊 */}
-      <footer className="border-t border-white/10 bg-[#0D0D1A]/80 px-6 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div className="font-display text-2xl font-extrabold bg-gradient-to-br from-coral to-yellow text-transparent bg-clip-text mb-2">
-              Roam Link.
-            </div>
-            <p className="text-sm text-muted max-w-md">{siteSettings.contact_note}</p>
-          </div>
-          <div className="w-full text-left md:max-w-3xl">
-            <h2 className="text-sm font-bold text-white mb-3">{siteSettings.contact_title}</h2>
-            <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm md:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
-              {siteSettings.contact_items.map((item) => (
-                item.href ? (
-                  <a key={item.id} href={item.href} className="min-w-0 break-words text-cyan transition-colors hover:text-white">
-                    {item.label}：{item.value}
-                  </a>
-                ) : (
-                  <p key={item.id} className="min-w-0 break-words text-cyan">
-                    {item.label}：{item.value}
-                  </p>
-                )
-              ))}
-            </div>
-            <p className="mt-4 text-sm text-white/50">企業優惠合作歡迎洽詢客服</p>
-            <div className="mt-2 grid grid-cols-2 items-center gap-x-5 gap-y-2">
-              <Link href="/company-discount" className="inline-flex min-h-11 items-center text-sm font-bold text-cyan transition-colors hover:text-white">
-                查詢企業優惠
-              </Link>
-              <Link href="/dealer" className="inline-flex min-h-11 items-center text-sm text-white/50 transition-colors hover:text-white">
-                經銷商專區
-              </Link>
-              <a
-                href="https://lin.ee/Td0EgHE"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="加入一飛通 LINE 好友"
-                className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#06c755]"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- LINE serves the official localized button. */}
-                <img
-                  src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png"
-                  alt="加入 LINE 好友"
-                  width="116"
-                  height="36"
-                  className="h-9 w-auto"
-                />
-              </a>
-              <a
-                href={OFFICIAL_INSTAGRAM_URL}
-                target="_blank"
-                rel="me noopener noreferrer"
-                aria-label="前往一飛通官方 Instagram @first_esim"
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-3 text-sm font-bold text-white/70 transition-colors hover:border-[#E1306C]/60 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E1306C]"
-              >
-                <Camera size={18} aria-hidden="true" />
-                Instagram
-              </a>
-              <a
-                href={OFFICIAL_THREADS_URL}
-                target="_blank"
-                rel="me noopener noreferrer"
-                aria-label="前往一飛通官方 Threads @first_esim"
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-3 text-sm font-bold text-white/70 transition-colors hover:border-white/50 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                <AtSign size={18} aria-hidden="true" />
-                Threads
-              </a>
-            </div>
-            <p className="mt-1 text-xs text-white/35">官方社群 @first_esim</p>
-          </div>
-        </div>
-      </footer>
 
       {/* 登入 / 註冊對話框 */}
       {isLoginOpen && (
