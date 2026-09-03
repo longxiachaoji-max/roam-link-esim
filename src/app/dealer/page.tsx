@@ -154,6 +154,7 @@ interface DealerApplication {
   phone: string;
   taxId: string;
   salesMode: DealerSalesMode;
+  referralCode: string;
 }
 
 function money(value: number | undefined) {
@@ -213,6 +214,7 @@ export default function DealerPage() {
     phone: "",
     taxId: "",
     salesMode: "direct",
+    referralCode: "",
   });
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedDays, setSelectedDays] = useState<number | null>(null);
@@ -342,6 +344,17 @@ export default function DealerPage() {
     setMessage("申請已送出，待後台審核開通");
   };
 
+  const checkReferralCodeAvailability = async () => {
+    if (application.salesMode !== "referral") return;
+    const response = await fetch("/api/dealer/referral-code-availability", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: application.referralCode }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "推薦碼檢查失敗");
+  };
+
   const handleAuth = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -351,9 +364,16 @@ export default function DealerPage() {
         if (
           !application.storeName ||
           !application.contactName ||
-          !application.phone
+          !application.phone ||
+          (application.salesMode === "referral" &&
+            !application.referralCode.trim())
         )
-          throw new Error("請填寫完整店家資料");
+          throw new Error(
+            application.salesMode === "referral"
+              ? "請填寫完整店家資料與推薦碼"
+              : "請填寫完整店家資料",
+          );
+        await checkReferralCodeAvailability();
         const result = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -2088,6 +2108,24 @@ function ApplicationFields({
           送出後由管理員審核並設定經銷價格或推薦分潤，開通前仍可調整。
         </p>
       </fieldset>
+      {value.salesMode === "referral" && (
+        <Field label="申請的推薦碼">
+          <input
+            required
+            value={value.referralCode}
+            onChange={(e) =>
+              update("referralCode", e.target.value.toUpperCase())
+            }
+            maxLength={24}
+            className="field"
+            placeholder="例如 TRAVEL88"
+            autoComplete="off"
+          />
+          <p className="mt-2 text-xs leading-5 text-white/35">
+            這組推薦碼不可與現有推薦碼或折扣碼重複。
+          </p>
+        </Field>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="聯絡人">
           <input

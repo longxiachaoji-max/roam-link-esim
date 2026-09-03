@@ -1,9 +1,21 @@
-import { NextResponse } from 'next/server';
-import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
-import { normalizeDealerSalesMode } from '@/lib/dealer-sales-mode';
+import { NextResponse } from "next/server";
+import {
+  authenticationErrorResponse,
+  getServerSupabase,
+  requireAuthenticatedUser,
+} from "@/lib/server-auth";
+import { normalizeDealerSalesMode } from "@/lib/dealer-sales-mode";
+import { dealerReferralCodeIsAvailable } from "@/lib/dealer-referral-code-availability";
+import {
+  MIN_REFERRAL_CODE_LENGTH,
+  normalizeReferralCode,
+  referralCodeLength,
+} from "@/lib/referral-code";
 
 function text(value: unknown, max: number) {
-  return String(value ?? '').trim().slice(0, max);
+  return String(value ?? "")
+    .trim()
+    .slice(0, max);
 }
 
 export async function POST(request: Request) {
@@ -15,22 +27,56 @@ export async function POST(request: Request) {
     const phone = text(body.phone, 40);
     const taxId = text(body.taxId, 20);
     const salesMode = normalizeDealerSalesMode(body.salesMode);
+    const referralCode = normalizeReferralCode(String(body.referralCode || ""));
     if (!storeName || !contactName || !phone) {
-      return NextResponse.json({ error: '請填寫店家名稱、聯絡人與電話' }, { status: 400 });
+      return NextResponse.json(
+        { error: "請填寫店家名稱、聯絡人與電話" },
+        { status: 400 },
+      );
     }
 
     const supabase = getServerSupabase();
     const { data: existingByEmail, error: existingError } = await supabase
-      .from('dealers')
-      .select('id, user_id, email, store_name, contact_name, phone, status, balance, sales_mode, referral_code, referral_share_percent')
-      .eq('email', user.email.toLowerCase())
+      .from("dealers")
+      .select(
+        "id, user_id, email, store_name, contact_name, phone, status, balance, sales_mode, referral_code, referral_share_percent",
+      )
+      .eq("email", user.email.toLowerCase())
       .maybeSingle();
     if (existingError) throw existingError;
     if (existingByEmail && existingByEmail.user_id !== user.id) {
-      return NextResponse.json({ error: '此 Email 已綁定其他經銷商帳號' }, { status: 409 });
+      return NextResponse.json(
+        { error: "此 Email 已綁定其他經銷商帳號" },
+        { status: 409 },
+      );
     }
 
-    if (existingByEmail?.status === 'approved' || existingByEmail?.status === 'suspended') {
+    if (salesMode === "referral") {
+      if (referralCodeLength(referralCode) < MIN_REFERRAL_CODE_LENGTH) {
+        return NextResponse.json(
+          {
+            error: `推薦碼至少需要 ${MIN_REFERRAL_CODE_LENGTH} 個中英文字或數字`,
+          },
+          { status: 400 },
+        );
+      }
+      const available = await dealerReferralCodeIsAvailable(
+        supabase,
+        referralCode,
+        existingByEmail?.id || "",
+      );
+      if (!available) {
+        return NextResponse.json(
+          { error: "此推薦碼已被使用，請更換其他推薦碼" },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (
+      existingByEmail?.status === "approved" ||
+      existingByEmail?.status === "suspended"
+    ) {
       return NextResponse.json({
         dealer: {
           id: existingByEmail.id,
@@ -42,8 +88,8 @@ export async function POST(request: Request) {
           balance: existingByEmail.balance,
           sales_mode: existingByEmail.sales_mode,
           referral_code: existingByEmail.referral_code,
-          referral_share_percent: existingByEmail.referral_share_percent
-        }
+          referral_share_percent: existingByEmail.referral_share_percent,
+        },
       });
     }
 
@@ -55,20 +101,32 @@ export async function POST(request: Request) {
       phone,
       tax_id: taxId || null,
       sales_mode: salesMode,
-      status: 'pending'
+      referral_code: salesMode === "referral" ? referralCode : null,
+      status: "pending",
     };
     const query = existingByEmail
-      ? supabase.from('dealers').update(payload).eq('id', existingByEmail.id)
-      : supabase.from('dealers').insert(payload);
+      ? supabase.from("dealers").update(payload).eq("id", existingByEmail.id)
+      : supabase.from("dealers").insert(payload);
     const { data, error } = await query
-      .select('id, email, store_name, contact_name, phone, status, balance, sales_mode, referral_code, referral_share_percent')
+      .select(
+        "id, email, store_name, contact_name, phone, status, balance, sales_mode, referral_code, referral_share_percent",
+      )
       .single();
+    if (error?.code === "23505" && salesMode === "referral") {
+      return NextResponse.json(
+        { error: "此推薦碼已被使用，請更換其他推薦碼" },
+        { status: 409 },
+      );
+    }
     if (error) throw error;
     return NextResponse.json({ dealer: data });
   } catch (error) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
-    console.error('Dealer registration failed:', error);
-    return NextResponse.json({ error: '送出申請失敗，請稍後再試' }, { status: 500 });
+    console.error("Dealer registration failed:", error);
+    return NextResponse.json(
+      { error: "送出申請失敗，請稍後再試" },
+      { status: 500 },
+    );
   }
 }
