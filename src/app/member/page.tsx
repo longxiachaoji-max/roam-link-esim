@@ -454,7 +454,6 @@ export default function MemberCenter() {
         <button onClick={() => window.location.href = '/'} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors">
           <X size={20} className="text-white/70" />
         </button>
-        <span className="font-bold tracking-wider">member-center-v2</span>
         <button className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors">
           <MoreHorizontal size={20} className="text-white/70" />
         </button>
