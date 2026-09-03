@@ -1041,79 +1041,74 @@ export default function Home() {
 
       {/* 頁尾聯絡資訊 */}
       <footer className="border-t border-white/10 bg-[#0D0D1A]/80 px-6 py-10">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-start md:justify-between gap-8">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="font-display text-2xl font-extrabold bg-gradient-to-br from-coral to-yellow text-transparent bg-clip-text mb-2">
               Roam Link.
             </div>
             <p className="text-sm text-muted max-w-md">{siteSettings.contact_note}</p>
           </div>
-          <div className="text-left md:text-right">
+          <div className="w-full text-left md:max-w-3xl">
             <h2 className="text-sm font-bold text-white mb-3">{siteSettings.contact_title}</h2>
-            <div className="flex flex-col gap-2 text-sm">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm md:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               {siteSettings.contact_items.map((item) => (
                 item.href ? (
-                  <a key={item.id} href={item.href} className="text-cyan hover:text-white transition-colors">
+                  <a key={item.id} href={item.href} className="min-w-0 break-words text-cyan transition-colors hover:text-white">
                     {item.label}：{item.value}
                   </a>
                 ) : (
-                  <p key={item.id} className="text-cyan">
+                  <p key={item.id} className="min-w-0 break-words text-cyan">
                     {item.label}：{item.value}
                   </p>
                 )
               ))}
             </div>
-            <div className="mt-4 flex flex-col items-start gap-1 md:items-end">
-              <p className="text-sm text-white/50">企業優惠合作歡迎洽詢客服</p>
+            <p className="mt-4 text-sm text-white/50">企業優惠合作歡迎洽詢客服</p>
+            <div className="mt-2 grid grid-cols-2 items-center gap-x-5 gap-y-2">
               <Link href="/company-discount" className="inline-flex min-h-11 items-center text-sm font-bold text-cyan transition-colors hover:text-white">
                 查詢企業優惠
               </Link>
-              <Link href="/dealer" className="text-sm text-white/50 transition-colors hover:text-white">
+              <Link href="/dealer" className="inline-flex min-h-11 items-center text-sm text-white/50 transition-colors hover:text-white">
                 經銷商專區
               </Link>
+              <a
+                href="https://lin.ee/Td0EgHE"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="加入一飛通 LINE 好友"
+                className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#06c755]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- LINE serves the official localized button. */}
+                <img
+                  src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png"
+                  alt="加入 LINE 好友"
+                  width="116"
+                  height="36"
+                  className="h-9 w-auto"
+                />
+              </a>
+              <a
+                href={OFFICIAL_INSTAGRAM_URL}
+                target="_blank"
+                rel="me noopener noreferrer"
+                aria-label="前往一飛通官方 Instagram @first_esim"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-3 text-sm font-bold text-white/70 transition-colors hover:border-[#E1306C]/60 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E1306C]"
+              >
+                <Camera size={18} aria-hidden="true" />
+                Instagram
+              </a>
+              <a
+                href={OFFICIAL_THREADS_URL}
+                target="_blank"
+                rel="me noopener noreferrer"
+                aria-label="前往一飛通官方 Threads @first_esim"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-3 text-sm font-bold text-white/70 transition-colors hover:border-white/50 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                <AtSign size={18} aria-hidden="true" />
+                Threads
+              </a>
             </div>
-            <a
-              href="https://lin.ee/Td0EgHE"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="加入一飛通 LINE 好友"
-              className="mt-4 inline-flex min-h-11 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#06c755]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- LINE serves the official localized button. */}
-              <img
-                src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png"
-                alt="加入 LINE 好友"
-                width="116"
-                height="36"
-                className="h-9 w-auto"
-              />
-            </a>
-            <div className="mt-5">
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-white/40">官方社群</p>
-              <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                <a
-                  href={OFFICIAL_INSTAGRAM_URL}
-                  target="_blank"
-                  rel="me noopener noreferrer"
-                  aria-label="前往一飛通官方 Instagram @first_esim"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-4 text-sm font-bold text-white/70 transition-colors hover:border-[#E1306C]/60 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E1306C]"
-                >
-                  <Camera size={18} aria-hidden="true" />
-                  Instagram
-                </a>
-                <a
-                  href={OFFICIAL_THREADS_URL}
-                  target="_blank"
-                  rel="me noopener noreferrer"
-                  aria-label="前往一飛通官方 Threads @first_esim"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-white/15 px-4 text-sm font-bold text-white/70 transition-colors hover:border-white/50 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  <AtSign size={18} aria-hidden="true" />
-                  Threads
-                </a>
-              </div>
-              <p className="mt-2 text-xs text-white/35">@first_esim</p>
-            </div>
+            <p className="mt-1 text-xs text-white/35">官方社群 @first_esim</p>
           </div>
         </div>
       </footer>
