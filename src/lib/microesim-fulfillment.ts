@@ -9,6 +9,7 @@ import {
   type MicroesimTopupDetail
 } from '@/lib/microesim';
 import { buildMicroesimOrderReference } from '@/lib/order-numbers';
+import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type SupabaseLike = SupabaseClient;
@@ -55,10 +56,17 @@ async function completeOrderWhenReady(supabase: SupabaseLike, orderId: string) {
     .eq('order_id', orderId);
 
   if (!error && items?.length && items.every((item: { inventory_id: string | null }) => item.inventory_id)) {
-    await supabase
+    const { error: completionError } = await supabase
       .from('orders')
       .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
       .eq('id', orderId);
+    if (completionError) throw completionError;
+
+    try {
+      await sendCustomerEsimDeliveryEmail(supabase, orderId);
+    } catch (emailError) {
+      console.error('Customer eSIM delivery email failed:', { orderId, error: emailError });
+    }
   }
 }
 

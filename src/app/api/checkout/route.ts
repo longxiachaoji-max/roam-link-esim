@@ -4,6 +4,7 @@ import { isDealerReferralDiscount, isPromoDiscount, resolveCheckoutDiscount, typ
 import { recordDealerReferralCommission } from '@/lib/dealer-referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
+import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
 import { parseTokenCheckoutRequest, TokenCheckoutRequestError } from '@/lib/token-checkout';
 
@@ -279,46 +280,32 @@ export async function POST(request: Request) {
           .update({ order_status: fullyAssigned ? 'COMPLETED' : 'PENDING', updated_at: new Date().toISOString() })
           .eq('id', order.id);
 
-        // 6. Send customer and pending-fulfillment notifications.
+        // 6. Notify the customer only after every eSIM is ready. Pending alerts remain admin-only.
         const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
         const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
-        const productNames = products.map(product => product.name).join('、');
         try {
-          const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
-      await resend.emails.send({
-        from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
-        to: [email],
-        subject: fullyAssigned ? '付款成功，eSIM 已可安裝' : '付款成功，eSIM 正在準備中',
-        html: fullyAssigned ? `
-          <h1>感謝您的購買</h1>
-          <p>訂單商品：<strong>${productNames}</strong></p>
-          <p>eSIM 已配發完成，請前往會員中心查看安裝按鈕與 QR Code。</p>
-          <p><strong>安裝提醒：</strong>請於啟用日前或旅程出發前完成安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
-        ` : `
-          <h1>Thank you for your purchase!</h1>
-          <p>Your order for <strong>${productNames}</strong> has been received and is being prepared.</p>
-          <p>You can check your member center later. The installation button and QR Code will appear once the eSIM is assigned.</p>
-          <p><strong>安裝提醒：</strong>請於啟用日前或旅程出發前完成安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
-        `,
-      });
+          if (fullyAssigned) {
+            await sendCustomerEsimDeliveryEmail(supabase, order.id);
+          }
 
-      const notificationSettings = !fullyAssigned ? await getNotificationSettings() : null;
-      const notifyEmail = notificationSettings?.order_notify_email || '';
-      if (!fullyAssigned && notificationSettings?.notify_email_enabled && notifyEmail) {
-        await resend.emails.send({
-          from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
-          to: [notifyEmail],
-          subject: `待補 eSIM 訂單：${pendingProducts.map(product => product.name).join('、')}`,
-          html: `
-            <h1>有一筆訂單需要補 eSIM</h1>
-            <p><strong>訂單：</strong>${order.order_number || order.id}</p>
-            <p><strong>客戶：</strong>${email}</p>
-            <p><strong>商品：</strong>${pendingProducts.map(product => product.name).join('、')}</p>
-            <p><strong>實付：</strong>NT$${tokensUsed}</p>
-            <p>請到後台訂單管理補上 eSIM 資料。</p>
-          `,
-        });
-      }
+          const notificationSettings = !fullyAssigned ? await getNotificationSettings() : null;
+          const notifyEmail = notificationSettings?.order_notify_email || '';
+          if (!fullyAssigned && notificationSettings?.notify_email_enabled && notifyEmail) {
+            const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
+            await resend.emails.send({
+              from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
+              to: [notifyEmail],
+              subject: `待補 eSIM 訂單：${pendingProducts.map(product => product.name).join('、')}`,
+              html: `
+                <h1>有一筆訂單需要補 eSIM</h1>
+                <p><strong>訂單：</strong>${order.order_number || order.id}</p>
+                <p><strong>客戶：</strong>${email}</p>
+                <p><strong>商品：</strong>${pendingProducts.map(product => product.name).join('、')}</p>
+                <p><strong>實付：</strong>NT$${tokensUsed}</p>
+                <p>請到後台訂單管理補上 eSIM 資料。</p>
+              `,
+            });
+          }
         } catch (emailError) {
           console.error('Failed to send email:', emailError);
           // The order remains valid even if a notification cannot be sent.

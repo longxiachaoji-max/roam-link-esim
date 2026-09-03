@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import { awardReferralRewards } from '@/lib/referrals';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
+import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
 
 const NOTIFICATION_CONFIG_PATTERN = /\n?<!--NOTIFICATION_SETTINGS:([\s\S]*?)-->\n?/;
 
@@ -92,29 +93,7 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
   const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key');
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
   const customerEmail = order.customers?.email || '';
-  const productNames = order.order_items.map(item => item.products?.name || 'eSIM 商品').join('、');
-  const memberUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/member`;
   const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://roma-link-esim.vercel.app'}/admin/orders`;
-
-  if (customerEmail) {
-    try {
-      await resend.emails.send({
-        from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
-        to: [customerEmail],
-        subject: pendingItems.length ? '付款成功，eSIM 正在準備中' : '付款成功，eSIM 已可安裝',
-        html: `
-          <h1>付款成功</h1>
-          <p>訂單商品：<strong>${productNames}</strong></p>
-          <p>${pendingItems.length ? '部分或全部 eSIM 正在準備中，配發後會員中心會自動出現安裝按鈕。' : '你的 eSIM 已經配發完成，可前往會員中心安裝。'}</p>
-          <p><strong>安裝提醒：</strong>請於啟用日前或旅程出發前完成安裝。安裝前請先連接穩定的 Wi-Fi 或行動網路，過程中請勿中斷連線。</p>
-          <p>每張 eSIM 的最晚安裝日與啟用後方案到期日，可在會員中心分別查看。</p>
-          <p><a href="${memberUrl}">前往會員中心</a></p>
-        `
-      });
-    } catch (error) {
-      console.error('Failed to send ECPay customer email:', error);
-    }
-  }
 
   if (!pendingItems.length) return;
   const supabase = getAdminClient();
@@ -313,6 +292,14 @@ export async function markEcpayOrderPaidAndFulfill(
     .eq('id', orderId);
 
   await awardReferralRewards(supabase, orderId);
+
+  if (!pendingItems.length) {
+    try {
+      await sendCustomerEsimDeliveryEmail(supabase, orderId);
+    } catch (emailError) {
+      console.error('ECPay customer eSIM delivery email failed:', { orderId, error: emailError });
+    }
+  }
 
   const notificationOrder = { ...order, order_items: normalizedItems };
   await sendPaidOrderNotifications(notificationOrder, pendingItems);

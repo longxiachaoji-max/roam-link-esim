@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
 import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
+import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
 import {
   fetchMicroesimDeviceDetail,
   fetchMicroesimEventDetail,
@@ -325,6 +326,9 @@ export async function PUT(request: Request) {
           .from('orders')
           .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
           .eq('id', orderItem.order_id);
+        await sendCustomerEsimDeliveryEmail(supabase, orderItem.order_id).catch(emailError => {
+          console.error('Admin customer eSIM delivery email failed:', emailError);
+        });
       }
 
       return NextResponse.json({ success: true, inventory });
@@ -398,6 +402,9 @@ export async function PUT(request: Request) {
         .from('orders')
         .update({ order_status: 'COMPLETED' })
         .eq('id', orderItem.order_id);
+      await sendCustomerEsimDeliveryEmail(supabase, orderItem.order_id).catch(emailError => {
+        console.error('Admin customer eSIM delivery email failed:', emailError);
+      });
     }
 
     return NextResponse.json({ success: true });
