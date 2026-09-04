@@ -5,7 +5,11 @@ import {
   BadgeCheck,
   Banknote,
   Building2,
+  Copy,
+  ExternalLink,
   HandCoins,
+  Link2,
+  MousePointerClick,
   Search,
   WalletCards,
 } from "lucide-react";
@@ -58,6 +62,23 @@ interface ReferralPayout {
     | { store_name: string; email: string }
     | { store_name: string; email: string }[];
 }
+interface DealerReferralCode {
+  id: string;
+  dealer_id: string;
+  code: string;
+  is_active: boolean;
+}
+interface DealerReferralLink {
+  id: string;
+  dealer_id: string;
+  referral_code_id: string;
+  name: string;
+  slug: string;
+  click_count: number;
+  last_clicked_at: string | null;
+  created_at: string;
+  dealer_referral_codes: { code: string } | { code: string }[];
+}
 
 const STATUS_LABELS = {
   pending: "待審核",
@@ -76,6 +97,8 @@ export default function AdminDealersPage() {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [topups, setTopups] = useState<TopupRequest[]>([]);
   const [referralPayouts, setReferralPayouts] = useState<ReferralPayout[]>([]);
+  const [referralLinks, setReferralLinks] = useState<DealerReferralLink[]>([]);
+  const [referralCodes, setReferralCodes] = useState<DealerReferralCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -96,19 +119,28 @@ export default function AdminDealersPage() {
   const [balanceAmount, setBalanceAmount] = useState("");
   const [cashReceived, setCashReceived] = useState("");
   const [balanceReason, setBalanceReason] = useState("現金加值");
+  const [linkDealer, setLinkDealer] = useState<Dealer | null>(null);
+  const [linkReferralCodeId, setLinkReferralCodeId] = useState("");
+  const [linkName, setLinkName] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const response = await adminFetch("/api/admin/dealers", {
-      cache: "no-store",
-    });
-    const result = await response.json();
-    if (response.ok) {
+    const [response, linksResponse] = await Promise.all([
+      adminFetch("/api/admin/dealers", { cache: "no-store" }),
+      adminFetch("/api/admin/dealer-referral-links", { cache: "no-store" }),
+    ]);
+    const [result, linksResult] = await Promise.all([
+      response.json(),
+      linksResponse.json(),
+    ]);
+    if (response.ok && linksResponse.ok) {
       setDealers(result.dealers || []);
       setTopups(result.topupRequests || []);
       setReferralPayouts(result.referralPayouts || []);
-    } else setMessage(result.error || "讀取失敗");
+      setReferralLinks(linksResult.links || []);
+      setReferralCodes(linksResult.codes || []);
+    } else setMessage(result.error || linksResult.error || "讀取失敗");
     setLoading(false);
   }, []);
   useEffect(() => {
@@ -306,6 +338,43 @@ export default function AdminDealersPage() {
     setBalanceAmount("");
     setCashReceived("");
     setBalanceReason("現金加值");
+  };
+  const openReferralLinks = (dealer: Dealer) => {
+    const firstCode = referralCodes.find(
+      (code) => code.dealer_id === dealer.id && code.is_active,
+    );
+    setLinkDealer(dealer);
+    setLinkReferralCodeId(firstCode?.id || "");
+    setLinkName("");
+  };
+  const createReferralLink = async () => {
+    if (!linkDealer) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await adminFetch("/api/admin/dealer-referral-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealerId: linkDealer.id,
+          referralCodeId: linkReferralCodeId,
+          name: linkName,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "建立失敗");
+      setLinkName("");
+      setMessage("宣傳網址已建立");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "建立失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copyReferralLink = async (slug: string) => {
+    await navigator.clipboard.writeText(`https://firstesim.space/r/${slug}`);
+    setMessage("宣傳網址已複製");
   };
   const pendingReferralPayouts = referralPayouts.filter(
     (item) => item.status === "requested",
@@ -603,6 +672,16 @@ export default function AdminDealersPage() {
                       餘額
                     </button>
                   )}
+                  {dealer.sales_mode === "referral" &&
+                    dealer.status === "approved" && (
+                      <button
+                        onClick={() => openReferralLinks(dealer)}
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-300/25 px-3 py-2 text-sm font-black text-emerald-200"
+                      >
+                        <Link2 size={16} />
+                        宣傳網址
+                      </button>
+                    )}
                   <button
                     onClick={() => openEdit(dealer)}
                     className="rounded-md border border-cyan/25 bg-cyan/5 px-3 py-2 text-sm font-bold text-cyan"
@@ -619,6 +698,130 @@ export default function AdminDealersPage() {
           )}
         </div>
       </section>
+
+      {linkDealer && (
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/75 p-4">
+          <div className="my-6 w-full max-w-2xl rounded-md border border-white/12 bg-[#17172a] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black">宣傳網址與流量</h2>
+                <p className="mt-1 text-sm text-white/40">
+                  {linkDealer.store_name} · 每次開啟網址計 1 次
+                </p>
+              </div>
+              <button
+                onClick={() => setLinkDealer(null)}
+                className="rounded-md border border-white/15 px-3 py-1.5 text-sm"
+              >
+                關閉
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              <label className="block text-sm text-white/50">
+                推薦碼
+                <select
+                  value={linkReferralCodeId}
+                  onChange={(event) =>
+                    setLinkReferralCodeId(event.target.value)
+                  }
+                  className="field mt-2"
+                >
+                  {referralCodes
+                    .filter(
+                      (code) =>
+                        code.dealer_id === linkDealer.id && code.is_active,
+                    )
+                    .map((code) => (
+                      <option key={code.id} value={code.id}>
+                        {code.code}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="block text-sm text-white/50">
+                來源名稱
+                <input
+                  value={linkName}
+                  onChange={(event) => setLinkName(event.target.value)}
+                  maxLength={80}
+                  className="field mt-2"
+                  placeholder="例如：台北門市海報"
+                />
+              </label>
+              <button
+                disabled={busy || !linkName.trim() || !linkReferralCodeId}
+                onClick={createReferralLink}
+                className="rounded-md bg-emerald-400 px-4 py-3 font-black text-black disabled:opacity-40"
+              >
+                新增網址
+              </button>
+            </div>
+
+            <div className="mt-6 divide-y divide-white/8 border-y border-white/10">
+              {referralLinks.filter((link) => link.dealer_id === linkDealer.id)
+                .length ? (
+                referralLinks
+                  .filter((link) => link.dealer_id === linkDealer.id)
+                  .map((link) => {
+                    const code = first(link.dealer_referral_codes);
+                    const url = `https://firstesim.space/r/${link.slug}`;
+                    return (
+                      <div key={link.id} className="py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-bold">{link.name}</p>
+                            <p className="mt-1 font-mono text-xs text-emerald-300">
+                              推薦碼：{code?.code || "-"}
+                            </p>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 flex items-center gap-1 break-all text-xs text-cyan hover:underline"
+                            >
+                              {url} <ExternalLink size={12} />
+                            </a>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-4">
+                            <div>
+                              <p className="flex items-center gap-1 text-xs text-white/35">
+                                <MousePointerClick size={13} /> 點擊次數
+                              </p>
+                              <p className="mt-1 text-xl font-black text-amber-300">
+                                {Number(link.click_count || 0).toLocaleString(
+                                  "zh-TW",
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => copyReferralLink(link.slug)}
+                              className="inline-flex items-center gap-1 rounded-md border border-cyan/25 px-3 py-2 text-sm text-cyan"
+                            >
+                              <Copy size={14} /> 複製
+                            </button>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs text-white/35">
+                          最後點擊：
+                          {link.last_clicked_at
+                            ? new Date(link.last_clicked_at).toLocaleString(
+                                "zh-TW",
+                              )
+                            : "尚未有人開啟"}
+                        </p>
+                      </div>
+                    );
+                  })
+              ) : (
+                <p className="py-10 text-center text-sm text-white/35">
+                  尚未建立宣傳網址
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/75 p-4">
