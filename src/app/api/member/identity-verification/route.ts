@@ -3,6 +3,24 @@ import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUse
 
 export const dynamic = 'force-dynamic';
 
+const SUBMISSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const IMAGE_KINDS = new Set(['id-front', 'id-back', 'selfie']);
+
+function getSubmissionId(value: unknown) {
+  const submissionId = String(value || '').trim();
+  if (!SUBMISSION_ID_PATTERN.test(submissionId)) throw new Error('送出識別碼不正確，請重新送出');
+  return submissionId;
+}
+
+function getIdentityPaths(customerId: string, submissionId: string) {
+  const basePath = `${customerId}/${submissionId}`;
+  return {
+    front: `${basePath}/id-front.jpg`,
+    back: `${basePath}/id-back.jpg`,
+    selfie: `${basePath}/selfie.jpg`
+  };
+}
+
 async function getCustomerId(email: string, name?: string) {
   const supabase = getServerSupabase();
   const { data: existing, error } = await supabase.from('customers').select('id').eq('email', email).maybeSingle();
@@ -13,6 +31,11 @@ async function getCustomerId(email: string, name?: string) {
     name: name || email.split('@')[0],
     token_balance: 0
   }).select('id').single();
+  if (insertError?.code === '23505') {
+    const { data: concurrent, error: concurrentError } = await supabase.from('customers').select('id').eq('email', email).single();
+    if (concurrentError) throw concurrentError;
+    return concurrent.id;
+  }
   if (insertError) throw insertError;
   return data.id;
 }
@@ -37,50 +60,58 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const uploadedPaths: string[] = [];
   try {
     const user = await requireAuthenticatedUser(request);
     const form = await request.formData();
-    const idFront = form.get('idFront');
-    const idBack = form.get('idBack');
-    const selfie = form.get('selfie');
-    if (!(idFront instanceof File) || !(idBack instanceof File) || !(selfie instanceof File)) {
-      return NextResponse.json({ error: '請上傳身分證正面、反面及本人自拍照' }, { status: 400 });
-    }
+    const file = form.get('file');
+    const kind = String(form.get('kind') || '');
+    const submissionId = getSubmissionId(form.get('submissionId'));
+    if (!(file instanceof File) || !IMAGE_KINDS.has(kind)) return NextResponse.json({ error: '照片資料不完整，請重新選擇' }, { status: 400 });
 
     // Keep the native image processor out of status-only requests.
     const { prepareIdentityImage } = await import('@/lib/identity-images');
-    const [frontBuffer, backBuffer, selfieBuffer] = await Promise.all([
-      prepareIdentityImage(idFront, true),
-      prepareIdentityImage(idBack, true),
-      prepareIdentityImage(selfie, false)
-    ]);
+    const image = await prepareIdentityImage(file, kind !== 'selfie');
     const supabase = getServerSupabase();
     const customerId = await getCustomerId(user.email, String(user.user_metadata?.name || ''));
-    const verificationId = crypto.randomUUID();
-    const basePath = `${customerId}/${verificationId}`;
-    const files = [
-      { path: `${basePath}/id-front.jpg`, body: frontBuffer },
-      { path: `${basePath}/id-back.jpg`, body: backBuffer },
-      { path: `${basePath}/selfie.jpg`, body: selfieBuffer }
-    ];
-    for (const file of files) {
-      const { error } = await supabase.storage.from('identity-verifications').upload(file.path, file.body, {
-        contentType: 'image/jpeg', upsert: false, cacheControl: '0'
-      });
-      if (error) throw error;
-      uploadedPaths.push(file.path);
+    const paths = getIdentityPaths(customerId, submissionId);
+    const path = kind === 'id-front' ? paths.front : kind === 'id-back' ? paths.back : paths.selfie;
+    const { error } = await supabase.storage.from('identity-verifications').upload(path, image, {
+      contentType: 'image/jpeg', upsert: true, cacheControl: '0'
+    });
+    if (error) throw error;
+    return NextResponse.json({ success: true, kind });
+  } catch (error) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
+    return NextResponse.json({ error: error instanceof Error ? error.message : '照片上傳失敗' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const user = await requireAuthenticatedUser(request);
+    const body = await request.json();
+    const submissionId = getSubmissionId(body.submissionId);
+    const supabase = getServerSupabase();
+    const customerId = await getCustomerId(user.email, String(user.user_metadata?.name || ''));
+    const paths = getIdentityPaths(customerId, submissionId);
+    const { data: uploaded, error: listError } = await supabase.storage.from('identity-verifications')
+      .list(`${customerId}/${submissionId}`, { limit: 10 });
+    if (listError) throw listError;
+    const names = new Set((uploaded || []).map(item => item.name));
+    if (!['id-front.jpg', 'id-back.jpg', 'selfie.jpg'].every(name => names.has(name))) {
+      return NextResponse.json({ error: '部分照片尚未上傳完成，請重新送出' }, { status: 400 });
     }
 
     const { data: previous } = await supabase.from('customer_identity_verifications')
       .select('id_front_path, id_back_path, selfie_path').eq('customer_id', customerId).maybeSingle();
     const { error: saveError } = await supabase.from('customer_identity_verifications').upsert({
-      id: verificationId,
+      id: submissionId,
       customer_id: customerId,
       status: 'PENDING',
-      id_front_path: files[0].path,
-      id_back_path: files[1].path,
-      selfie_path: files[2].path,
+      id_front_path: paths.front,
+      id_back_path: paths.back,
+      selfie_path: paths.selfie,
       submitted_at: new Date().toISOString(),
       reviewed_at: null,
       reviewed_by: null,
@@ -91,13 +122,27 @@ export async function POST(request: Request) {
     if (previous) {
       await supabase.storage.from('identity-verifications').remove([
         previous.id_front_path, previous.id_back_path, previous.selfie_path
-      ].filter(Boolean));
+      ].filter((path): path is string => typeof path === 'string' && !Object.values(paths).includes(path)));
     }
     return NextResponse.json({ success: true, verification: { status: 'PENDING' } });
   } catch (error) {
-    if (uploadedPaths.length) await getServerSupabase().storage.from('identity-verifications').remove(uploadedPaths);
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
     return NextResponse.json({ error: error instanceof Error ? error.message : '實名認證送出失敗' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const user = await requireAuthenticatedUser(request);
+    const submissionId = getSubmissionId(new URL(request.url).searchParams.get('submissionId'));
+    const supabase = getServerSupabase();
+    const customerId = await getCustomerId(user.email, String(user.user_metadata?.name || ''));
+    await supabase.storage.from('identity-verifications').remove(Object.values(getIdentityPaths(customerId, submissionId)));
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
+    return NextResponse.json({ error: '暫存照片清理失敗' }, { status: 500 });
   }
 }

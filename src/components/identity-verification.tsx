@@ -13,7 +13,7 @@ interface Verification {
   review_note?: string | null;
 }
 
-const MAX_UPLOAD_BYTES = 1_100_000;
+const MAX_UPLOAD_BYTES = 750_000;
 const MAX_IMAGE_EDGE = 1600;
 
 async function loadBrowserImage(file: File) {
@@ -96,18 +96,36 @@ export function IdentityVerificationModal({ open, onClose, onSubmitted }: {
     if (!front || !back || !selfie || saving) return setMessage('請完成三張照片上傳');
     setSaving(true);
     setMessage('');
+    const submissionId = crypto.randomUUID();
     try {
-      const form = new FormData();
-      form.set('idFront', front);
-      form.set('idBack', back);
-      form.set('selfie', selfie);
-      const response = await authenticatedFetch('/api/member/identity-verification', { method: 'POST', body: form });
+      const upload = async (kind: string, file: File) => {
+        const form = new FormData();
+        form.set('submissionId', submissionId);
+        form.set('kind', kind);
+        form.set('file', file);
+        const response = await authenticatedFetch('/api/member/identity-verification', { method: 'POST', body: form });
+        const result = response.headers.get('content-type')?.includes('application/json') ? await response.json() : null;
+        if (!response.ok) throw new Error(result?.error || (response.status === 413 ? '照片仍然過大，請重新拍照後再試' : `照片上傳失敗（${response.status}）`));
+      };
+      const uploads = await Promise.allSettled([
+        upload('id-front', front),
+        upload('id-back', back),
+        upload('selfie', selfie)
+      ]);
+      const failedUpload = uploads.find(result => result.status === 'rejected');
+      if (failedUpload?.status === 'rejected') throw failedUpload.reason;
+      const response = await authenticatedFetch('/api/member/identity-verification', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId })
+      });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '送出失敗');
       onSubmitted?.();
       onClose();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '送出失敗');
+      void authenticatedFetch(`/api/member/identity-verification?submissionId=${encodeURIComponent(submissionId)}`, { method: 'DELETE' });
     } finally {
       setSaving(false);
     }

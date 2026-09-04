@@ -25,8 +25,7 @@ test('identity documents stay in private storage and use privileged APIs', () =>
 });
 
 test('server watermarks ID images and never returns storage paths to members', () => {
-  assert.match(identityRoute, /prepareIdentityImage\(idFront, true\)/);
-  assert.match(identityRoute, /prepareIdentityImage\(idBack, true\)/);
+  assert.match(identityRoute, /prepareIdentityImage\(file, kind !== 'selfie'\)/);
   const memberGetHandler = identityRoute.slice(identityRoute.indexOf('export async function GET'), identityRoute.indexOf('export async function POST'));
   assert.doesNotMatch(memberGetHandler, /id_front_path|id_back_path|selfie_path/);
 });
@@ -39,7 +38,10 @@ test('cash pickup requests do not reserve rental dates until an admin confirms t
 });
 
 test('identity photos are compressed before the authenticated upload', () => {
-  assert.match(identityComponent, /MAX_UPLOAD_BYTES = 1_100_000/);
+  assert.match(identityComponent, /MAX_UPLOAD_BYTES = 750_000/);
   assert.match(identityComponent, /compressIdentityPhoto/);
   assert.match(identityComponent, /canvas\.toBlob/);
+  assert.match(identityComponent, /Promise\.allSettled\(\[/);
+  assert.match(identityRoute, /form\.get\('file'\)/);
+  assert.match(identityRoute, /export async function PUT/);
 });
