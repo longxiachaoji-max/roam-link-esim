@@ -9,6 +9,8 @@ const adminComponent = readFileSync('src/components/admin-identity-verifications
 const migration = readFileSync('supabase/migrations/20260904102541_add_member_identity_verification.sql', 'utf8');
 const pickupConfirmationMigration = readFileSync('supabase/migrations/20260904235500_confirm_pickup_before_reserving_dates.sql', 'utf8');
 const identityComponent = readFileSync('src/components/identity-verification.tsx', 'utf8');
+const shopPage = readFileSync('src/app/shop/page.tsx', 'utf8');
+const pendingConfirmationMigration = readFileSync('supabase/migrations/20260904170022_allow_pending_confirmation_physical_orders.sql', 'utf8');
 
 test('rental checkout is enforced server-side', () => {
   assert.match(checkoutRoute, /verification\?\.status !== 'APPROVED'/);
@@ -36,6 +38,13 @@ test('cash pickup requests do not reserve rental dates until an admin confirms t
   assert.match(pickupConfirmationMigration, /new\.reservation_expires_at := null/);
   assert.match(pickupConfirmationMigration, /confirm_physical_pickup_reservation/);
   assert.match(pickupConfirmationMigration, /order_status = 'PROCESSING'/);
+  assert.match(pendingConfirmationMigration, /'PENDING_CONFIRMATION'/);
+});
+
+test('checkout errors remain visible inside the checkout dialog', () => {
+  assert.match(shopPage, /setCheckoutMessage\(errorMessage\)/);
+  assert.match(shopPage, /role="alert"/);
+  assert.match(shopPage, /\{checkoutMessage\}/);
 });
 
 test('identity photos are compressed before the authenticated upload', () => {

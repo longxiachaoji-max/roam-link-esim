@@ -135,6 +135,7 @@ export default function PhysicalShopPage() {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('shipping');
   const [storeSettings, setStoreSettings] = useState<PhysicalStoreSettings>(DEFAULT_PHYSICAL_STORE_SETTINGS);
   const [shipping, setShipping] = useState({ recipientName: '', recipientPhone: '', postalCode: '', shippingAddress: '', shippingNote: '' });
+  const [checkoutMessage, setCheckoutMessage] = useState('');
   const cartInitializationRef = useRef('');
   const cloudSyncTimerRef = useRef<number | null>(null);
   const paymentSucceededRef = useRef(false);
@@ -337,6 +338,7 @@ export default function PhysicalShopPage() {
       const result = await response.json();
       if (response.ok) setTokenBalance(Number(result.customer?.token_balance || 0));
     }
+    setCheckoutMessage('');
     setCartOpen(false); setCheckoutOpen(true);
   };
 
@@ -349,8 +351,12 @@ export default function PhysicalShopPage() {
 
   const checkout = async (paymentMethod: 'Credit' | 'BARCODE' | 'TOKENS' | 'CASH_PICKUP') => {
     if (paying || !cart.length) return;
-    if (hasRental && !rentalTermsAccepted) return setMessage('請先閱讀並勾選同意租借合約條款');
+    if (hasRental && !rentalTermsAccepted) {
+      setCheckoutMessage('請先閱讀並勾選同意租借合約條款');
+      return;
+    }
     setPaying(paymentMethod);
+    setCheckoutMessage('');
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session?.access_token) throw new Error('登入狀態已過期，請重新登入');
@@ -392,7 +398,9 @@ export default function PhysicalShopPage() {
       });
       document.body.appendChild(form); form.submit();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '結帳失敗');
+      const errorMessage = error instanceof Error ? error.message : '結帳失敗';
+      setCheckoutMessage(errorMessage);
+      setMessage(errorMessage);
       setPaying(null);
     }
   };
@@ -475,7 +483,8 @@ export default function PhysicalShopPage() {
 
       {checkoutOpen && <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4">
         <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-md bg-white p-5 text-[#172028] shadow-2xl sm:rounded-md sm:p-7">
-          <div className="mb-6 flex items-center justify-between"><div><h2 className="text-xl font-bold">配送與付款</h2><p className="mt-1 text-xs text-black/40">登入會員：{sessionEmail}</p></div><button title="關閉" onClick={() => setCheckoutOpen(false)}><X size={20} /></button></div>
+          <div className="mb-6 flex items-center justify-between"><div><h2 className="text-xl font-bold">配送與付款</h2><p className="mt-1 text-xs text-black/40">登入會員：{sessionEmail}</p></div><button title="關閉" onClick={() => { setCheckoutOpen(false); setCheckoutMessage(''); }}><X size={20} /></button></div>
+          {checkoutMessage && <div role="alert" className="mb-5 rounded-md border border-red-400/25 bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-700">{checkoutMessage}</div>}
           <div className={`grid gap-3 ${storeSettings.pickup_enabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button type="button" onClick={() => setDeliveryMethod('shipping')} className={`flex min-h-20 items-center gap-3 rounded-md border px-4 text-left ${deliveryMethod === 'shipping' ? 'border-[#247253] bg-[#dceee7]' : 'border-black/10'}`}><Truck size={20} /><span><span className="block text-sm font-bold">黑貓宅配</span><span className="mt-1 block text-xs text-black/45">運費 NT${storeSettings.shipping_fee.toLocaleString()}</span></span></button>
             {storeSettings.pickup_enabled && <button type="button" onClick={() => setDeliveryMethod('pickup')} className={`flex min-h-20 items-center gap-3 rounded-md border px-4 text-left ${deliveryMethod === 'pickup' ? 'border-[#247253] bg-[#dceee7]' : 'border-black/10'}`}><MapPin size={20} /><span><span className="block text-sm font-bold">{storeSettings.pickup_label}</span><span className="mt-1 block text-xs text-black/45">免運費</span></span></button>}
