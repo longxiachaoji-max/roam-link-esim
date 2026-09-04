@@ -153,7 +153,7 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
             {summary.plans.map(plan => (
               <article key={plan.id} className="group rounded-md border border-white/10 bg-[#181826] p-5 transition-colors hover:border-[#56d5ea]/45">
                 <Link href={getPlanHref(destination.slug, plan.id)} className="block">
-                  <p className="text-xs font-semibold text-[#56d5ea]">{plan.country}</p>
+                  <p className="text-xs font-semibold text-[#56d5ea]">{destination.shortName}</p>
                   <h3 className="mt-2 font-bold leading-6">{plan.dataAmount}</h3>
                   <div className="mt-4 flex items-end justify-between gap-3">
                     <span className="inline-flex items-center gap-1.5 text-sm text-white/50"><CalendarDays size={14} />{plan.availableDays.map(days => `${days} 天`).join('、')}</span>

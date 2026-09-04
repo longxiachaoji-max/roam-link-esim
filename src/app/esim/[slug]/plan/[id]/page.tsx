@@ -133,7 +133,7 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
           <p className="mt-5 max-w-3xl text-sm leading-7 text-white/60 md:text-base">{seo.description}</p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="flex gap-3"><Globe2 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">適用地區</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.country}</p></div></div>
+            <div className="flex gap-3"><Globe2 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">適用地區</p><p className="mt-1 text-xs leading-5 text-white/45">{destination.shortName}</p></div></div>
             <div className="flex gap-3"><Clock3 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">使用天數</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.options.map(option => `${option.validityDays} 天`).join('、')}</p></div></div>
             <div className="flex gap-3"><Wifi className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">安裝方式</p><p className="mt-1 text-xs leading-5 text-white/45">付款後於會員中心查看</p></div></div>
           </div>
