@@ -5,6 +5,7 @@ import test from 'node:test';
 const checkoutRoute = readFileSync('src/app/api/shop/checkout/route.ts', 'utf8');
 const identityRoute = readFileSync('src/app/api/member/identity-verification/route.ts', 'utf8');
 const adminRoute = readFileSync('src/app/api/admin/identity-verifications/route.ts', 'utf8');
+const adminComponent = readFileSync('src/components/admin-identity-verifications.tsx', 'utf8');
 const migration = readFileSync('supabase/migrations/20260904102541_add_member_identity_verification.sql', 'utf8');
 const pickupConfirmationMigration = readFileSync('supabase/migrations/20260904235500_confirm_pickup_before_reserving_dates.sql', 'utf8');
 const identityComponent = readFileSync('src/components/identity-verification.tsx', 'utf8');
@@ -51,4 +52,10 @@ test('members can preview selected identity photos and the ID watermark', () => 
   assert.match(identityComponent, /alt={`\$\{label\}預覽`}/);
   assert.match(identityComponent, /僅供一飛通租借實名認證使用/);
   assert.match(identityComponent, /previewUrl && !selfieCapture/);
+});
+
+test('admin identity photos preserve their complete aspect ratio', () => {
+  assert.match(adminComponent, /object-contain/);
+  assert.doesNotMatch(adminComponent, /object-cover/);
+  assert.match(adminComponent, /點選查看原圖/);
 });
