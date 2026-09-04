@@ -50,7 +50,8 @@ interface PhysicalOrder {
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_PAYMENT: '等待付款',
-  PROCESSING: '備貨中',
+  PENDING_CONFIRMATION: '等待客服確認',
+  PROCESSING: '訂單成立',
   STOCK_ISSUE: '需要人工確認',
   SHIPPED: '已出貨',
   COMPLETED: '已完成',
@@ -59,6 +60,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_DESCRIPTIONS: Record<string, string> = {
   PENDING_PAYMENT: '尚未收到付款，付款完成後才會開始處理。',
+  PENDING_CONFIRMATION: '面交申請已送出，目前尚未占用租期；客服確認後訂單才會成立並保留日期。',
   PROCESSING: '訂單已成立，工作人員正在備貨或安排租借。',
   STOCK_ISSUE: '商品狀態需要人工確認，客服會協助處理。',
   SHIPPED: '商品已寄出或租借交付已安排。',
@@ -218,7 +220,7 @@ export default function PhysicalOrdersPanel() {
 
           {deleted && <div className="border-b border-red-400/15 bg-red-400/8 px-4 py-3 text-xs leading-5 text-red-200">此紀錄已標記刪除，將於 {formatDeleteHideAt(order.user_deleted_at!)} 後從會員中心隱藏。如需恢復請聯絡客服。</div>}
 
-          {!cancelled && <div className="px-4 py-5"><div className="relative grid grid-cols-4"><div className="absolute left-[12.5%] right-[12.5%] top-4 h-px bg-white/10" /><div className="absolute left-[12.5%] top-4 h-px bg-[#F05A28] transition-all" style={{ width: `${(currentProgress / 3) * 75}%` }} />{PROGRESS_STEPS.map((step, index) => { const Icon = step.icon; const reached = index <= currentProgress; return <div key={step.label} className="relative z-10 flex flex-col items-center"><span className={`grid h-8 w-8 place-items-center rounded-full border ${reached ? 'border-[#F05A28] bg-[#F05A28] text-white' : 'border-white/10 bg-[#17171f] text-white/25'}`}><Icon size={14} /></span><span className={`mt-2 text-[11px] font-semibold ${reached ? 'text-white/75' : 'text-white/25'}`}>{step.label}</span></div>; })}</div></div>}
+          {!cancelled && order.order_status !== 'PENDING_CONFIRMATION' && <div className="px-4 py-5"><div className="relative grid grid-cols-4"><div className="absolute left-[12.5%] right-[12.5%] top-4 h-px bg-white/10" /><div className="absolute left-[12.5%] top-4 h-px bg-[#F05A28] transition-all" style={{ width: `${(currentProgress / 3) * 75}%` }} />{PROGRESS_STEPS.map((step, index) => { const Icon = step.icon; const reached = index <= currentProgress; return <div key={step.label} className="relative z-10 flex flex-col items-center"><span className={`grid h-8 w-8 place-items-center rounded-full border ${reached ? 'border-[#F05A28] bg-[#F05A28] text-white' : 'border-white/10 bg-[#17171f] text-white/25'}`}><Icon size={14} /></span><span className={`mt-2 text-[11px] font-semibold ${reached ? 'text-white/75' : 'text-white/25'}`}>{step.label}</span></div>; })}</div></div>}
 
           <div className="space-y-4 border-t border-white/8 px-4 py-4">{order.physical_order_items.map(item => <div key={item.id} className="border-b border-white/6 pb-4 last:border-b-0 last:pb-0"><div className="flex justify-between gap-4"><div className="min-w-0"><p className="font-semibold text-white/90">{item.product_name} × {item.quantity}</p>{item.rental_start_date && item.rental_end_date && <p className="mt-1 flex items-center gap-1.5 text-xs text-cyan-200"><CalendarDays size={13} />{formatDate(item.rental_start_date)} 至 {formatDate(item.rental_end_date)} · {item.rental_days} 天</p>}</div><p className="shrink-0 font-mono text-sm text-white/55">NT${(Number(item.unit_price) * item.quantity).toLocaleString()}</p></div>{order.order_status === 'COMPLETED' && !deleted && item.product_id && <button type="button" onClick={() => openReview(item)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border border-amber-300/20 bg-amber-300/8 px-3 text-xs font-bold text-amber-100 hover:bg-amber-300/15">{item.review ? <Star size={14} fill="currentColor" /> : <MessageSquareText size={14} />}{item.review ? `已評價 ${item.review.rating} 星 · 修改` : '留下商品評價'}</button>}</div>)}</div>
 

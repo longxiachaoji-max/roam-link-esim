@@ -23,7 +23,7 @@ interface Order {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  PENDING_PAYMENT: '等待付款', PROCESSING: '備貨中', STOCK_ISSUE: '庫存異常', SHIPPED: '已出貨', COMPLETED: '已完成', CANCELLED: '已取消'
+  PENDING_PAYMENT: '等待付款', PENDING_CONFIRMATION: '待確認面交預約', PROCESSING: '訂單成立', STOCK_ISSUE: '庫存異常', SHIPPED: '已出貨', COMPLETED: '已完成', CANCELLED: '已取消'
 };
 
 function formatDate(value: string) {
@@ -70,6 +70,17 @@ export default function PhysicalOrdersAdminPage() {
     await loadOrders();
   };
 
+  const confirmPickupReservation = async (id: string) => {
+    if (!window.confirm('確認接受這筆面交訂單並保留客戶選擇的租期？')) return;
+    const response = await adminFetch('/api/admin/physical-orders', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'confirm_pickup_reservation' })
+    });
+    const result = await response.json();
+    if (!response.ok) return setMessage(result.error || '確認訂單失敗');
+    setMessage('訂單已成立，前台租借日期已保留');
+    await loadOrders();
+  };
+
   return (
     <div className="mx-auto max-w-7xl pb-20">
       <div className="mb-7">
@@ -97,7 +108,8 @@ export default function PhysicalOrdersAdminPage() {
                 <div><p className="mb-2 text-xs font-semibold text-white/35">{order.delivery_method === 'pickup' ? '面交資訊' : '收件資訊'}</p><p>{order.recipient_name} · {order.recipient_phone}</p><p className="mt-1 text-sm text-white/60">{order.delivery_method === 'pickup' ? '預約面交' : '宅配'} · {order.shipping_fee === 0 ? '免運' : `運費 NT$${Number(order.shipping_fee).toLocaleString()}`}</p><p className="mt-1 text-sm text-white/60">{order.postal_code} {order.shipping_address}</p>{order.shipping_note && <p className="mt-2 text-sm text-cyan-200">備註：{order.shipping_note}</p>}</div>
                 <div><p className="mb-2 text-xs font-semibold text-white/35">商品內容</p><div className="space-y-3">{order.physical_order_items.map(item => <div key={item.id} className="flex justify-between gap-4 text-sm"><div><span>{item.product_name} × {item.quantity}</span>{item.rental_start_date && item.rental_end_date && <p className="mt-1 flex items-center gap-1.5 text-xs text-cyan-200"><CalendarDays size={13} />{formatDate(item.rental_start_date)} 至 {formatDate(item.rental_end_date)} · 共 {item.rental_days} 天</p>}{item.rental_daily_rate !== null && <p className="mt-1 text-xs text-white/35">每日租金 NT${Number(item.rental_daily_rate).toLocaleString()}</p>}</div><span className="shrink-0 font-mono text-white/60">NT${(Number(item.unit_price) * item.quantity).toLocaleString()}</span></div>)}</div></div>
               </div>
-              {order.payment_method === 'CASH_PICKUP' && order.payment_status === 'PENDING' && <div className="mt-5 flex justify-end"><button type="button" onClick={() => void confirmCashPayment(order.id)} className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-400"><Banknote size={16} />確認現場已收款</button></div>}
+              {order.payment_method === 'CASH_PICKUP' && order.order_status === 'PENDING_CONFIRMATION' && <div className="mt-5 flex flex-col items-end gap-2"><p className="text-xs text-amber-200/70">目前尚未占用租借日期，確認前請先與客戶核對面交時間。</p><button type="button" onClick={() => void confirmPickupReservation(order.id)} className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-500 px-4 text-sm font-bold text-[#071317] hover:bg-cyan-400"><CalendarDays size={16} />確認訂單成立並保留租期</button></div>}
+              {order.payment_method === 'CASH_PICKUP' && order.payment_status === 'PENDING' && order.order_status !== 'PENDING_CONFIRMATION' && <div className="mt-5 flex justify-end"><button type="button" onClick={() => void confirmCashPayment(order.id)} className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-400"><Banknote size={16} />確認現場已收款</button></div>}
             </div>}
           </div>
         ))}

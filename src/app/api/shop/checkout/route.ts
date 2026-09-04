@@ -242,8 +242,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, orderId, newBalance: Number(updatedCustomer?.token_balance ?? 0) });
     }
     if (paymentMethod === 'CASH_PICKUP') {
+      const { error: pendingError } = await supabase.from('physical_orders').update({
+        order_status: 'PENDING_CONFIRMATION',
+        reservation_expires_at: null
+      }).eq('id', orderId).eq('payment_method', 'CASH_PICKUP');
+      if (pendingError) throw pendingError;
       await sendPhysicalRentalOrderCreatedAlert(supabase, orderId);
-      return NextResponse.json({ success: true, orderId, onsitePayment: true });
+      return NextResponse.json({ success: true, orderId, onsitePayment: true, awaitingConfirmation: true });
     }
 
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();
