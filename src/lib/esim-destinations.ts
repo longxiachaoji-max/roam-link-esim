@@ -311,7 +311,7 @@ export const ESIM_DESTINATIONS: EsimDestination[] = [
     name: '香港 eSIM',
     shortName: '香港',
     flag: '🇭🇰',
-    countries: ['中國 香港 澳門'],
+    countries: ['香港'],
     title: '香港 eSIM 推薦｜香港網卡、吃到飽與旅遊上網方案',
     description: '比較香港 eSIM、香港旅遊網卡、每日流量、總量型與吃到飽方案，依停留天數、價格、熱點分享及使用需求選擇。',
     intro: '前往香港自由行、探親或出差，可依停留天數與使用量比較香港 eSIM。免拆換原本 SIM 卡，適合用於地圖導航、叫車、餐廳查詢、日常通訊與旅程分享。',
