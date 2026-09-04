@@ -689,7 +689,7 @@ export default function Home() {
   return (
     <div className="min-h-screen relative z-10">
       {/* 導覽列 */}
-      <nav className="sticky top-0 z-50 bg-[#0D0D1A]/90 px-4 py-3 backdrop-blur-md border-b border-white/5 md:flex md:items-center md:justify-between md:px-6 md:py-4">
+      <nav className="sticky top-0 z-50 border-b border-white/5 bg-[#0D0D1A]/90 px-4 py-3 shadow-[0_10px_35px_rgba(0,0,0,0.12)] backdrop-blur-md transition-[background-color,box-shadow] duration-300 md:flex md:items-center md:justify-between md:px-[max(1.5rem,calc((100vw-1320px)/2))] md:py-3">
         <div className="flex items-center justify-between gap-3">
           <Link href="/" aria-label="一飛通全球漫遊 FirstRoamLink 首頁" className="min-w-0 font-display font-extrabold leading-tight tracking-normal">
             <span className="block text-[13px] text-white md:text-base">一飛通全球漫遊</span>
@@ -772,7 +772,7 @@ export default function Home() {
 
       {/* 首頁廣告輪播；未設定圖片時保留原本的文字首頁。 */}
       {currentCarouselBanner ? (
-        <section className="w-full pb-10 sm:pb-14">
+        <section className="home-section-reveal w-full pb-10 sm:pb-12 md:px-6 md:pt-5">
           <h1 className="sr-only">{siteSettings.hero_title}</h1>
           <div
             ref={carouselViewportRef}
@@ -781,14 +781,14 @@ export default function Home() {
             onPointerUp={event => finishCarouselDrag(event)}
             onPointerCancel={event => finishCarouselDrag(event, true)}
             onClickCapture={preventCarouselClickAfterDrag}
-            className={`relative aspect-video w-full select-none overflow-hidden bg-[#080812] ${activeCarousel.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            className={`home-carousel relative aspect-video w-full select-none overflow-hidden bg-[#080812] md:mx-auto md:max-w-[1320px] md:rounded-md md:border md:border-white/10 md:shadow-[0_24px_70px_rgba(0,0,0,0.32)] ${activeCarousel.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
             style={{ touchAction: 'pan-y' }}
           >
             <div
               className="flex h-full"
               style={{
                 transform: `translate3d(calc(-${(carouselIndex % activeCarousel.length) * 100}% + ${carouselDragOffset}px), 0, 0)`,
-                transition: isCarouselDragging ? 'none' : 'transform 500ms ease-out',
+                transition: isCarouselDragging ? 'none' : 'transform 650ms cubic-bezier(0.22, 1, 0.36, 1)',
                 willChange: 'transform'
               }}
             >
@@ -803,7 +803,7 @@ export default function Home() {
                         priority={index === 0}
                         draggable={false}
                         sizes="100vw"
-                        className="object-cover"
+                        className={`object-cover transition-transform duration-1000 ease-out ${index === carouselIndex % activeCarousel.length ? 'scale-[1.01]' : 'scale-100'}`}
                       />
                     </a>
                   ) : (
@@ -814,7 +814,7 @@ export default function Home() {
                       priority={index === 0}
                       draggable={false}
                       sizes="100vw"
-                      className="object-cover"
+                      className={`object-cover transition-transform duration-1000 ease-out ${index === carouselIndex % activeCarousel.length ? 'scale-[1.01]' : 'scale-100'}`}
                     />
                   )}
                 </div>
@@ -823,14 +823,14 @@ export default function Home() {
           </div>
 
           {activeCarousel.length > 1 && (
-            <div className="flex h-10 items-center justify-center gap-2 bg-[#080812]">
+            <div className="mx-auto flex h-9 max-w-[1320px] items-center justify-center gap-2 bg-[#080812] md:bg-transparent">
               {activeCarousel.map((banner, index) => (
                 <button
                   key={banner.id}
                   type="button"
                   onClick={() => setCarouselIndex(index)}
                   aria-label={`顯示第 ${index + 1} 張廣告`}
-                  className={`h-2.5 w-2.5 rounded-full transition-colors ${index === carouselIndex % activeCarousel.length ? 'bg-coral' : 'bg-white/35 hover:bg-white/70'}`}
+                  className={`h-2.5 rounded-full transition-[width,background-color,transform] duration-300 hover:scale-110 ${index === carouselIndex % activeCarousel.length ? 'w-7 bg-coral' : 'w-2.5 bg-white/35 hover:bg-white/70'}`}
                 />
               ))}
             </div>
@@ -851,7 +851,7 @@ export default function Home() {
       )}
 
       {/* 商品區塊 */}
-      <section id="products" className="max-w-6xl mx-auto px-6 py-16">
+      <section id="products" className="home-section-reveal max-w-6xl mx-auto px-6 py-14 md:py-16">
         <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-6">
           <h2 className="text-3xl font-black">
             {activeTab === 'guide' ? '使用說明' : activeTab === 'faq' ? '購買常見問題' : siteSettings.section_title}
@@ -961,7 +961,7 @@ export default function Home() {
             <Link
               key={destination.country}
               href={getCountryDestinationHref(destination.country)}
-              className="group flex min-h-32 flex-col justify-between rounded-md border border-white/10 bg-card-bg p-4 transition-colors hover:border-cyan/45 hover:bg-white/[0.07] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan sm:min-h-36 sm:p-5"
+              className="group flex min-h-32 flex-col justify-between rounded-md border border-white/10 bg-card-bg p-4 transition-[transform,border-color,background-color,box-shadow] duration-300 hover:-translate-y-1 hover:border-cyan/45 hover:bg-white/[0.07] hover:shadow-[0_16px_35px_rgba(0,0,0,0.2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan sm:min-h-36 sm:p-5"
             >
               <div>
                 <span className="block text-3xl sm:text-4xl" aria-hidden="true">{destination.flag}</span>
@@ -978,7 +978,7 @@ export default function Home() {
         )}
       </section>
 
-      <section className="border-y border-white/10 bg-[#111827] px-6 py-12" aria-labelledby="travel-esim-heading">
+      <section className="home-section-reveal border-y border-white/10 bg-[#111827] px-6 py-12" aria-labelledby="travel-esim-heading">
         <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.35fr_0.65fr] md:items-center">
           <div>
             <p className="mb-3 text-xs font-bold text-cyan">一飛通全球漫遊 FirstRoamLink</p>
@@ -1003,7 +1003,7 @@ export default function Home() {
       </section>
 
       {/* 頁尾聯絡資訊 */}
-      <footer className="border-t border-white/10 bg-[#0D0D1A] px-6 py-9">
+      <footer className="home-section-reveal border-t border-white/10 bg-[#0D0D1A] px-6 py-9">
         <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] lg:gap-14">
           <div>
             <p className="text-sm font-bold text-white">一飛通全球漫遊</p>
@@ -1052,7 +1052,7 @@ export default function Home() {
         </div>
       </footer>
 
-      <section className="border-y border-white/10 bg-[#0f1522] px-6 py-5" aria-labelledby="destination-request-heading">
+      <section className="home-section-reveal border-y border-white/10 bg-[#0f1522] px-6 py-5" aria-labelledby="destination-request-heading">
         <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[48px_minmax(280px,0.8fr)_minmax(420px,1.4fr)] lg:items-center">
           <div className="grid h-12 w-12 place-items-center rounded-md bg-coral/15 text-coral"><MapPin size={22} /></div>
           <div>

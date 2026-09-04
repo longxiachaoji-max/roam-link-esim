@@ -51,6 +51,14 @@
   .animate-fade-in-up {
     animation: fadeInUp 0.4s ease-out forwards;
   }
+
+  .home-carousel {
+    animation: homeCarouselReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .home-section-reveal {
+    animation: homeSectionReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
   
   @keyframes slideInRight {
     from { transform: translateX(100%); opacity: 0; }
@@ -59,5 +67,24 @@
   @keyframes fadeInUp {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes homeCarouselReveal {
+    from { transform: translateY(10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes homeSectionReveal {
+    from { transform: translateY(14px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-slide-in-right,
+    .animate-fade-in-up,
+    .home-carousel,
+    .home-section-reveal {
+      animation: none;
+    }
   }
 }
