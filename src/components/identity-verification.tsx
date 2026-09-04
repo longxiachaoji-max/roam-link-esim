@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, Camera, Clock3, IdCard, ShieldCheck, Upload, X } from 'lucide-react';
+import { Camera, Clock3, IdCard, ShieldCheck, Upload, X } from 'lucide-react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 
 type VerificationStatus = 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -215,13 +215,14 @@ export function IdentityVerificationCard() {
     const timer = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timer);
   }, [refresh]);
-  const status = verification?.status || 'NOT_SUBMITTED';
-  const Icon = status === 'APPROVED' ? BadgeCheck : status === 'PENDING' ? Clock3 : IdCard;
+  if (loading || !verification || verification.status === 'APPROVED') return null;
+  const status = verification.status;
+  const Icon = status === 'PENDING' ? Clock3 : IdCard;
   return <>
     <div className="mb-10 rounded-md border border-white/8 bg-[#1a1a24] p-5">
-      <div className="flex items-start justify-between gap-4"><div className="flex min-w-0 gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-cyan-400/10 text-cyan-300"><Icon size={21} /></span><div><h3 className="font-bold">租借實名認證</h3><p className="mt-1 text-xs leading-5 text-white/45">租借手機與設備前需完成認證；一般會員功能不受影響。</p></div></div><span className={`shrink-0 rounded px-2 py-1 text-xs font-bold ${status === 'APPROVED' ? 'bg-emerald-400/10 text-emerald-300' : status === 'PENDING' ? 'bg-amber-400/10 text-amber-200' : 'bg-white/8 text-white/55'}`}>{loading ? '讀取中' : STATUS_TEXT[status]}</span></div>
+      <div className="flex items-start justify-between gap-4"><div className="flex min-w-0 gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-cyan-400/10 text-cyan-300"><Icon size={21} /></span><div><h3 className="font-bold">租借實名認證</h3><p className="mt-1 text-xs leading-5 text-white/45">租借手機與設備前需完成認證；一般會員功能不受影響。</p></div></div><span className={`shrink-0 rounded px-2 py-1 text-xs font-bold ${status === 'PENDING' ? 'bg-amber-400/10 text-amber-200' : 'bg-white/8 text-white/55'}`}>{STATUS_TEXT[status]}</span></div>
       {verification?.review_note && <p className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-xs leading-5 text-red-200">審核說明：{verification.review_note}</p>}
-      {status !== 'APPROVED' && status !== 'PENDING' && <button type="button" onClick={() => setOpen(true)} className="mt-4 h-10 rounded-md bg-cyan-500 px-4 text-sm font-black text-[#071317]">{status === 'REJECTED' ? '重新上傳資料' : '開始實名認證'}</button>}
+      {status !== 'PENDING' && <button type="button" onClick={() => setOpen(true)} className="mt-4 h-10 rounded-md bg-cyan-500 px-4 text-sm font-black text-[#071317]">{status === 'REJECTED' ? '重新上傳資料' : '開始實名認證'}</button>}
       {status === 'PENDING' && <p className="mt-4 text-xs text-amber-100/70">資料已送出，後台審核完成後即可租借下單。</p>}
     </div>
     <IdentityVerificationModal open={open} onClose={() => setOpen(false)} onSubmitted={() => void refresh()} />

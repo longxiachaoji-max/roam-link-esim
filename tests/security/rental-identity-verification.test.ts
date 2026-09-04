@@ -63,6 +63,10 @@ test('members can preview selected identity photos and the ID watermark', () => 
   assert.match(identityComponent, /previewUrl && !selfieCapture/);
 });
 
+test('approved identity verification is hidden from the member center', () => {
+  assert.match(identityComponent, /verification\.status === 'APPROVED'\) return null/);
+});
+
 test('admin identity photos preserve their complete aspect ratio', () => {
   assert.match(adminComponent, /object-contain/);
   assert.doesNotMatch(adminComponent, /object-cover/);
