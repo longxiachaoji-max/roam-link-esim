@@ -10,7 +10,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://pbscoymzoghpghcfpvde.supabase.co wss://pbscoymzoghpghcfpvde.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://www.google.com",
+  "connect-src 'self' https://pbscoymzoghpghcfpvde.supabase.co wss://pbscoymzoghpghcfpvde.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net",
   "frame-src 'self' https://payment.ecpay.com.tw",
   "worker-src 'self' blob:",
   "manifest-src 'self'",

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 
       let update = supabase
         .from('site_settings')
-        .update({ usage_guide: nextGuide, updated_at: new Date().toISOString() })
+        .update({ usage_guide: nextGuide })
         .eq('id', 'main');
       update = currentGuide === null ? update.is('usage_guide', null) : update.eq('usage_guide', currentGuide);
       const { data: updated, error: updateError } = await update.select('id');
