@@ -3,7 +3,7 @@ import { authenticationErrorResponse, getServerSupabase, requireAdminUser } from
 
 export const dynamic = 'force-dynamic';
 
-const VERIFICATION_SELECT = 'id, customer_id, status, submitted_at, reviewed_at, review_note, id_front_path, id_back_path, selfie_path, legal_name, national_id, birth_date, residential_address';
+const VERIFICATION_SELECT = 'id, customer_id, status, submitted_at, reviewed_at, review_note, id_front_path, id_back_path, selfie_path';
 
 async function signVerificationImages(supabase: ReturnType<typeof getServerSupabase>, verification: {
   id_front_path: string;
@@ -31,11 +31,15 @@ export async function GET(request: Request) {
         .select(VERIFICATION_SELECT).eq('id', detailId).maybeSingle();
       if (error) throw error;
       if (!verification) return NextResponse.json({ error: '找不到實名認證資料' }, { status: 404 });
-      const { data: customer, error: customerError } = await supabase.from('customers')
-        .select('id, name, email').eq('id', verification.customer_id).maybeSingle();
+      const [{ data: customer, error: customerError }, { data: profile, error: profileError }] = await Promise.all([
+        supabase.from('customers').select('id, name, email').eq('id', verification.customer_id).maybeSingle(),
+        supabase.from('customer_private_profiles').select('legal_name, national_id, birth_date, residential_address').eq('customer_id', verification.customer_id).maybeSingle()
+      ]);
       if (customerError) throw customerError;
+      if (profileError) throw profileError;
       return NextResponse.json({ verification: {
         ...verification,
+        ...(profile || {}),
         customer: customer || null,
         images: await signVerificationImages(supabase, verification)
       } });
@@ -50,22 +54,15 @@ export async function GET(request: Request) {
       : { data: [], error: null };
     if (customersError) throw customersError;
     const customerMap = new Map((customers || []).map(customer => [customer.id, customer]));
-    const rows = await Promise.all((verifications || []).map(async verification => {
-      const expanded = verification.status === 'PENDING';
-      return {
+    const rows = (verifications || []).map(verification => ({
         id: verification.id,
         status: verification.status,
         submitted_at: verification.submitted_at,
         reviewed_at: verification.reviewed_at,
         review_note: verification.review_note,
         customer: customerMap.get(verification.customer_id) || null,
-        legal_name: expanded ? verification.legal_name : null,
-        national_id: expanded ? verification.national_id : null,
-        birth_date: expanded ? verification.birth_date : null,
-        residential_address: expanded ? verification.residential_address : null,
-        images: expanded ? await signVerificationImages(supabase, verification) : null
-      };
-    }));
+        images: null
+      }));
     return NextResponse.json({ verifications: rows });
   } catch (error) {
     const authError = authenticationErrorResponse(error);

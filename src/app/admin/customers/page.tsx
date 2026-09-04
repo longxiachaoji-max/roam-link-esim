@@ -3,10 +3,9 @@
 import { adminFetch } from '@/lib/admin-fetch';
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { Search, Zap, User, PlusCircle, TicketPercent } from "lucide-react";
+import { IdCard, Search, Zap, User, PlusCircle, TicketPercent } from "lucide-react";
 import { normalizeReferralCode } from '@/lib/referral-code';
-import AdminIdentityVerifications from '@/components/admin-identity-verifications';
+import AdminCustomerProfileModal, { type AdminCustomerProfile } from '@/components/admin-customer-profile-modal';
 
 export default function AdminCustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -19,10 +18,9 @@ export default function AdminCustomersPage() {
   }, []);
 
   const fetchCustomers = async () => {
-    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
-    if (!error && data) {
-      setCustomers(data);
-    }
+    const response = await adminFetch('/api/admin/customers', { cache: 'no-store' });
+    const result = await response.json();
+    if (response.ok) setCustomers(result.customers || []);
   };
   const fetchReferralConfig = async () => {
     const res = await adminFetch('/api/admin/referrals');
@@ -31,6 +29,7 @@ export default function AdminCustomersPage() {
   };
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [selectedReferralCustomer, setSelectedReferralCustomer] = useState<any>(null);
+  const [selectedProfileCustomer, setSelectedProfileCustomer] = useState<AdminCustomerProfile | null>(null);
   const [addAmount, setAddAmount] = useState("");
   const [paymentReceivedAmount, setPaymentReceivedAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -208,8 +207,6 @@ export default function AdminCustomersPage() {
         </div>
       </div>
 
-      <AdminIdentityVerifications />
-
       <div className="bg-[#1A1A2E] md:bg-card-bg border border-white/10 rounded-2xl p-4 md:p-6 mb-8 shadow-xl">
         <div className="mb-6 border border-cyan/20 bg-cyan/5 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-4">
@@ -300,6 +297,13 @@ export default function AdminCustomersPage() {
                         <TicketPercent size={16} />
                         推薦設定
                       </button>
+                      <button
+                        onClick={() => setSelectedProfileCustomer(customer)}
+                        title="基本資料與實名認證"
+                        className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/65 transition-colors hover:bg-white/10"
+                      >
+                        <IdCard size={17} />
+                      </button>
                       <button 
                         onClick={() => setSelectedCustomer(customer)}
                         className="bg-cyan/20 text-cyan hover:bg-cyan/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-2 whitespace-nowrap"
@@ -360,6 +364,13 @@ export default function AdminCustomersPage() {
                   >
                     <TicketPercent size={15} />
                     推薦
+                  </button>
+                  <button
+                    onClick={() => setSelectedProfileCustomer(customer)}
+                    title="基本資料與實名認證"
+                    className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/65 transition-colors hover:bg-white/10"
+                  >
+                    <IdCard size={16} />
                   </button>
                   <button 
                     onClick={() => setSelectedCustomer(customer)}
@@ -513,6 +524,12 @@ export default function AdminCustomersPage() {
           </div>
         </div>
       )}
+
+      <AdminCustomerProfileModal
+        customer={selectedProfileCustomer}
+        onClose={() => setSelectedProfileCustomer(null)}
+        onChanged={fetchCustomers}
+      />
 
       {/* 吐司通知 */}
       {toastMsg && (

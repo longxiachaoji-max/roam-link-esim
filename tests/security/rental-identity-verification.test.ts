@@ -5,13 +5,17 @@ import test from 'node:test';
 const checkoutRoute = readFileSync('src/app/api/shop/checkout/route.ts', 'utf8');
 const identityRoute = readFileSync('src/app/api/member/identity-verification/route.ts', 'utf8');
 const adminRoute = readFileSync('src/app/api/admin/identity-verifications/route.ts', 'utf8');
-const adminComponent = readFileSync('src/components/admin-identity-verifications.tsx', 'utf8');
+const adminComponent = readFileSync('src/components/admin-customer-profile-modal.tsx', 'utf8');
+const adminCustomersRoute = readFileSync('src/app/api/admin/customers/route.ts', 'utf8');
+const adminCustomersPage = readFileSync('src/app/admin/customers/page.tsx', 'utf8');
+const memberPage = readFileSync('src/app/member/page.tsx', 'utf8');
 const migration = readFileSync('supabase/migrations/20260904102541_add_member_identity_verification.sql', 'utf8');
 const pickupConfirmationMigration = readFileSync('supabase/migrations/20260904235500_confirm_pickup_before_reserving_dates.sql', 'utf8');
 const identityComponent = readFileSync('src/components/identity-verification.tsx', 'utf8');
 const shopPage = readFileSync('src/app/shop/page.tsx', 'utf8');
 const pendingConfirmationMigration = readFileSync('supabase/migrations/20260904170022_allow_pending_confirmation_physical_orders.sql', 'utf8');
 const identityProfileMigration = readFileSync('supabase/migrations/20260904210412_add_identity_profile_fields.sql', 'utf8');
+const privateProfileMigration = readFileSync('supabase/migrations/20260905093000_add_customer_private_profiles.sql', 'utf8');
 
 test('rental checkout is enforced server-side', () => {
   assert.match(checkoutRoute, /verification\?\.status !== 'APPROVED'/);
@@ -64,13 +68,11 @@ test('members can preview selected identity photos and the ID watermark', () => 
   assert.match(identityComponent, /previewUrl && !selfieCapture/);
 });
 
-test('approved members only receive profile and replacement controls, never old identity photos', () => {
-  assert.match(identityComponent, /verification\.status === 'APPROVED'/);
-  assert.match(identityComponent, />會員資料</);
-  assert.match(identityComponent, />更新證件</);
-  assert.doesNotMatch(identityComponent, /調閱證件/);
-  const memberGetHandler = identityRoute.slice(identityRoute.indexOf('export async function GET'), identityRoute.indexOf('export async function PATCH'));
-  assert.doesNotMatch(memberGetHandler, /id_front_path|id_back_path|selfie_path/);
+test('the member center exposes neither private profile controls nor old identity documents', () => {
+  assert.doesNotMatch(memberPage, /IdentityVerificationCard|會員資料|更新證件/);
+  const memberGetHandler = identityRoute.slice(identityRoute.indexOf('export async function GET'), identityRoute.indexOf('export async function POST'));
+  assert.doesNotMatch(memberGetHandler, /id_front_path|id_back_path|selfie_path|legal_name|national_id|birth_date|residential_address/);
+  assert.doesNotMatch(identityRoute, /export async function PATCH/);
 });
 
 test('admin identity photos preserve their complete aspect ratio', () => {
@@ -81,18 +83,19 @@ test('admin identity photos preserve their complete aspect ratio', () => {
 
 test('approved identity documents are collapsed and signed only when an admin retrieves them', () => {
   assert.match(adminRoute, /searchParams\.get\('id'\)/);
-  assert.match(adminRoute, /verification\.status === 'PENDING'/);
-  assert.match(adminRoute, /images: expanded \? await signVerificationImages/);
+  assert.match(adminRoute, /images: await signVerificationImages/);
+  assert.match(adminRoute, /images: null/);
   assert.match(adminComponent, /調閱證件/);
   assert.match(adminComponent, /證件已收起/);
 });
 
-test('identity profile fields are private, validated, and editable without exposing documents', () => {
+test('identity profile fields are stored and edited only through the admin area', () => {
   assert.match(identityProfileMigration, /legal_name text/);
-  assert.match(identityProfileMigration, /national_id text/);
-  assert.match(identityProfileMigration, /birth_date date/);
-  assert.match(identityProfileMigration, /residential_address text/);
-  assert.match(identityProfileMigration, /unique index[\s\S]*upper\(national_id\)/);
-  assert.match(identityRoute, /export async function PATCH/);
-  assert.match(identityRoute, /此身分證字號已由其他會員使用/);
+  assert.match(privateProfileMigration, /customer_private_profiles/);
+  assert.match(privateProfileMigration, /enable row level security/);
+  assert.match(privateProfileMigration, /revoke all[\s\S]*from public, anon, authenticated/);
+  assert.match(adminCustomersRoute, /export async function PUT/);
+  assert.match(adminCustomersRoute, /customer_private_profiles/);
+  assert.match(adminCustomersPage, /推薦設定[\s\S]*setSelectedProfileCustomer/);
+  assert.doesNotMatch(adminCustomersPage, /AdminIdentityVerifications/);
 });
