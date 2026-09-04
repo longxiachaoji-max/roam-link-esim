@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Session } from '@supabase/supabase-js';
-import { ArrowLeft, ArrowRight, Barcode, CalendarDays, CreditCard, LogIn, MapPin, Minus, Package, Plus, ShoppingBag, Trash2, Truck, User, WalletCards, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Banknote, Barcode, CalendarDays, CreditCard, LogIn, MapPin, Minus, Package, Plus, ShieldCheck, ShoppingBag, Trash2, Truck, User, WalletCards, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateRentalPrice, type RentalPriceTier } from '@/lib/rental-pricing';
 import {
@@ -22,6 +22,8 @@ import {
   writePhysicalCartSnapshot,
   type PhysicalCartSnapshotItem
 } from '@/lib/physical-cart';
+import { IdentityVerificationModal, useIdentityVerification } from '@/components/identity-verification';
+import { getRentalContractSections } from '@/lib/rental-contract';
 
 type Category = 'all' | 'rental' | 'travel_card' | 'other';
 interface Product { id: string; name: string; category: Exclude<Category, 'all'>; summary: string | null; price: number; stock_quantity: number; images: string[]; rental_price_tiers: RentalPriceTier[]; rental_free_shipping_days: number | null; }
@@ -128,7 +130,7 @@ export default function PhysicalShopPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
-  const [paying, setPaying] = useState<'Credit' | 'BARCODE' | 'TOKENS' | null>(null);
+  const [paying, setPaying] = useState<'Credit' | 'BARCODE' | 'TOKENS' | 'CASH_PICKUP' | null>(null);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('shipping');
   const [storeSettings, setStoreSettings] = useState<PhysicalStoreSettings>(DEFAULT_PHYSICAL_STORE_SETTINGS);
@@ -136,6 +138,9 @@ export default function PhysicalShopPage() {
   const cartInitializationRef = useRef('');
   const cloudSyncTimerRef = useRef<number | null>(null);
   const paymentSucceededRef = useRef(false);
+  const [identityOpen, setIdentityOpen] = useState(false);
+  const [rentalTermsAccepted, setRentalTermsAccepted] = useState(false);
+  const identity = useIdentityVerification();
 
   useEffect(() => {
     const payment = new URLSearchParams(window.location.search).get('payment');
@@ -280,6 +285,8 @@ export default function PhysicalShopPage() {
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = cart.reduce((sum, item) => sum + lineTotal(item), 0);
   const hasRental = cart.some(item => item.category === 'rental');
+  const rentalSubject = [...new Set(cart.filter(item => item.category === 'rental').map(item => item.name))].join('、') || '租借商品';
+  const rentalContractSections = getRentalContractSections(rentalSubject);
   const shippingFee = calculatePhysicalShippingFee(
     subtotal,
     cart.filter(item => item.category === 'rental').map(item => ({
@@ -312,6 +319,20 @@ export default function PhysicalShopPage() {
     if (!sessionEmail) { setCartOpen(false); setLoginOpen(true); setMessage('請先登入會員再結帳'); return; }
     const { data } = await supabase.auth.getSession();
     if (data.session?.access_token) {
+      if (hasRental) {
+        try {
+          const verification = await identity.refresh();
+          if (verification.status !== 'APPROVED') {
+            setCartOpen(false);
+            setIdentityOpen(true);
+            setMessage(verification.status === 'PENDING' ? '實名認證正在審核中，通過後即可租借下單。' : '租借商品需先完成實名認證。');
+            return;
+          }
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : '無法確認實名認證狀態');
+          return;
+        }
+      }
       const response = await fetch('/api/topup/profile', { headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: 'no-store' });
       const result = await response.json();
       if (response.ok) setTokenBalance(Number(result.customer?.token_balance || 0));
@@ -326,8 +347,9 @@ export default function PhysicalShopPage() {
     setLoginOpen(false); setCheckoutOpen(true); setMessage('登入成功');
   };
 
-  const checkout = async (paymentMethod: 'Credit' | 'BARCODE' | 'TOKENS') => {
+  const checkout = async (paymentMethod: 'Credit' | 'BARCODE' | 'TOKENS' | 'CASH_PICKUP') => {
     if (paying || !cart.length) return;
+    if (hasRental && !rentalTermsAccepted) return setMessage('請先閱讀並勾選同意租借合約條款');
     setPaying(paymentMethod);
     try {
       const { data } = await supabase.auth.getSession();
@@ -344,19 +366,21 @@ export default function PhysicalShopPage() {
           })),
           paymentMethod,
           deliveryMethod,
+          rentalTermsAccepted,
           ...shipping
         })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '無法建立付款');
-      if (paymentMethod === 'TOKENS') {
+      if (paymentMethod === 'TOKENS' || paymentMethod === 'CASH_PICKUP') {
         if (!result.success) throw new Error(result.error || '儲值金付款失敗');
         await saveMemberCart(data.session.access_token, []);
         writePhysicalCartSnapshot([]);
         setCart([]);
-        setTokenBalance(Number(result.newBalance || 0));
+        if (paymentMethod === 'TOKENS') setTokenBalance(Number(result.newBalance || 0));
         setCheckoutOpen(false);
-        setMessage('儲值金付款完成，訂單已立即成立。');
+        setRentalTermsAccepted(false);
+        setMessage(paymentMethod === 'CASH_PICKUP' ? '面交訂單已成立，請依預約時間現場付款取件。' : '儲值金付款完成，訂單已立即成立。');
         setPaying(null);
         return;
       }
@@ -464,11 +488,12 @@ export default function PhysicalShopPage() {
             <label className="text-sm text-black/55 sm:col-span-2">訂單備註<textarea rows={3} value={shipping.shippingNote} onChange={e => setShipping({ ...shipping, shippingNote: e.target.value })} className="mt-2 w-full rounded-md border border-black/12 p-3 outline-none focus:border-[#247253]" /></label>
           </div>
           <div className="my-6 border-y border-black/8 py-4 text-sm"><div className="flex justify-between text-black/50"><span>商品合計</span><span>NT${subtotal.toLocaleString()}</span></div><div className="mt-2 flex justify-between text-black/50"><span>{deliveryMethod === 'pickup' ? '預約面交' : '宅配運費'}</span><span>{shippingFee === 0 ? '免運' : `NT$${shippingFee.toLocaleString()}`}</span></div><div className="mt-3 flex items-end justify-between"><div><p className="font-semibold">本次付款</p><p className="text-xs text-[#247253]">儲值金餘額 NT${Number(tokenBalance || 0).toLocaleString()}</p></div><p className="text-2xl font-bold text-[#df4d5f]">NT${total.toLocaleString()}</p></div></div>
-          {hasRental && <div className="mb-4 rounded-md border border-[#247253]/20 bg-[#dceee7] px-4 py-3 text-sm leading-6 text-[#174d38]">租借商品不開放超商條碼直接結帳。如需現金付款，請先儲值至超商繳款後，再以儲值金結帳。</div>}
-          <div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('TOKENS')} disabled={paying !== null || tokenBalance === null || tokenBalance < total} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#df4d5f] font-bold text-white disabled:bg-black/10 disabled:text-black/30"><WalletCards size={18} /> {paying === 'TOKENS' ? '立即扣款中...' : '儲值金立即付款'}</button><button onClick={() => checkout('Credit')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button>{!hasRental && <button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button>}</div>
+          {hasRental && <div className="mb-5 rounded-md border border-[#247253]/20 bg-[#edf7f2] p-4 text-sm text-[#174d38]"><div className="mb-3 flex items-center gap-2 font-bold"><ShieldCheck size={18} />租借合約條款</div><p className="mb-3 text-xs text-black/55">租借標的：{rentalSubject}</p><div className="max-h-48 space-y-3 overflow-y-auto rounded-md border border-[#247253]/15 bg-white/70 p-3 text-xs leading-5">{rentalContractSections.map((section, index) => <div key={section.title}><p className="font-bold">{index + 1}. {section.title}</p><p className="mt-1 text-black/60">{section.body}</p></div>)}</div><label className="mt-4 flex cursor-pointer items-start gap-3 font-semibold leading-5"><input type="checkbox" checked={rentalTermsAccepted} onChange={event => setRentalTermsAccepted(event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[#247253]" /><span>本人已閱讀並同意以上租借合約條款，且確認實名資料為本人所有。</span></label><p className="mt-3 text-xs text-[#174d38]/70">租借商品不開放超商條碼直接結帳。選擇面交時可於現場支付。</p></div>}
+          <div className="grid gap-3 sm:grid-cols-2"><button onClick={() => checkout('TOKENS')} disabled={paying !== null || tokenBalance === null || tokenBalance < total || (hasRental && !rentalTermsAccepted)} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#df4d5f] font-bold text-white disabled:bg-black/10 disabled:text-black/30"><WalletCards size={18} /> {paying === 'TOKENS' ? '立即扣款中...' : '儲值金立即付款'}</button><button onClick={() => checkout('Credit')} disabled={paying !== null || (hasRental && !rentalTermsAccepted)} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#172028] font-bold text-white disabled:opacity-40"><CreditCard size={18} /> {paying === 'Credit' ? '前往付款中...' : '信用卡付款'}</button>{hasRental && deliveryMethod === 'pickup' && <button onClick={() => checkout('CASH_PICKUP')} disabled={paying !== null || !rentalTermsAccepted} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Banknote size={18} /> {paying === 'CASH_PICKUP' ? '建立預約中...' : '面交現場支付'}</button>}{!hasRental && <button onClick={() => checkout('BARCODE')} disabled={paying !== null} className="flex h-12 items-center justify-center gap-2 rounded-md bg-[#247253] font-bold text-white disabled:opacity-40 sm:col-span-2"><Barcode size={18} /> {paying === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}</button>}</div>
           {tokenBalance !== null && tokenBalance < total && <Link href="/member?topup=1" className="mt-4 flex h-11 items-center justify-center rounded-md border border-[#df4d5f]/30 text-sm font-bold text-[#c43b4e] hover:bg-[#df4d5f]/5">餘額不足，先前往會員中心儲值</Link>}<p className="mt-3 text-center text-xs text-black/40">儲值金付款會立即扣款並成立訂單。</p>
         </div>
       </div>}
+      <IdentityVerificationModal open={identityOpen} onClose={() => setIdentityOpen(false)} onSubmitted={() => { setMessage('實名認證已送出，後台審核通過後即可租借下單。'); void identity.refresh(); }} />
     </main>
   );
 }

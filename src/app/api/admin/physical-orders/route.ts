@@ -24,6 +24,22 @@ export async function PUT(request: Request) {
     await requirePhysicalStoreAdmin(request);
     const body = await request.json();
     const id = String(body.id || '');
+    if (body.action === 'confirm_cash_payment') {
+      if (!id) return NextResponse.json({ error: '訂單編號不正確' }, { status: 400 });
+      const supabase = getPhysicalStoreAdmin();
+      const { data: order, error: orderError } = await supabase.from('physical_orders')
+        .select('id, payment_method, payment_status, total_amount').eq('id', id).maybeSingle();
+      if (orderError) throw orderError;
+      if (!order || order.payment_method !== 'CASH_PICKUP' || order.payment_status !== 'PENDING') {
+        return NextResponse.json({ error: '此訂單不是待收款的面交訂單' }, { status: 400 });
+      }
+      const { data: status, error } = await supabase.rpc('mark_physical_order_paid', {
+        p_order_id: id,
+        p_paid_amount: Number(order.total_amount)
+      });
+      if (error) throw error;
+      return NextResponse.json({ success: true, orderStatus: status });
+    }
     const orderStatus = String(body.order_status || '');
     if (!id || !ORDER_STATUSES.has(orderStatus)) {
       return NextResponse.json({ error: '訂單狀態不正確' }, { status: 400 });

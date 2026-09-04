@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Search, Zap, User, PlusCircle, TicketPercent } from "lucide-react";
 import { normalizeReferralCode } from '@/lib/referral-code';
+import AdminIdentityVerifications from '@/components/admin-identity-verifications';
 
 export default function AdminCustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -206,6 +207,8 @@ export default function AdminCustomersPage() {
           <p className="text-muted text-sm md:text-base">查詢會員資料並手動加值/扣款 (Tokens)</p>
         </div>
       </div>
+
+      <AdminIdentityVerifications />
 
       <div className="bg-[#1A1A2E] md:bg-card-bg border border-white/10 rounded-2xl p-4 md:p-6 mb-8 shadow-xl">
         <div className="mb-6 border border-cyan/20 bg-cyan/5 rounded-2xl p-4">

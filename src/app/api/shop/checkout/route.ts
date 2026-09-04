@@ -16,10 +16,11 @@ import {
   normalizePhysicalStoreSettings,
   type DeliveryMethod
 } from '@/lib/physical-store-settings';
+import { buildRentalContractSnapshot, RENTAL_CONTRACT_VERSION } from '@/lib/rental-contract';
 
 export const dynamic = 'force-dynamic';
 
-type PaymentMethod = 'Credit' | 'BARCODE' | 'TOKENS';
+type PaymentMethod = 'Credit' | 'BARCODE' | 'TOKENS' | 'CASH_PICKUP';
 
 interface CheckoutItem {
   productId: string;
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const paymentMethod = String(body.paymentMethod || 'Credit') as PaymentMethod;
-    if (paymentMethod !== 'Credit' && paymentMethod !== 'BARCODE' && paymentMethod !== 'TOKENS') {
+    if (!['Credit', 'BARCODE', 'TOKENS', 'CASH_PICKUP'].includes(paymentMethod)) {
       return NextResponse.json({ error: '不支援的付款方式' }, { status: 400 });
     }
     const deliveryMethod = String(body.deliveryMethod || 'shipping') as DeliveryMethod;
@@ -149,6 +150,10 @@ export async function POST(request: Request) {
     if (hasRental && paymentMethod === 'BARCODE') {
       throw new Error('租借商品不開放超商條碼直接結帳。如需現金付款，請先儲值至超商繳款後，再以儲值金結帳');
     }
+    if (paymentMethod === 'CASH_PICKUP' && (!hasRental || deliveryMethod !== 'pickup')) {
+      throw new Error('現場支付僅限租借商品預約面交');
+    }
+    if (hasRental && body.rentalTermsAccepted !== true) throw new Error('請先閱讀並同意租借合約條款');
     const shippingFee = calculatePhysicalShippingFee(
       subtotal,
       orderItems.filter(item => item.rental_days !== null).map(item => ({
@@ -161,7 +166,7 @@ export async function POST(request: Request) {
     const totalAmount = subtotal + shippingFee;
     if (!Number.isInteger(totalAmount) || totalAmount <= 0) throw new Error('訂單金額不正確');
 
-    if (paymentMethod !== 'TOKENS') {
+    if (paymentMethod !== 'TOKENS' && paymentMethod !== 'CASH_PICKUP') {
       const { data: settings } = await supabase.from('site_settings').select('usage_guide').eq('id', 'main').single();
       const limits = parsePaymentLimits(settings?.usage_guide);
       const limit = paymentMethod === 'BARCODE'
@@ -183,8 +188,23 @@ export async function POST(request: Request) {
       customer = data;
     }
 
-    const merchantTradeNo = paymentMethod === 'TOKENS' ? '' : createMerchantTradeNo();
-    const reservationExpiresAt = paymentMethod === 'TOKENS' ? null : new Date(Date.now() + (paymentMethod === 'BARCODE' ? 3 * 24 * 60 : 30) * 60_000).toISOString();
+    if (hasRental) {
+      const { data: verification, error: verificationError } = await supabase
+        .from('customer_identity_verifications')
+        .select('status')
+        .eq('customer_id', customer.id)
+        .maybeSingle();
+      if (verificationError) throw verificationError;
+      if (verification?.status !== 'APPROVED') throw new Error('租借商品需先完成實名認證並通過後台審核');
+    }
+
+    const merchantTradeNo = paymentMethod === 'TOKENS' || paymentMethod === 'CASH_PICKUP' ? '' : createMerchantTradeNo();
+    const latestRentalEnd = orderItems.reduce<string | null>((latest, item) => item.rental_end_date && (!latest || item.rental_end_date > latest) ? item.rental_end_date : latest, null);
+    const reservationExpiresAt = paymentMethod === 'TOKENS'
+      ? null
+      : paymentMethod === 'CASH_PICKUP' && latestRentalEnd
+        ? new Date(`${latestRentalEnd}T23:59:59+08:00`).toISOString()
+        : new Date(Date.now() + (paymentMethod === 'BARCODE' ? 3 * 24 * 60 : 30) * 60_000).toISOString();
     const { data: createdOrderId, error: orderError } = await supabase.rpc('create_physical_order_with_items', {
       p_order: {
         customer_id: customer.id,
@@ -199,9 +219,12 @@ export async function POST(request: Request) {
         delivery_method: deliveryMethod,
         subtotal,
         shipping_fee: shippingFee,
-        payment_method: paymentMethod === 'TOKENS' ? 'TOKENS' : paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',
+        payment_method: paymentMethod === 'TOKENS' ? 'TOKENS' : paymentMethod === 'CASH_PICKUP' ? 'CASH_PICKUP' : paymentMethod === 'BARCODE' ? 'ECPAY_BARCODE' : 'ECPAY_CREDIT',
         ecpay_trade_no: merchantTradeNo,
-        reservation_expires_at: reservationExpiresAt
+        reservation_expires_at: reservationExpiresAt,
+        rental_terms_accepted: hasRental,
+        rental_terms_version: hasRental ? RENTAL_CONTRACT_VERSION : '',
+        rental_terms_snapshot: hasRental ? buildRentalContractSnapshot(requiredText(body.recipientName, '取件人姓名', 80), orderItems.filter(item => item.rental_days !== null).map(item => item.product_name).join('、')) : ''
       },
       p_items: orderItems.map(item => ({
         product_id: item.product_id,
@@ -217,6 +240,10 @@ export async function POST(request: Request) {
       await sendPhysicalRentalOrderCreatedAlert(supabase, orderId);
       const { data: updatedCustomer } = await supabase.from('customers').select('token_balance').eq('id', customer.id).maybeSingle();
       return NextResponse.json({ success: true, orderId, newBalance: Number(updatedCustomer?.token_balance ?? 0) });
+    }
+    if (paymentMethod === 'CASH_PICKUP') {
+      await sendPhysicalRentalOrderCreatedAlert(supabase, orderId);
+      return NextResponse.json({ success: true, orderId, onsitePayment: true });
     }
 
     const { merchantId, hashKey, hashIv, checkoutUrl } = getEcpayConfig();

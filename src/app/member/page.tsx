@@ -11,6 +11,7 @@ import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } f
 import { buildReferralShareUrl, readRememberedReferralCode, validReferralCode } from '@/lib/referral-link';
 import PhysicalOrdersPanel from './physical-orders-panel';
 import BarcodeOrdersPanel from './barcode-orders-panel';
+import { IdentityVerificationCard } from '@/components/identity-verification';
 
 interface MemberReview {
   id: string;
@@ -639,6 +640,8 @@ export default function MemberCenter() {
             </div>
           </div>
         )}
+
+        <IdentityVerificationCard />
 
         {/* Referral Code */}
         <div className="bg-[#1a1a24] rounded-2xl p-5 border border-white/5 mb-10">

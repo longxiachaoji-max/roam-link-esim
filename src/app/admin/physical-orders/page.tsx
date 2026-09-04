@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, ChevronDown, ChevronUp, PackageCheck } from 'lucide-react';
+import { Banknote, CalendarDays, ChevronDown, ChevronUp, PackageCheck } from 'lucide-react';
 import { adminFetch } from '@/lib/admin-fetch';
 
 interface OrderItem {
@@ -59,6 +59,17 @@ export default function PhysicalOrdersAdminPage() {
     await loadOrders();
   };
 
+  const confirmCashPayment = async (id: string) => {
+    if (!window.confirm('確認已於面交現場收到這筆訂單的款項？')) return;
+    const response = await adminFetch('/api/admin/physical-orders', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'confirm_cash_payment' })
+    });
+    const result = await response.json();
+    if (!response.ok) return setMessage(result.error || '確認收款失敗');
+    setMessage('面交款項已確認，訂單已標記為已付款');
+    await loadOrders();
+  };
+
   return (
     <div className="mx-auto max-w-7xl pb-20">
       <div className="mb-7">
@@ -75,7 +86,7 @@ export default function PhysicalOrdersAdminPage() {
               <div><p className="font-mono text-xs text-white/55">{order.id.slice(0, 8)}</p><p className="mt-1 text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p></div>
               <div className="min-w-0"><p className="truncate font-medium">{order.recipient_name}</p><p className="truncate text-sm text-white/40">{order.customer_email}</p></div>
               <p className="font-mono font-semibold text-amber-300">NT${Number(order.total_amount).toLocaleString()}</p>
-              <span className={order.payment_status === 'PAID' ? 'text-sm text-emerald-300' : 'text-sm text-yellow-200'}>{order.payment_status === 'PAID' ? '已付款' : '等待付款'}</span>
+              <span className={order.payment_status === 'PAID' ? 'text-sm text-emerald-300' : 'text-sm text-yellow-200'}>{order.payment_status === 'PAID' ? '已付款' : order.payment_method === 'CASH_PICKUP' ? '面交收款' : '等待付款'}</span>
               <select value={order.order_status} onChange={e => updateStatus(order.id, e.target.value)} className="h-9 rounded-md border border-white/12 bg-[#0d0d1a] px-2 text-sm text-white">
                 {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
@@ -86,6 +97,7 @@ export default function PhysicalOrdersAdminPage() {
                 <div><p className="mb-2 text-xs font-semibold text-white/35">{order.delivery_method === 'pickup' ? '面交資訊' : '收件資訊'}</p><p>{order.recipient_name} · {order.recipient_phone}</p><p className="mt-1 text-sm text-white/60">{order.delivery_method === 'pickup' ? '預約面交' : '宅配'} · {order.shipping_fee === 0 ? '免運' : `運費 NT$${Number(order.shipping_fee).toLocaleString()}`}</p><p className="mt-1 text-sm text-white/60">{order.postal_code} {order.shipping_address}</p>{order.shipping_note && <p className="mt-2 text-sm text-cyan-200">備註：{order.shipping_note}</p>}</div>
                 <div><p className="mb-2 text-xs font-semibold text-white/35">商品內容</p><div className="space-y-3">{order.physical_order_items.map(item => <div key={item.id} className="flex justify-between gap-4 text-sm"><div><span>{item.product_name} × {item.quantity}</span>{item.rental_start_date && item.rental_end_date && <p className="mt-1 flex items-center gap-1.5 text-xs text-cyan-200"><CalendarDays size={13} />{formatDate(item.rental_start_date)} 至 {formatDate(item.rental_end_date)} · 共 {item.rental_days} 天</p>}{item.rental_daily_rate !== null && <p className="mt-1 text-xs text-white/35">每日租金 NT${Number(item.rental_daily_rate).toLocaleString()}</p>}</div><span className="shrink-0 font-mono text-white/60">NT${(Number(item.unit_price) * item.quantity).toLocaleString()}</span></div>)}</div></div>
               </div>
+              {order.payment_method === 'CASH_PICKUP' && order.payment_status === 'PENDING' && <div className="mt-5 flex justify-end"><button type="button" onClick={() => void confirmCashPayment(order.id)} className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-400"><Banknote size={16} />確認現場已收款</button></div>}
             </div>}
           </div>
         ))}

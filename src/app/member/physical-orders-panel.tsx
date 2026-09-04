@@ -89,6 +89,7 @@ function paymentLabel(method: string) {
   if (method === 'TOKENS') return '儲值金';
   if (method === 'ECPAY_BARCODE') return '超商條碼';
   if (method === 'ECPAY_CREDIT') return '信用卡';
+  if (method === 'CASH_PICKUP') return '面交現場支付';
   return method;
 }
 
