@@ -13,9 +13,9 @@ import { serializeJsonLd } from '@/lib/json-ld';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: '出國 eSIM 方案｜日本、韓國、泰國、印尼與亞洲旅遊網卡',
-  description: '比較日本、韓國、泰國、印尼、越南、中國、中港澳與台灣 eSIM，依 1–30 天、每日流量、總量型、吃到飽及熱點分享需求挑選。',
-  keywords: ['出國 eSIM', '旅遊 eSIM', '亞洲 eSIM', '印尼 eSIM', '巴厘島 eSIM', 'eSIM 吃到飽', '每日流量 eSIM', '總量型 eSIM', '熱點分享 eSIM', '短期網卡'],
+  title: '出國 eSIM 方案｜日本、韓國、香港、泰國與亞洲旅遊網卡',
+  description: '比較日本、韓國、香港、泰國、印尼、越南、中國、中港澳與台灣 eSIM，依 1–30 天、每日流量、總量型、吃到飽及熱點分享需求挑選。',
+  keywords: ['出國 eSIM', '旅遊 eSIM', '亞洲 eSIM', '香港 eSIM', '香港網卡', '印尼 eSIM', '巴厘島 eSIM', 'eSIM 吃到飽', '每日流量 eSIM', '總量型 eSIM', '熱點分享 eSIM', '短期網卡'],
   alternates: { canonical: '/esim' },
   openGraph: {
     title: '出國 eSIM 方案｜一飛通全球漫遊 FirstRoamLink',
@@ -35,7 +35,7 @@ export default async function EsimDestinationHubPage() {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: '出國 eSIM 方案',
-    description: '日本、韓國、泰國、印尼、越南、中國、中港澳與台灣 eSIM 旅遊上網方案。',
+    description: '日本、韓國、香港、泰國、印尼、越南、中國、中港澳與台灣 eSIM 旅遊上網方案。',
     url: 'https://firstesim.space/esim',
     mainEntity: {
       '@type': 'ItemList',
