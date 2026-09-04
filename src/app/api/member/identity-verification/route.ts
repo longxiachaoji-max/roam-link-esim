@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
-import { prepareIdentityImage } from '@/lib/identity-images';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +48,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '請上傳身分證正面、反面及本人自拍照' }, { status: 400 });
     }
 
+    // Keep the native image processor out of status-only requests.
+    const { prepareIdentityImage } = await import('@/lib/identity-images');
     const [frontBuffer, backBuffer, selfieBuffer] = await Promise.all([
       prepareIdentityImage(idFront, true),
       prepareIdentityImage(idBack, true),

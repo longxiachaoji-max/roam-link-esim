@@ -26,6 +26,12 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/api/member/identity-verification': [
+      './node_modules/@img/sharp-linux-x64/**/*',
+      './node_modules/@img/sharp-libvips-linux-x64/**/*'
+    ]
+  },
   async headers() {
     return [{
       source: '/:path*',
