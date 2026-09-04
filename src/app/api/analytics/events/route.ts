@@ -23,8 +23,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const eventType = String(body.eventType || '') as AnalyticsEventType;
     const visitorId = String(body.visitorId || '');
-    const sourcePath = String(body.sourcePath || '/').slice(0, 200);
-
     if (!ALLOWED_EVENTS.has(eventType)) {
       return NextResponse.json({ error: '不支援的統計事件' }, { status: 400 });
     }
@@ -33,31 +31,25 @@ export async function POST(request: Request) {
     }
 
     const supabase = getAdminClient();
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const { data, error: readError } = await supabase
-        .from('site_settings')
-        .select('usage_guide')
-        .eq('id', 'main')
-        .single();
-      if (readError) throw readError;
+    const { data, error: readError } = await supabase
+      .from('site_settings')
+      .select('usage_guide')
+      .eq('id', 'main')
+      .single();
+    if (readError) throw readError;
 
-      const currentGuide = data.usage_guide as string | null;
-      const analytics = parseTrafficAnalytics(currentGuide);
-      analytics.counters[eventType].total += 1;
-      analytics.counters[eventType].today += 1;
-      const nextGuide = withTrafficAnalytics(currentGuide, analytics);
+    const currentGuide = data.usage_guide as string | null;
+    const analytics = parseTrafficAnalytics(currentGuide);
+    analytics.counters[eventType].total += 1;
+    analytics.counters[eventType].today += 1;
 
-      let update = supabase
-        .from('site_settings')
-        .update({ usage_guide: nextGuide })
-        .eq('id', 'main');
-      update = currentGuide === null ? update.is('usage_guide', null) : update.eq('usage_guide', currentGuide);
-      const { data: updated, error: updateError } = await update.select('id');
-      if (updateError) throw updateError;
-      if (updated?.length) return NextResponse.json({ success: true });
-    }
+    const { error: updateError } = await supabase
+      .from('site_settings')
+      .update({ usage_guide: withTrafficAnalytics(currentGuide, analytics) })
+      .eq('id', 'main');
+    if (updateError) throw updateError;
 
-    throw new Error('統計資料更新忙碌');
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Analytics event error:', error);
     return NextResponse.json({ error: '無法記錄流量' }, { status: 500 });
