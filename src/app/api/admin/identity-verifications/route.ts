@@ -3,12 +3,45 @@ import { authenticationErrorResponse, getServerSupabase, requireAdminUser } from
 
 export const dynamic = 'force-dynamic';
 
+const VERIFICATION_SELECT = 'id, customer_id, status, submitted_at, reviewed_at, review_note, id_front_path, id_back_path, selfie_path, legal_name, national_id, birth_date, residential_address';
+
+async function signVerificationImages(supabase: ReturnType<typeof getServerSupabase>, verification: {
+  id_front_path: string;
+  id_back_path: string;
+  selfie_path: string;
+}) {
+  const { data: signed, error } = await supabase.storage.from('identity-verifications').createSignedUrls([
+    verification.id_front_path, verification.id_back_path, verification.selfie_path
+  ], 300);
+  if (error) throw error;
+  return {
+    idFront: signed?.[0]?.signedUrl || null,
+    idBack: signed?.[1]?.signedUrl || null,
+    selfie: signed?.[2]?.signedUrl || null
+  };
+}
+
 export async function GET(request: Request) {
   try {
     await requireAdminUser(request);
     const supabase = getServerSupabase();
+    const detailId = new URL(request.url).searchParams.get('id');
+    if (detailId) {
+      const { data: verification, error } = await supabase.from('customer_identity_verifications')
+        .select(VERIFICATION_SELECT).eq('id', detailId).maybeSingle();
+      if (error) throw error;
+      if (!verification) return NextResponse.json({ error: '找不到實名認證資料' }, { status: 404 });
+      const { data: customer, error: customerError } = await supabase.from('customers')
+        .select('id, name, email').eq('id', verification.customer_id).maybeSingle();
+      if (customerError) throw customerError;
+      return NextResponse.json({ verification: {
+        ...verification,
+        customer: customer || null,
+        images: await signVerificationImages(supabase, verification)
+      } });
+    }
     const { data: verifications, error } = await supabase.from('customer_identity_verifications')
-      .select('id, customer_id, status, submitted_at, reviewed_at, review_note, id_front_path, id_back_path, selfie_path')
+      .select(VERIFICATION_SELECT)
       .order('submitted_at', { ascending: false });
     if (error) throw error;
     const customerIds = [...new Set((verifications || []).map(item => item.customer_id))];
@@ -18,9 +51,7 @@ export async function GET(request: Request) {
     if (customersError) throw customersError;
     const customerMap = new Map((customers || []).map(customer => [customer.id, customer]));
     const rows = await Promise.all((verifications || []).map(async verification => {
-      const { data: signed } = await supabase.storage.from('identity-verifications').createSignedUrls([
-        verification.id_front_path, verification.id_back_path, verification.selfie_path
-      ], 300);
+      const expanded = verification.status === 'PENDING';
       return {
         id: verification.id,
         status: verification.status,
@@ -28,11 +59,11 @@ export async function GET(request: Request) {
         reviewed_at: verification.reviewed_at,
         review_note: verification.review_note,
         customer: customerMap.get(verification.customer_id) || null,
-        images: {
-          idFront: signed?.[0]?.signedUrl || null,
-          idBack: signed?.[1]?.signedUrl || null,
-          selfie: signed?.[2]?.signedUrl || null
-        }
+        legal_name: expanded ? verification.legal_name : null,
+        national_id: expanded ? verification.national_id : null,
+        birth_date: expanded ? verification.birth_date : null,
+        residential_address: expanded ? verification.residential_address : null,
+        images: expanded ? await signVerificationImages(supabase, verification) : null
       };
     }));
     return NextResponse.json({ verifications: rows });

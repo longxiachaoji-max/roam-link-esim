@@ -5,6 +5,19 @@ export const dynamic = 'force-dynamic';
 
 const SUBMISSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const IMAGE_KINDS = new Set(['id-front', 'id-back', 'selfie']);
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function identityProfile(value: Record<string, unknown>) {
+  const legalName = String(value.legalName || '').trim().slice(0, 80);
+  const nationalId = String(value.nationalId || '').trim().toUpperCase().replace(/\s+/g, '').slice(0, 30);
+  const birthDate = String(value.birthDate || '').trim();
+  const residentialAddress = String(value.residentialAddress || '').trim().slice(0, 300);
+  if (!legalName) throw new Error('請填寫真實姓名');
+  if (!/^[A-Z0-9-]{4,30}$/.test(nationalId)) throw new Error('身分證字號格式不正確');
+  if (!DATE_PATTERN.test(birthDate) || birthDate < '1900-01-01' || birthDate > new Date().toISOString().slice(0, 10)) throw new Error('生日日期不正確');
+  if (residentialAddress.length < 5) throw new Error('請填寫完整地址');
+  return { legalName, nationalId, birthDate, residentialAddress };
+}
 
 function getSubmissionId(value: unknown) {
   const submissionId = String(value || '').trim();
@@ -47,7 +60,7 @@ export async function GET(request: Request) {
     const customerId = await getCustomerId(user.email, String(user.user_metadata?.name || ''));
     const { data, error } = await supabase
       .from('customer_identity_verifications')
-      .select('id, status, submitted_at, reviewed_at, review_note')
+      .select('id, status, submitted_at, reviewed_at, review_note, legal_name, national_id, birth_date, residential_address')
       .eq('customer_id', customerId)
       .maybeSingle();
     if (error) throw error;
@@ -56,6 +69,31 @@ export async function GET(request: Request) {
     const authError = authenticationErrorResponse(error);
     if (authError) return authError;
     return NextResponse.json({ error: error instanceof Error ? error.message : '讀取實名認證失敗' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const user = await requireAuthenticatedUser(request);
+    const body = await request.json();
+    const profile = identityProfile(body);
+    const supabase = getServerSupabase();
+    const customerId = await getCustomerId(user.email, String(user.user_metadata?.name || ''));
+    const { data, error } = await supabase.from('customer_identity_verifications').update({
+      legal_name: profile.legalName,
+      national_id: profile.nationalId,
+      birth_date: profile.birthDate,
+      residential_address: profile.residentialAddress,
+      updated_at: new Date().toISOString()
+    }).eq('customer_id', customerId).select('legal_name, national_id, birth_date, residential_address').maybeSingle();
+    if (error?.code === '23505') return NextResponse.json({ error: '此身分證字號已由其他會員使用' }, { status: 409 });
+    if (error) throw error;
+    if (!data) return NextResponse.json({ error: '請先完成實名認證資料上傳' }, { status: 400 });
+    return NextResponse.json({ success: true, profile: data });
+  } catch (error) {
+    const authError = authenticationErrorResponse(error);
+    if (authError) return authError;
+    return NextResponse.json({ error: error instanceof Error ? error.message : '會員資料儲存失敗' }, { status: 400 });
   }
 }
 

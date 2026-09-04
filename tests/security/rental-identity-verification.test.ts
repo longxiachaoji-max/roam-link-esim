@@ -11,6 +11,7 @@ const pickupConfirmationMigration = readFileSync('supabase/migrations/2026090423
 const identityComponent = readFileSync('src/components/identity-verification.tsx', 'utf8');
 const shopPage = readFileSync('src/app/shop/page.tsx', 'utf8');
 const pendingConfirmationMigration = readFileSync('supabase/migrations/20260904170022_allow_pending_confirmation_physical_orders.sql', 'utf8');
+const identityProfileMigration = readFileSync('supabase/migrations/20260904210412_add_identity_profile_fields.sql', 'utf8');
 
 test('rental checkout is enforced server-side', () => {
   assert.match(checkoutRoute, /verification\?\.status !== 'APPROVED'/);
@@ -63,12 +64,35 @@ test('members can preview selected identity photos and the ID watermark', () => 
   assert.match(identityComponent, /previewUrl && !selfieCapture/);
 });
 
-test('approved identity verification is hidden from the member center', () => {
-  assert.match(identityComponent, /verification\.status === 'APPROVED'\) return null/);
+test('approved members only receive profile and replacement controls, never old identity photos', () => {
+  assert.match(identityComponent, /verification\.status === 'APPROVED'/);
+  assert.match(identityComponent, />會員資料</);
+  assert.match(identityComponent, />更新證件</);
+  assert.doesNotMatch(identityComponent, /調閱證件/);
+  const memberGetHandler = identityRoute.slice(identityRoute.indexOf('export async function GET'), identityRoute.indexOf('export async function PATCH'));
+  assert.doesNotMatch(memberGetHandler, /id_front_path|id_back_path|selfie_path/);
 });
 
 test('admin identity photos preserve their complete aspect ratio', () => {
   assert.match(adminComponent, /object-contain/);
   assert.doesNotMatch(adminComponent, /object-cover/);
   assert.match(adminComponent, /點選查看原圖/);
+});
+
+test('approved identity documents are collapsed and signed only when an admin retrieves them', () => {
+  assert.match(adminRoute, /searchParams\.get\('id'\)/);
+  assert.match(adminRoute, /verification\.status === 'PENDING'/);
+  assert.match(adminRoute, /images: expanded \? await signVerificationImages/);
+  assert.match(adminComponent, /調閱證件/);
+  assert.match(adminComponent, /證件已收起/);
+});
+
+test('identity profile fields are private, validated, and editable without exposing documents', () => {
+  assert.match(identityProfileMigration, /legal_name text/);
+  assert.match(identityProfileMigration, /national_id text/);
+  assert.match(identityProfileMigration, /birth_date date/);
+  assert.match(identityProfileMigration, /residential_address text/);
+  assert.match(identityProfileMigration, /unique index[\s\S]*upper\(national_id\)/);
+  assert.match(identityRoute, /export async function PATCH/);
+  assert.match(identityRoute, /此身分證字號已由其他會員使用/);
 });

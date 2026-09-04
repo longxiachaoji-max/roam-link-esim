@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
-import { Camera, Clock3, IdCard, ShieldCheck, Upload, X } from 'lucide-react';
+import { Camera, Clock3, IdCard, RefreshCw, ShieldCheck, Upload, UserRound, X } from 'lucide-react';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 
 type VerificationStatus = 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -11,6 +11,10 @@ interface Verification {
   submitted_at?: string | null;
   reviewed_at?: string | null;
   review_note?: string | null;
+  legal_name?: string | null;
+  national_id?: string | null;
+  birth_date?: string | null;
+  residential_address?: string | null;
 }
 
 interface IdentityPhotoUploaderProps {
@@ -141,10 +145,11 @@ export function useIdentityVerification() {
   return { verification, loading, refresh, setVerification };
 }
 
-export function IdentityVerificationModal({ open, onClose, onSubmitted }: {
+export function IdentityVerificationModal({ open, onClose, onSubmitted, replacing = false }: {
   open: boolean;
   onClose: () => void;
   onSubmitted?: () => void;
+  replacing?: boolean;
 }) {
   const [front, setFront] = useState<File | null>(null);
   const [back, setBack] = useState<File | null>(null);
@@ -196,6 +201,7 @@ export function IdentityVerificationModal({ open, onClose, onSubmitted }: {
   return <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4">
     <div className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-t-md border border-white/10 bg-[#151523] p-5 text-white shadow-2xl sm:rounded-md sm:p-7">
       <div className="mb-5 flex items-start justify-between"><div><h2 className="text-xl font-bold">租借實名認證</h2><p className="mt-1 text-sm text-white/50">租借商品需先完成認證，註冊與一般購物不受影響。</p></div><button type="button" title="關閉" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-white/10"><X size={19} /></button></div>
+      {replacing && <div className="mb-5 rounded-md border border-amber-300/20 bg-amber-300/[0.08] px-4 py-3 text-xs leading-5 text-amber-100">重新送出證件後會進入再次審核；審核期間暫時無法建立新的租借訂單。舊證件不會顯示於前台。</div>}
       <div className="mb-5 rounded-md border border-cyan-400/20 bg-cyan-400/[0.07] p-4 text-xs leading-6 text-cyan-50/80"><ShieldCheck className="mb-2 text-cyan-300" size={20} />身分證照片會由伺服器自動加蓋「僅供一飛通租借實名認證使用」浮水印，並存放在非公開空間，僅授權後台審核人員查看。</div>
       <div className="space-y-3">
         <IdentityPhotoUploader label="身分證正面" file={front} setFile={setFront} processing={processing === '身分證正面'} setProcessing={setProcessing} setMessage={setMessage} />
@@ -208,14 +214,82 @@ export function IdentityVerificationModal({ open, onClose, onSubmitted }: {
   </div>;
 }
 
+function IdentityProfileModal({ verification, open, onClose, onSaved }: {
+  verification: Verification;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [legalName, setLegalName] = useState('');
+  const [nationalId, setNationalId] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [residentialAddress, setResidentialAddress] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setLegalName(verification.legal_name || '');
+    setNationalId(verification.national_id || '');
+    setBirthDate(verification.birth_date || '');
+    setResidentialAddress(verification.residential_address || '');
+    setMessage('');
+  }, [open, verification]);
+
+  if (!open) return null;
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await authenticatedFetch('/api/member/identity-verification', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legalName, nationalId, birthDate, residentialAddress })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '會員資料儲存失敗');
+      await onSaved();
+      onClose();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '會員資料儲存失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="fixed inset-0 z-[91] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+    <div className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-t-md border border-white/10 bg-[#151523] p-5 text-white shadow-2xl sm:rounded-md sm:p-7">
+      <div className="mb-5 flex items-start justify-between"><div><h2 className="text-xl font-bold">會員資料</h2><p className="mt-1 text-sm text-white/50">資料僅供租借身分核對，不會顯示於商城頁面。</p></div><button type="button" title="關閉" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-white/10"><X size={19} /></button></div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-sm text-white/60">真實姓名<input value={legalName} onChange={event => setLegalName(event.target.value)} maxLength={80} autoComplete="name" className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400/60" /></label>
+        <label className="text-sm text-white/60">身分證字號<input value={nationalId} onChange={event => setNationalId(event.target.value.toUpperCase())} maxLength={30} autoCapitalize="characters" className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 font-mono uppercase text-white outline-none focus:border-cyan-400/60" /></label>
+        <label className="text-sm text-white/60">生日<input type="date" value={birthDate} onChange={event => setBirthDate(event.target.value)} max={new Date().toISOString().slice(0, 10)} className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400/60" /></label>
+        <label className="text-sm text-white/60 sm:col-span-2">地址<input value={residentialAddress} onChange={event => setResidentialAddress(event.target.value)} maxLength={300} autoComplete="street-address" className="mt-2 h-11 w-full rounded-md border border-white/12 bg-black/25 px-3 text-white outline-none focus:border-cyan-400/60" /></label>
+      </div>
+      {message && <p role="alert" className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-200">{message}</p>}
+      <button type="button" onClick={() => void save()} disabled={saving} className="mt-5 h-12 w-full rounded-md bg-cyan-500 font-black text-[#071317] disabled:opacity-40">{saving ? '儲存中...' : '儲存會員資料'}</button>
+    </div>
+  </div>;
+}
+
 export function IdentityVerificationCard() {
   const { verification, loading, refresh } = useIdentityVerification();
   const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timer);
   }, [refresh]);
-  if (loading || !verification || verification.status === 'APPROVED') return null;
+  if (loading || !verification) return null;
+  if (verification.status === 'APPROVED') return <>
+    <div className="mb-6 flex flex-wrap justify-end gap-2">
+      <button type="button" onClick={() => setProfileOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-bold text-white/65 hover:bg-white/[0.08]"><UserRound size={15} />會員資料</button>
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 text-xs font-bold text-white/65 hover:bg-white/[0.08]"><RefreshCw size={14} />更新證件</button>
+    </div>
+    <IdentityProfileModal verification={verification} open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={refresh} />
+    <IdentityVerificationModal open={open} onClose={() => setOpen(false)} onSubmitted={() => void refresh()} replacing />
+  </>;
   const status = verification.status;
   const Icon = status === 'PENDING' ? Clock3 : IdCard;
   return <>
