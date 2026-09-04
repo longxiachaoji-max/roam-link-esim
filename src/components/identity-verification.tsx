@@ -13,6 +13,16 @@ interface Verification {
   review_note?: string | null;
 }
 
+interface IdentityPhotoUploaderProps {
+  label: string;
+  file: File | null;
+  setFile: (file: File | null) => void;
+  processing: boolean;
+  setProcessing: (label: string | null) => void;
+  setMessage: (message: string) => void;
+  selfieCapture?: boolean;
+}
+
 const MAX_UPLOAD_BYTES = 750_000;
 const MAX_IMAGE_EDGE = 1600;
 
@@ -52,6 +62,58 @@ async function compressIdentityPhoto(file: File) {
   if (!blob) throw new Error('照片壓縮失敗，請重新選擇照片');
   if (blob.size > MAX_UPLOAD_BYTES) throw new Error('照片內容過大，請靠近證件重新拍攝');
   return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+}
+
+function IdentityPhotoUploader({
+  label,
+  file,
+  setFile,
+  processing,
+  setProcessing,
+  setMessage,
+  selfieCapture = false
+}: IdentityPhotoUploaderProps) {
+  const [previewUrl, setPreviewUrl] = useState('');
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return <label className="block cursor-pointer overflow-hidden rounded-md border border-dashed border-white/20 bg-white/[0.04] transition-colors hover:bg-white/[0.07]">
+    <span className="relative grid aspect-[16/9] w-full place-items-center overflow-hidden bg-black/25">
+      {previewUrl
+        ? <img src={previewUrl} alt={`${label}預覽`} className="h-full w-full object-contain" />
+        : <span className="flex flex-col items-center gap-2 text-white/40">{selfieCapture ? <Camera size={28} /> : <IdCard size={28} />}<span className="text-xs">點選拍照或選擇照片</span></span>}
+      {previewUrl && !selfieCapture && <span className="pointer-events-none absolute left-1/2 top-1/2 w-[92%] -translate-x-1/2 -translate-y-1/2 -rotate-[18deg] rounded bg-black/55 px-2 py-2 text-center text-[10px] font-bold leading-4 text-white/90 sm:text-xs">僅供一飛通租借實名認證使用</span>}
+      {processing && <span className="absolute inset-0 grid place-items-center bg-black/65 text-sm font-bold text-white">正在縮小照片...</span>}
+      {previewUrl && <span className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-md bg-black/65 text-white" title="更換照片"><Upload size={17} /></span>}
+    </span>
+    <span className="flex items-center gap-3 px-4 py-3">
+      <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-white">{label}</span><span className="mt-1 block truncate text-xs text-white/45">{file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : '照片會自動縮小後上傳'}</span></span>
+      {!previewUrl && <Upload className="shrink-0 text-white/35" size={18} />}
+    </span>
+    <input type="file" accept="image/*" capture={selfieCapture ? 'user' : 'environment'} className="hidden" onChange={async event => {
+      const selected = event.target.files?.[0];
+      if (!selected) return;
+      setProcessing(label);
+      setMessage('');
+      try {
+        setFile(await compressIdentityPhoto(selected));
+      } catch (error) {
+        setFile(null);
+        setMessage(error instanceof Error ? error.message : '照片處理失敗');
+      } finally {
+        setProcessing(null);
+        event.target.value = '';
+      }
+    }} />
+  </label>;
 }
 
 const STATUS_TEXT: Record<VerificationStatus, string> = {
@@ -131,34 +193,15 @@ export function IdentityVerificationModal({ open, onClose, onSubmitted }: {
     }
   };
 
-  const uploader = (label: string, file: File | null, setFile: (file: File | null) => void, selfieCapture = false) => (
-    <label className="flex min-h-24 cursor-pointer items-center gap-4 rounded-md border border-dashed border-white/20 bg-white/[0.04] p-4 hover:bg-white/[0.07]">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-cyan-400/10 text-cyan-200">{selfieCapture ? <Camera size={21} /> : <IdCard size={21} />}</span>
-      <span className="min-w-0"><span className="block text-sm font-bold text-white">{label}</span><span className="mt-1 block truncate text-xs text-white/45">{processing === label ? '正在縮小照片...' : file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : '點選拍照或選擇照片，會自動縮小上傳'}</span></span>
-      <Upload className="ml-auto shrink-0 text-white/35" size={18} />
-      <input type="file" accept="image/*" capture={selfieCapture ? 'user' : 'environment'} className="hidden" onChange={async event => {
-        const selected = event.target.files?.[0];
-        if (!selected) return;
-        setProcessing(label);
-        setMessage('');
-        try {
-          setFile(await compressIdentityPhoto(selected));
-        } catch (error) {
-          setFile(null);
-          setMessage(error instanceof Error ? error.message : '照片處理失敗');
-        } finally {
-          setProcessing(null);
-          event.target.value = '';
-        }
-      }} />
-    </label>
-  );
-
   return <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4">
     <div className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-t-md border border-white/10 bg-[#151523] p-5 text-white shadow-2xl sm:rounded-md sm:p-7">
       <div className="mb-5 flex items-start justify-between"><div><h2 className="text-xl font-bold">租借實名認證</h2><p className="mt-1 text-sm text-white/50">租借商品需先完成認證，註冊與一般購物不受影響。</p></div><button type="button" title="關閉" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-white/10"><X size={19} /></button></div>
       <div className="mb-5 rounded-md border border-cyan-400/20 bg-cyan-400/[0.07] p-4 text-xs leading-6 text-cyan-50/80"><ShieldCheck className="mb-2 text-cyan-300" size={20} />身分證照片會由伺服器自動加蓋「僅供一飛通租借實名認證使用」浮水印，並存放在非公開空間，僅授權後台審核人員查看。</div>
-      <div className="space-y-3">{uploader('身分證正面', front, setFront)}{uploader('身分證反面', back, setBack)}{uploader('本人自拍照', selfie, setSelfie, true)}</div>
+      <div className="space-y-3">
+        <IdentityPhotoUploader label="身分證正面" file={front} setFile={setFront} processing={processing === '身分證正面'} setProcessing={setProcessing} setMessage={setMessage} />
+        <IdentityPhotoUploader label="身分證反面" file={back} setFile={setBack} processing={processing === '身分證反面'} setProcessing={setProcessing} setMessage={setMessage} />
+        <IdentityPhotoUploader label="本人自拍照" file={selfie} setFile={setSelfie} processing={processing === '本人自拍照'} setProcessing={setProcessing} setMessage={setMessage} selfieCapture />
+      </div>
       {message && <p className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-200">{message}</p>}
       <button type="button" onClick={submit} disabled={saving || processing !== null || !front || !back || !selfie} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-cyan-500 font-black text-[#071317] disabled:bg-white/10 disabled:text-white/30"><ShieldCheck size={18} />{saving ? '正在安全送出...' : processing ? '正在縮小照片...' : '送出審核'}</button>
     </div>

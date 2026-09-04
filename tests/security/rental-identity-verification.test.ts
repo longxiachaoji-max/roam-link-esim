@@ -45,3 +45,10 @@ test('identity photos are compressed before the authenticated upload', () => {
   assert.match(identityRoute, /form\.get\('file'\)/);
   assert.match(identityRoute, /export async function PUT/);
 });
+
+test('members can preview selected identity photos and the ID watermark', () => {
+  assert.match(identityComponent, /URL\.createObjectURL\(file\)/);
+  assert.match(identityComponent, /alt={`\$\{label\}預覽`}/);
+  assert.match(identityComponent, /僅供一飛通租借實名認證使用/);
+  assert.match(identityComponent, /previewUrl && !selfieCapture/);
+});
