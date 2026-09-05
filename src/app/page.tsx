@@ -997,6 +997,9 @@ export default function Home() {
                 </Link>
               ))}
             </div>
+            <Link href="/guides/japan-esim" className="mt-5 inline-flex items-center gap-2 rounded-md border border-cyan/25 bg-cyan/[0.06] px-3 py-2 text-sm font-bold text-cyan hover:border-cyan hover:text-white">
+              日本 eSIM 怎麼選？完整指南 <ArrowRight size={14} />
+            </Link>
             <Link href="/esim" className="mt-5 inline-flex text-sm font-bold text-cyan hover:text-white">查看全部 eSIM 目的地 →</Link>
           </div>
         </div>

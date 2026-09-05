@@ -137,6 +137,17 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
         </div>
       </section>
 
+      {destination.slug === 'japan' && <section className="border-b border-white/10 py-9" aria-labelledby="japan-guide-link-heading">
+        <div className="flex flex-col justify-between gap-5 rounded-lg border border-[#56d5ea]/25 bg-[#56d5ea]/[0.06] p-6 md:flex-row md:items-center md:p-7">
+          <div>
+            <p className="text-xs font-bold text-[#56d5ea]">完整選購指南</p>
+            <h2 id="japan-guide-link-heading" className="mt-2 text-xl font-bold">日本 eSIM 吃到飽、每日流量、總量型怎麼選？</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">依流量、旅遊天數、KDDI／SoftBank 涵蓋、手機相容性與啟用方式逐項比較，並附出發前安裝及抵達日本後的設定清單。</p>
+          </div>
+          <Link href="/guides/japan-esim" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-[#56d5ea]/35 px-4 text-sm font-bold text-[#56d5ea] hover:bg-[#56d5ea] hover:text-[#07141b]">閱讀日本 eSIM 怎麼選 <ArrowRight size={16} /></Link>
+        </div>
+      </section>}
+
       <section className="py-12" aria-labelledby="plans-heading">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div><p className="text-xs font-bold text-[#56d5ea]">即時讀取上架資料</p><h2 id="plans-heading" className="mt-2 text-2xl font-bold">{destination.name} 方案摘要</h2></div>

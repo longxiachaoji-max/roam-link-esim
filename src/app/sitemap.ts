@@ -60,6 +60,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily',
       priority: 0.9
     },
+    {
+      url: 'https://firstesim.space/guides/japan-esim',
+      lastModified: new Date('2026-09-05'),
+      changeFrequency: 'monthly',
+      priority: 0.85
+    },
     ...[...destinationByPath.keys()].map(path => ({
       url: `https://firstesim.space${path}`,
       lastModified: latestModified(
