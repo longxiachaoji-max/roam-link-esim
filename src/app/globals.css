@@ -233,6 +233,17 @@
       radial-gradient(circle at var(--card-light-x) var(--card-light-y), rgb(153 232 255 / 0.11), transparent 35%);
   }
 
+  @media (pointer: coarse) {
+    .card-glass-shell[data-sensor-active='false'] .card-glass-inner-light {
+      inset: -8%;
+      animation: cardMobileFallbackLight 7s ease-in-out infinite alternate;
+    }
+
+    .card-glass-shell[data-sensor-active='false'] .card-glass-edge-light {
+      animation: cardMobileEdgeGlow 5.5s ease-in-out infinite alternate;
+    }
+  }
+
   .card-logo-frame {
     border: 1px solid rgb(255 255 255 / 0.58);
     background: white;
@@ -258,8 +269,12 @@
     background-color: rgb(255 255 255 / 0.11);
   }
 
-  .card-glass-link {
+  .card-glass-link-enter {
     animation: cardGlassLinkEnter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .card-glass-link {
+    width: 100%;
     border: 1px solid rgb(255 255 255 / 0.18);
     background: linear-gradient(145deg, rgb(255 255 255 / 0.115), rgb(255 255 255 / 0.055));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -1px 0 rgb(88 217 255 / 0.05), 0 10px 28px rgb(0 0 0 / 0.16);
@@ -271,7 +286,6 @@
   }
 
   .card-glass-link:hover {
-    animation: none;
     transform: translateY(-3px) translateZ(22px) scale(1.008);
     border-color: rgb(255 255 255 / 0.34);
     background-color: rgb(255 255 255 / 0.12);
@@ -279,7 +293,6 @@
   }
 
   .card-glass-link:active {
-    animation: none;
     transform: translateY(1px) translateZ(8px) scale(0.975);
     border-color: rgb(132 231 255 / 0.44);
     background-color: rgb(255 255 255 / 0.18);
@@ -338,7 +351,6 @@
   }
 
   .card-glass-link:focus-visible {
-    animation: none;
     outline: 2px solid rgb(112 224 255 / 0.8);
     outline-offset: 3px;
   }
@@ -379,7 +391,7 @@
 
   @keyframes cardGlassLinkEnter {
     from { transform: translateY(12px); opacity: 0; }
-    to { transform: translateY(0) translateZ(12px); opacity: 1; }
+    to { transform: translateY(0); opacity: 1; }
   }
 
   @keyframes cardAmbientSweep {
@@ -399,6 +411,16 @@
     100% { transform: scale(1.05); }
   }
 
+  @keyframes cardMobileFallbackLight {
+    from { transform: translate3d(-5%, -2%, 0); opacity: 0.72; }
+    to { transform: translate3d(5%, 3%, 0); opacity: 1; }
+  }
+
+  @keyframes cardMobileEdgeGlow {
+    from { opacity: 0.45; filter: brightness(0.9); }
+    to { opacity: 0.9; filter: brightness(1.18); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-slide-in-right,
     .animate-fade-in-up,
@@ -407,9 +429,11 @@
     .home-carousel,
     .home-section-reveal,
     .card-glass-enter,
-    .card-glass-link,
+    .card-glass-link-enter,
     .card-stage-light-a,
-    .card-stage-light-b {
+    .card-stage-light-b,
+    .card-glass-inner-light,
+    .card-glass-edge-light {
       animation: none;
     }
 

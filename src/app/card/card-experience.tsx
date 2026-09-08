@@ -27,6 +27,7 @@ const links = [
 export default function CardExperience() {
   const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
+  const orientationBaselineRef = useRef<{ beta: number; gamma: number } | null>(null);
 
   const setGlassMotion = (x: number, y: number, immediate = true) => {
     const shell = shellRef.current;
@@ -61,8 +62,46 @@ export default function CardExperience() {
 
     updateScrollLight();
     window.addEventListener('scroll', updateScrollLight, { passive: true });
+
+    const resetOrientationBaseline = () => {
+      orientationBaselineRef.current = null;
+    };
+
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      if (event.beta === null || event.gamma === null || !shellRef.current) return;
+      if (!orientationBaselineRef.current) {
+        orientationBaselineRef.current = { beta: event.beta, gamma: event.gamma };
+        shellRef.current.dataset.sensorActive = 'true';
+        return;
+      }
+
+      const betaDelta = event.beta - orientationBaselineRef.current.beta;
+      const gammaDelta = event.gamma - orientationBaselineRef.current.gamma;
+      const screenAngle = window.screen.orientation?.angle || 0;
+      let x = gammaDelta / 22;
+      let y = betaDelta / 22;
+
+      if (screenAngle === 90) {
+        x = betaDelta / 22;
+        y = -gammaDelta / 22;
+      } else if (screenAngle === 270) {
+        x = -betaDelta / 22;
+        y = gammaDelta / 22;
+      } else if (screenAngle === 180) {
+        x = -gammaDelta / 22;
+        y = -betaDelta / 22;
+      }
+
+      setGlassMotion(Math.max(-1, Math.min(1, x)), Math.max(-1, Math.min(1, y)));
+    };
+
+    // Do not call requestPermission: unsupported or permission-gated browsers use the CSS fallback.
+    window.addEventListener('deviceorientation', handleOrientation, { passive: true });
+    window.screen.orientation?.addEventListener('change', resetOrientationBaseline);
     return () => {
       window.removeEventListener('scroll', updateScrollLight);
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.screen.orientation?.removeEventListener('change', resetOrientationBaseline);
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     };
   }, []);
@@ -83,6 +122,7 @@ export default function CardExperience() {
             onPointerMove={handlePointerMove}
             onPointerLeave={() => setGlassMotion(0, 0, false)}
             onPointerCancel={() => setGlassMotion(0, 0, false)}
+            data-sensor-active="false"
             className="card-glass-shell relative w-full overflow-hidden rounded-[36px] p-2 sm:p-2.5"
           >
             <div className="card-glass-edge-light" />
@@ -115,15 +155,17 @@ export default function CardExperience() {
 
             <div className="relative space-y-2.5 px-1 pb-1 pt-3">
               {links.map(({ label, description, href, icon: Icon, accent }, index) => (
-                <Link key={label} href={href} target="_blank" rel="noopener noreferrer" style={{ animationDelay: `${140 + index * 65}ms` }} className="card-glass-link group relative flex items-center gap-3 overflow-hidden rounded-[22px] p-3.5">
-                  <span className="card-glass-link-shine" />
-                  <span className={`card-glass-icon grid size-11 shrink-0 place-items-center rounded-[15px] bg-gradient-to-br ${accent} text-[#07101c]`}><Icon size={20} /></span>
-                  <span className="relative min-w-0 flex-1 text-left">
-                    <span className="block text-sm font-black">{label}</span>
-                    <span className="mt-0.5 block truncate text-xs text-white/45">{description}</span>
-                  </span>
-                  <span className="card-glass-arrow relative grid size-8 shrink-0 place-items-center rounded-full"><ArrowUpRight className="text-white/50" size={16} /></span>
-                </Link>
+                <div key={label} style={{ animationDelay: `${140 + index * 65}ms` }} className="card-glass-link-enter">
+                  <Link href={href} target="_blank" rel="noopener noreferrer" className="card-glass-link group relative flex items-center gap-3 overflow-hidden rounded-[22px] p-3.5">
+                    <span className="card-glass-link-shine" />
+                    <span className={`card-glass-icon grid size-11 shrink-0 place-items-center rounded-[15px] bg-gradient-to-br ${accent} text-[#07101c]`}><Icon size={20} /></span>
+                    <span className="relative min-w-0 flex-1 text-left">
+                      <span className="block text-sm font-black">{label}</span>
+                      <span className="mt-0.5 block truncate text-xs text-white/45">{description}</span>
+                    </span>
+                    <span className="card-glass-arrow relative grid size-8 shrink-0 place-items-center rounded-full"><ArrowUpRight className="text-white/50" size={16} /></span>
+                  </Link>
+                </div>
               ))}
             </div>
 
