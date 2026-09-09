@@ -7,7 +7,7 @@ import { serializeJsonLd } from '@/lib/json-ld';
 
 export const metadata: Metadata = {
   title: '出國 eSIM 怎麼選？台灣旅客熱門目的地完整指南',
-  description: '依台灣旅客出國統計整理日本、中國、韓國、香港、越南、泰國、印尼與中港澳 eSIM 選購指南，逐項比較流量、吃到飽、合作網路、手機相容、啟用與當地限制。',
+  description: '整理日本、中國、韓國、香港、越南、泰國、印尼、中港澳與台灣短期 eSIM 指南，逐項比較流量、吃到飽、合作網路、手機相容、啟用與當地限制。',
   keywords: ['出國 eSIM 怎麼選', '旅遊 eSIM 推薦', '出國網卡', 'eSIM 吃到飽', '台灣人出國排名'],
   alternates: { canonical: '/guides' },
   openGraph: {
@@ -31,6 +31,7 @@ const guideDescriptions: Record<string, string> = {
 
 export default function EsimGuidesPage() {
   const crossRegionGuide = ESIM_GUIDES.find(guide => guide.slug === 'greater-china-esim');
+  const taiwanGuide = ESIM_GUIDES.find(guide => guide.slug === 'taiwan-esim');
   const itemListData = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
@@ -74,6 +75,21 @@ export default function EsimGuidesPage() {
         <article className="rounded-lg border border-white/10 bg-[#171724] p-5"><MapPin className="text-[#56d5ea]" size={22} /><h2 className="mt-3 font-bold">不是全國總榜</h2><p className="mt-2 text-sm leading-6 text-white/50">未上架目的地沒有列入；首站統計也不等同旅客最終停留國家的實際入境人次。</p></article>
         <article className="rounded-lg border border-white/10 bg-[#171724] p-5"><ShieldCheck className="text-[#56d5ea]" size={22} /><h2 className="mt-3 font-bold">內容查核原則</h2><p className="mt-2 text-sm leading-6 text-white/50">不把吃到飽寫成永不限速，也不預設含門號、語音、簡訊或所有常用服務。</p></article>
       </section>
+
+      {taiwanGuide && <section className="border-b border-white/10 py-11" aria-labelledby="taiwan-short-term-heading">
+        <div className="rounded-xl border border-[#56d5ea]/30 bg-gradient-to-br from-[#56d5ea]/[0.11] to-[#56d5ea]/[0.03] p-6 md:grid md:grid-cols-[1fr_auto] md:items-center md:gap-10 md:p-8">
+          <div>
+            <div className="flex items-center gap-3"><span className="text-3xl" aria-hidden="true">🇹🇼</span><p className="text-xs font-black tracking-[0.15em] text-[#56d5ea]">TAIWAN SHORT-TERM eSIM</p></div>
+            <h2 id="taiwan-short-term-heading" className="mt-4 text-2xl font-black md:text-3xl">在台灣臨時需要網路，不必申辦月租或綁長約</h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">適合來台旅遊、返台探親、短期出差、活動工作、原門號故障，或臨時需要第二條備用網路。依天數一次選購，並先確認方案是否為純數據、是否含台灣門號、熱點及身分驗證規則。</p>
+            <div className="mt-6 flex flex-wrap gap-2 text-xs text-white/50"><span className="rounded-full border border-white/10 px-3 py-1.5">短天數選購</span><span className="rounded-full border border-white/10 px-3 py-1.5">免月租</span><span className="rounded-full border border-white/10 px-3 py-1.5">免綁長約</span><span className="rounded-full border border-white/10 px-3 py-1.5">免換實體卡</span></div>
+          </div>
+          <div className="mt-7 flex flex-col gap-3 md:mt-0">
+            <Link href="/guides/taiwan-esim" className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#ff5a69] px-5 text-sm font-black text-white hover:bg-[#ff7180]">台灣短期 eSIM 指南 <ArrowRight size={15} /></Link>
+            <Link href="/esim/taiwan" className="inline-flex h-11 items-center justify-center rounded-md border border-white/15 px-5 text-sm font-bold text-white/70 hover:border-[#56d5ea] hover:text-[#56d5ea]">查看台灣方案</Link>
+          </div>
+        </div>
+      </section>}
 
       <section className="py-11" aria-labelledby="ranked-guides-heading">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">

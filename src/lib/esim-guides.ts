@@ -243,6 +243,44 @@ export const ESIM_GUIDES: EsimGuide[] = [
     ]
   },
   {
+    slug: 'taiwan-esim',
+    destinationSlug: 'taiwan',
+    name: '台灣',
+    flag: '🇹🇼',
+    priorityRank: null,
+    outboundCount: null,
+    title: '台灣短期 eSIM 怎麼選？臨時上網免月租、免綁長約指南',
+    description: '台灣短期 eSIM 完整指南：適合來台旅遊、返台、出差、探親、活動工作與臨時備用網路，依使用天數比較流量、吃到飽、熱點、合作網路與身分驗證。',
+    keywords: ['台灣短期 eSIM', '台灣臨時網路', '台灣免綁約網卡', '台灣短期網卡', '台灣 eSIM 推薦', '來台 eSIM', '返台上網', '台灣旅遊網卡', '台灣 eSIM 吃到飽'],
+    intro: '只在台灣停留幾天或幾週，不必為短期需求申辦月租門號或綁長約。可以依實際使用天數購買短期 eSIM，抵達後作為主要行動數據；返台探親、臨時出差、活動工作、原門號故障或需要備用網路也適用。',
+    lightUse: 'LINE、地圖、叫車、電子票券、餐廳與交通查詢',
+    normalUse: '導航、社群、照片上傳、行動辦公與偶爾短影音',
+    heavyUse: '工作視訊、直播、長時間影片、雲端備份或筆電熱點',
+    cities: ['台北', '台中', '台南', '高雄', '花東', '澎湖／金門／馬祖'],
+    networks: ['中華電信', '台灣大哥大', '遠傳電信'],
+    networkAdvice: '台灣本島主要城市通常都有行動網路服務，但地下空間、高樓室內、山區、花東縱谷、海岸公路及離島仍可能不同。先確認商品實際使用的合作網路；環島、自駕或登山行程應以完整路線查看官方涵蓋，不要只用台北市區的訊號推定全程。',
+    specialHeading: '短期、免月租不代表功能都相同',
+    specialChecks: [
+      '「免綁長約」是指不用申辦月租型門號；購買的短期 eSIM 仍有明確效期、流量與使用條款。',
+      '旅遊 eSIM 多為數據服務，不應預設包含台灣電話號碼、語音或簡訊；需要收驗證碼時要逐項確認。',
+      '若商品提供台灣本地門號或預付服務，可能需要依電信業者及法規完成 KYC 或證件核驗。',
+      '短期吃到飽也可能有高速流量、流量管理或熱點額度；需用筆電工作時要先看分享規則。',
+      '純數據旅遊 eSIM 的網路路由可能和台灣本地門號不同，延遲與可用功能以實際商品為準。'
+    ],
+    faqs: [
+      { question: '台灣短期 eSIM 需要綁約或付月租費嗎？', answer: '本站的短期旅遊 eSIM 依商品天數與流量一次選購，不需要申辦月租型門號或綁長約。方案到期後即停止使用；是否能加購或延長則依商品規則。' },
+      { question: '人在台灣臨時需要網路，可以馬上購買 eSIM 嗎？', answer: '可以先確認手機支援 eSIM、沒有電信商鎖定，並且目前有穩定 Wi-Fi 可接收及安裝資料。付款、交付與啟用時間仍依商品頁及訂單狀態為準，緊急需求應預留設定時間。' },
+      { question: '返台幾天也適合使用台灣 eSIM 嗎？', answer: '適合。若原本沒有台灣門號、原門號暫停、只想增加數據或需要第二條備用網路，可依返台天數選擇短期方案。' },
+      { question: '台灣 eSIM 有本地電話號碼，可以收簡訊嗎？', answer: '不一定。許多旅遊 eSIM 是數據型，不含本地門號、語音與簡訊。若銀行、叫車或服務登入需要台灣號碼，購買前必須確認商品明確提供。' },
+      { question: '台灣 eSIM 需要身分驗證嗎？', answer: '視商品類型而定。純數據漫遊型 eSIM 依供應商流程；若屬台灣本地門號或預付服務，可能需要依電信業者與現行規定核對證件。商品頁標示優先。' }
+    ],
+    sources: [
+      { label: '中華電信：台灣觀光預付卡方案與申請方式', href: 'https://www.cht.com.tw/home/consumer/mobservice/prepaid/prepaidpromo/prepaidvisitorplan' },
+      { label: '中華電信：eSIM 數位 SIM 服務與設定', href: 'https://www.cht.com.tw/home/apple/service-offer-description/esim' },
+      { label: '國家通訊傳播委員會：申辦電信服務身分核對指引', href: 'https://api.ncc.gov.tw/chncc/app/data/doc?aplistdn=undefined&detailNo=2&id=51&module=announcement&preview=undefined&serno=50079_566_news&type=s' }
+    ]
+  },
+  {
     slug: 'greater-china-esim',
     destinationSlug: 'greater-china',
     name: '中港澳',

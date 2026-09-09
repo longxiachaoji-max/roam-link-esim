@@ -1000,6 +1000,9 @@ export default function Home() {
             <Link href="/guides" className="mt-5 inline-flex items-center gap-2 rounded-md border border-cyan/25 bg-cyan/[0.06] px-3 py-2 text-sm font-bold text-cyan hover:border-cyan hover:text-white">
               出國 eSIM 怎麼選？完整指南 <ArrowRight size={14} />
             </Link>
+            <Link href="/guides/taiwan-esim" className="mt-3 inline-flex items-center gap-2 rounded-md border border-coral/30 bg-coral/[0.07] px-3 py-2 text-sm font-bold text-coral hover:border-coral hover:text-white">
+              台灣臨時上網：免月租、免綁長約 <ArrowRight size={14} />
+            </Link>
             <Link href="/esim" className="mt-5 inline-flex text-sm font-bold text-cyan hover:text-white">查看全部 eSIM 目的地 →</Link>
           </div>
         </div>

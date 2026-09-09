@@ -15,6 +15,7 @@ const expectedGuides = [
   'vietnam-esim',
   'thailand-esim',
   'indonesia-esim',
+  'taiwan-esim',
   'greater-china-esim'
 ];
 
@@ -46,6 +47,15 @@ test('country guidance preserves critical product and regulatory caveats', () =>
   assert.match(guideTemplate, /吃到飽.*不等於任何時間都維持最高速度/);
   assert.match(guideTemplate, /不要把刪除 eSIM 當成第一個排除步驟/);
   assert.match(guideTemplate, /數據漫遊/);
+});
+
+test('Taiwan guide targets temporary no-contract usage without promising a local number', () => {
+  assert.match(guideData, /台灣短期 eSIM 怎麼選/);
+  assert.match(guideData, /不需要申辦月租型門號或綁長約/);
+  assert.match(guideData, /不含本地門號、語音與簡訊/);
+  assert.match(guideData, /可能需要依電信業者與現行規定核對證件/);
+  assert.match(guidesIndex, /在台灣臨時需要網路/);
+  assert.match(destinationPage, /getEsimGuideHrefForDestination/);
 });
 
 test('guide pages include metadata, structured data and official sources', () => {
