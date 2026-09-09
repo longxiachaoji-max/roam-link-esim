@@ -14,6 +14,8 @@ test('keeps curated destination pages for popular countries', () => {
   assert.equal(getEsimDestination('indonesia')?.name, '印尼 eSIM');
   assert.equal(getEsimDestinationForCountry('印尼')?.slug, 'indonesia');
   assert.equal(getEsimDestination('indonesia') && getEsimDestinationHref(getEsimDestination('indonesia')!), '/esim/indonesia');
+  assert.equal(getEsimDestinationForCountry('菲律賓')?.slug, 'philippines');
+  assert.equal(getEsimDestination('philippines') && getEsimDestinationHref(getEsimDestination('philippines')!), '/esim/philippines');
   assert.ok(getEsimDestination('japan')?.keywords.includes('日本網卡推薦'));
   assert.ok((getEsimDestination('japan')?.guides?.length || 0) >= 3);
 });
