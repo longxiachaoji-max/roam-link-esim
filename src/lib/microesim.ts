@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getProductNetworkType } from '@/lib/product-network-type';
 
 const MICROESIM_TEST_PLAN_ID = 'b1a926e1-d770-4e03-804e-c527b9397eb9';
 const MICROESIM_PRODUCT_MARKER = 'MicroEsim 測試';
@@ -131,6 +132,7 @@ export interface TransformedMicroesimPlan {
   margin_twd: number;
   carrier: string;
   networks: string;
+  network_type: string;
   apn: string;
   active_type_note: string;
   rule_desc_zh: string;
@@ -569,6 +571,7 @@ export function transformMicroesimPlan(
     margin_twd: suggestedPrice - costTwd,
     carrier,
     networks: plan.networks || '',
+    network_type: getProductNetworkType(plan.networks),
     apn: plan.apn || '',
     active_type_note: activeTypeNote,
     rule_desc_zh: ruleDescZh,

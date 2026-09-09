@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, Star, Wifi } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Globe2, RadioTower, Star, Wifi } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
@@ -132,9 +132,10 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
           <h1 className="mt-2 max-w-3xl text-3xl font-black leading-tight md:text-5xl">{plan.dataAmount}</h1>
           <p className="mt-5 max-w-3xl text-sm leading-7 text-white/60 md:text-base">{seo.description}</p>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex gap-3"><Globe2 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">適用地區</p><p className="mt-1 text-xs leading-5 text-white/45">{destination.shortName}</p></div></div>
             <div className="flex gap-3"><Clock3 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">使用天數</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.options.map(option => `${option.validityDays} 天`).join('、')}</p></div></div>
+            <div className="flex gap-3"><RadioTower className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">網路規格</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.networkTypes.join('、') || '依方案與當地訊號為準'}</p></div></div>
             <div className="flex gap-3"><Wifi className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">安裝方式</p><p className="mt-1 text-xs leading-5 text-white/45">付款後於會員中心查看</p></div></div>
           </div>
         </div>

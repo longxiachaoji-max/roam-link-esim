@@ -18,24 +18,24 @@ async function fetchProductsWithOptionalColumns() {
   };
   const attempts = [
     {
-      select: `id, name, description, internal_note, price, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at`,
+      select: `id, name, description, internal_note, network_type, price, supplier, supplier_plan_id, supplier_plan_name, supplier_cost_twd, country, data_amount, validity_days, is_active, created_at`,
       map: (products: any[]) => products
     },
     {
       select: `id, name, description, internal_note, price, supplier, supplier_plan_id, supplier_plan_name, country, data_amount, validity_days, is_active, created_at`,
-      map: (products: any[]) => products.map(product => ({ ...product, supplier_cost_twd: null }))
+      map: (products: any[]) => products.map(product => ({ ...product, network_type: null, supplier_cost_twd: null }))
     },
     {
       select: `${baseColumns}, supplier_cost_twd`,
-      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, ...supplierFallback }))
+      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, network_type: null, ...supplierFallback }))
     },
     {
       select: `${baseColumns}, internal_note`,
-      map: (products: any[]) => products.map(product => ({ ...product, supplier_cost_twd: null, ...supplierFallback }))
+      map: (products: any[]) => products.map(product => ({ ...product, network_type: null, supplier_cost_twd: null, ...supplierFallback }))
     },
     {
       select: baseColumns,
-      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, supplier_cost_twd: null, ...supplierFallback }))
+      map: (products: any[]) => products.map(product => ({ ...product, internal_note: null, network_type: null, supplier_cost_twd: null, ...supplierFallback }))
     }
   ];
 
@@ -52,7 +52,7 @@ async function fetchProductsWithOptionalColumns() {
     }
 
     lastError = result.error;
-    if (!/column|internal_note|supplier_|supplier_cost_twd/i.test(result.error.message || '')) break;
+    if (!/column|internal_note|network_type|supplier_|supplier_cost_twd/i.test(result.error.message || '')) break;
   }
 
   return { data: null, error: lastError };
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     const body = await request.json();
-    const { name, country, data_amount, validity_days, price, description, internal_note } = body;
+    const { name, country, data_amount, validity_days, price, description, internal_note, network_type } = body;
 
     if (!name || !country || !validity_days || price === undefined) {
       return NextResponse.json({ error: '缺少必要欄位 (name, country, validity_days, price)' }, { status: 400 });
@@ -117,7 +117,8 @@ export async function POST(request: Request) {
       validity_days: Number(validity_days),
       price: Number(price),
       description: description || null,
-      internal_note: internal_note || null
+      internal_note: internal_note || null,
+      network_type: network_type || null
     };
 
     let { data, error } = await supabase
@@ -126,8 +127,9 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error && /internal_note|column/i.test(error.message || '')) {
+    if (error && /internal_note|network_type|column/i.test(error.message || '')) {
       delete insertPayload.internal_note;
+      delete insertPayload.network_type;
       const fallback = await supabase
         .from('products')
         .insert(insertPayload)
@@ -153,7 +155,7 @@ export async function PUT(request: Request) {
   if (denied) return denied;
   try {
     const body = await request.json();
-    const { id, name, country, data_amount, validity_days, price, description, internal_note, is_active } = body;
+    const { id, name, country, data_amount, validity_days, price, description, internal_note, network_type, is_active } = body;
 
     if (!id) {
       return NextResponse.json({ error: '缺少 ID' }, { status: 400 });
@@ -167,6 +169,7 @@ export async function PUT(request: Request) {
     if (price !== undefined) updateData.price = Number(price);
     if (description !== undefined) updateData.description = description;
     if (internal_note !== undefined) updateData.internal_note = internal_note;
+    if (network_type !== undefined) updateData.network_type = network_type || null;
     if (is_active !== undefined) updateData.is_active = is_active;
 
     let { error } = await supabase
@@ -174,8 +177,9 @@ export async function PUT(request: Request) {
       .update(updateData)
       .eq('id', id);
 
-    if (error && /internal_note|column/i.test(error.message || '')) {
+    if (error && /internal_note|network_type|column/i.test(error.message || '')) {
       delete updateData.internal_note;
+      delete updateData.network_type;
       const fallback = await supabase
         .from('products')
         .update(updateData)

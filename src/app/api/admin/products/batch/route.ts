@@ -54,6 +54,7 @@ export async function POST(request: Request) {
         price: Number(item.price),
         description: item.description || null,
         internal_note: item.internal_note || null,
+        network_type: item.network_type || null,
         is_active: true
       });
     }
@@ -61,8 +62,8 @@ export async function POST(request: Request) {
     let inserted = 0;
     if (toInsert.length > 0) {
       let { error } = await supabase.from('products').insert(toInsert);
-      if (error && /internal_note|column/i.test(error.message || '')) {
-        const fallback = await supabase.from('products').insert(toInsert.map(({ internal_note, ...item }) => item));
+      if (error && /internal_note|network_type|column/i.test(error.message || '')) {
+        const fallback = await supabase.from('products').insert(toInsert.map(({ internal_note, network_type, ...item }) => item));
         error = fallback.error;
       }
       if (error) {

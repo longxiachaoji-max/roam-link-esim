@@ -43,7 +43,8 @@ function cleanPlan(plan: Partial<TransformedMicroesimPlan>) {
     supplier_cost_twd: Number(plan.cost_twd || 0),
     supplier_cost_currency: String(plan.cost_currency || '').trim(),
     supplier_cost_original: Number(plan.cost_original || 0),
-    supplier_raw: plan.raw || null
+    supplier_raw: plan.raw || null,
+    network_type: String(plan.network_type || '').trim() || null
   };
 }
 
@@ -178,7 +179,8 @@ export async function POST(request: Request) {
           supplier_cost_twd: item.product.supplier_cost_twd,
           supplier_cost_currency: item.product.supplier_cost_currency,
           supplier_cost_original: item.product.supplier_cost_original,
-          supplier_raw: item.product.supplier_raw
+          supplier_raw: item.product.supplier_raw,
+          network_type: item.product.network_type
         };
         const { error: updateError } = await supabase
           .from('products')

@@ -13,6 +13,7 @@ interface Product {
   description: string | null;
   internal_note: string | null;
   data_amount: string | null;
+  network_type: string | null;
   validity_days: number;
   price: number;
   supplier: string | null;
@@ -80,6 +81,7 @@ type ProductEditDraft = {
   country: string;
   name: string;
   data_amount: string;
+  network_type: string;
   description: string;
   internal_note: string;
   validity_days: string;
@@ -526,6 +528,7 @@ export default function ProductsPage() {
     country: product.country,
     name: product.name,
     data_amount: product.data_amount || '',
+    network_type: product.network_type || '',
     description: product.description || '',
     internal_note: product.internal_note || '',
     validity_days: String(product.validity_days),
@@ -540,6 +543,7 @@ export default function ProductsPage() {
       if (draft.country.trim() !== product.country) updates.country = draft.country.trim();
       if (draft.name.trim() !== product.name) updates.name = draft.name.trim();
       if (draft.data_amount.trim() !== (product.data_amount || '')) updates.data_amount = draft.data_amount.trim() || null;
+      if (draft.network_type.trim() !== (product.network_type || '')) updates.network_type = draft.network_type.trim() || null;
       if (draft.description.trim() !== (product.description || '')) updates.description = draft.description.trim() || null;
       if (draft.internal_note.trim() !== (product.internal_note || '')) updates.internal_note = draft.internal_note.trim() || null;
       if (Number(draft.validity_days) !== product.validity_days) updates.validity_days = Number(draft.validity_days);
@@ -688,6 +692,7 @@ export default function ProductsPage() {
     customCountry: '',
     useCustomCountry: false,
     data_amount: '',
+    network_type: '',
     validity_days: '',
     price: '',
     description: '',
@@ -758,6 +763,7 @@ export default function ProductsPage() {
           name: formData.name,
           country,
           data_amount: formData.data_amount || null,
+          network_type: formData.network_type || null,
           validity_days: Number(formData.validity_days),
           price: Number(formData.price),
           description: formData.description || null,
@@ -786,6 +792,7 @@ export default function ProductsPage() {
       customCountry: isCommon ? '' : product.country,
       useCustomCountry: !isCommon,
       data_amount: product.data_amount || '',
+      network_type: product.network_type || '',
       validity_days: String(product.validity_days),
       price: String(product.price),
       description: product.description || '',
@@ -807,6 +814,7 @@ export default function ProductsPage() {
           name: editFormData.name,
           country,
           data_amount: editFormData.data_amount || null,
+          network_type: editFormData.network_type || null,
           validity_days: Number(editFormData.validity_days),
           price: Number(editFormData.price),
           description: editFormData.description || null,
@@ -903,6 +911,25 @@ export default function ProductsPage() {
           value={data.data_amount}
           onChange={(e) => setData({ ...data, data_amount: e.target.value })}
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-white/70 mb-1">網路規格</label>
+        <input
+          type="text"
+          list="product-network-types"
+          placeholder="例如：4G、5G、4G / 5G"
+          className="w-full border-white/20 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border text-white bg-black/40 placeholder:text-white/30"
+          value={data.network_type}
+          onChange={(e) => setData({ ...data, network_type: e.target.value })}
+        />
+        <datalist id="product-network-types">
+          <option value="4G" />
+          <option value="5G" />
+          <option value="4G / 5G" />
+          <option value="3G / 4G" />
+        </datalist>
+        <p className="mt-1 text-xs text-white/35">每個方案獨立設定；MicroEsim 上架時會依供應商資料自動帶入。</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -1250,7 +1277,7 @@ export default function ProductsPage() {
                           const marginTone = margin === null ? 'text-white/30' : margin >= 0 ? 'text-emerald-300/80' : 'text-red-300/80';
                           return (
                         <div key={product.id} className={`px-6 py-3 transition-colors ${selectedProductIds.has(product.id) ? 'bg-red-400/10' : isChanged ? 'bg-emerald-400/10' : 'hover:bg-white/5'}`}>
-                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(120px,1fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_112px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
+                          <div className={`${isSelectionMode ? 'grid grid-cols-[auto_72px_minmax(180px,1.3fr)_minmax(130px,0.9fr)_minmax(120px,1fr)_90px_minmax(150px,1fr)_minmax(180px,1.2fr)_80px_88px_112px_auto] gap-3 items-start' : 'flex items-center justify-between gap-4'}`}>
                             <div className={`${isSelectionMode ? 'contents' : 'flex items-center gap-6 flex-1 min-w-0'}`}>
                             {isSelectionMode && (
                               <button
@@ -1299,6 +1326,13 @@ export default function ProductsPage() {
                                   aria-label="流量規格"
                                 />
                                 <input
+                                  value={draft?.network_type ?? product.network_type ?? ''}
+                                  onChange={(event) => updateProductDraft(product.id, 'network_type', event.target.value)}
+                                  placeholder="4G / 5G"
+                                  className="rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-xs text-white placeholder:text-white/25"
+                                  aria-label="網路規格"
+                                />
+                                <input
                                   value={draft?.description ?? product.description ?? ''}
                                   onChange={(event) => updateProductDraft(product.id, 'description', event.target.value)}
                                   placeholder="熱點/短備註"
@@ -1343,6 +1377,7 @@ export default function ProductsPage() {
                                 <span className="text-sm text-white/50 w-14 text-right">{product.validity_days}天</span>
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-medium text-white/90">{product.name}</div>
+                                  {product.network_type && <div className="mt-1 text-xs font-bold text-cyan-200/70">{product.network_type}</div>}
                                   {product.supplier_plan_id && (
                                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] leading-4">
                                       <span className="rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 font-mono text-cyan-100/80">

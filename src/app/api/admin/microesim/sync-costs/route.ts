@@ -95,7 +95,8 @@ export async function POST(request: Request) {
         supplier_cost_twd: nextCost,
         supplier_cost_currency: plan.cost_currency,
         supplier_cost_original: plan.cost_original,
-        supplier_raw: plan.raw
+        supplier_raw: plan.raw,
+        network_type: plan.network_type || null
       };
 
       if (currentCost === nextCost) {

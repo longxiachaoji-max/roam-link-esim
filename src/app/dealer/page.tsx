@@ -47,6 +47,7 @@ interface Product {
   country: string;
   description: string | null;
   data_amount: string | null;
+  network_type: string | null;
   validity_days: number;
   retail_price: number;
   dealer_price?: number;
@@ -1069,6 +1070,7 @@ export default function DealerPage() {
                                 {product.data_amount
                                   ? ` · ${product.data_amount}`
                                   : ""}
+                                {product.network_type ? ` · ${product.network_type}` : ""}
                               </p>
                             </div>
                             <div className="flex items-center justify-between gap-4 sm:justify-end">
@@ -1788,6 +1790,7 @@ function MultiReferralCatalog({
                       <p className="mt-1 text-sm text-white/40">
                         {product.country} · {product.validity_days} 天
                         {product.data_amount ? ` · ${product.data_amount}` : ""}
+                        {product.network_type ? ` · ${product.network_type}` : ""}
                       </p>
                       <p className="mt-1 text-xs text-white/30">
                         官網售價 {money(product.retail_price)}

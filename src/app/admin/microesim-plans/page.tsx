@@ -23,6 +23,7 @@ type SupplierPlan = {
   margin_twd: number;
   carrier: string;
   networks: string;
+  network_type: string;
   apn: string;
   active_type_note: string;
   rule_desc_zh: string;
@@ -899,7 +900,7 @@ export default function MicroesimPlansPage() {
                     </td>
                     <td className="px-3 py-3 align-top">
                       <div className="font-semibold text-white">{plan.name}</div>
-                      <div className="mt-1 text-xs text-cyan-200/80">{plan.data_amount} · {plan.validity_days}天 · {plan.hotspot_sharing}</div>
+                      <div className="mt-1 text-xs text-cyan-200/80">{plan.data_amount} · {plan.validity_days}天{plan.network_type ? ` · ${plan.network_type}` : ''}{plan.hotspot_sharing ? ` · ${plan.hotspot_sharing}` : ''}</div>
                     </td>
                     <td className="px-3 py-3 align-top">
                       <div className="text-white/70">{plan.supplier_plan_name}</div>
