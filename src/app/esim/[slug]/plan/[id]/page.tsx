@@ -10,6 +10,7 @@ import {
 import { buildEsimPlanSeo } from '@/lib/esim-plan-seo';
 import { getEsimDestinationPlanSummary, getEsimPlanDetail, getPublicEsimPlanReviews } from '@/lib/esim-seo-products';
 import { serializeJsonLd } from '@/lib/json-ld';
+import { productRequiresKyc } from '@/lib/product-kyc';
 import { buildProductReviewJsonLd } from '@/lib/product-review-jsonld';
 import PlanPurchase from './plan-purchase';
 import EsimPageHeader from '../../../esim-page-header';
@@ -73,6 +74,7 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
   const relatedPlans = destinationSummary.plans
     .filter(candidate => candidate.dataAmount !== plan.dataAmount);
   const destinationHref = getEsimDestinationHref(destination);
+  const requiresKyc = plan.options.some(option => productRequiresKyc(option.name, option.description));
   const canonicalUrl = `https://firstesim.space/esim/${encodeURIComponent(destination.slug)}/plan/${encodeURIComponent(plan.canonicalId)}`;
   const productData = {
     '@context': 'https://schema.org',
@@ -136,7 +138,7 @@ export default async function EsimPlanPage({ params }: PlanPageProps) {
             <div className="flex gap-3"><Globe2 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">適用地區</p><p className="mt-1 text-xs leading-5 text-white/45">{destination.shortName}</p></div></div>
             <div className="flex gap-3"><Clock3 className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">使用天數</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.options.map(option => `${option.validityDays} 天`).join('、')}</p></div></div>
             <div className="flex gap-3"><RadioTower className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">網路規格</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.networkTypes.join('、') || '依方案與當地訊號為準'}</p></div></div>
-            <div className="flex gap-3"><Wifi className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">電信業者</p><p className="mt-1 text-xs leading-5 text-white/45">{plan.carrierNames.join('、') || '供應商未提供'}</p></div></div>
+            <div className="flex gap-3"><Wifi className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">電信業者</p><p className="mt-1 flex flex-wrap items-center gap-2 text-xs leading-5 text-white/45"><span>{plan.carrierNames.join('、') || '供應商未提供'}</span>{requiresKyc && <span className="rounded border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">需實名認證</span>}</p></div></div>
             <div className="flex gap-3"><Wifi className="mt-0.5 shrink-0 text-[#56d5ea]" size={18} /><div><p className="text-sm font-bold">安裝方式</p><p className="mt-1 text-xs leading-5 text-white/45">付款後於會員中心查看</p></div></div>
           </div>
         </div>

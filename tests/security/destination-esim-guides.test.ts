@@ -49,12 +49,13 @@ test('country guidance preserves critical product and regulatory caveats', () =>
   assert.match(guideTemplate, /數據漫遊/);
 });
 
-test('Taiwan guide targets temporary no-contract usage without promising a local number', () => {
+test('Taiwan guide targets temporary no-contract and no-KYC usage without promising a local number', () => {
   assert.match(guideData, /台灣短期 eSIM 怎麼選/);
   assert.match(guideData, /不需要申辦月租型門號或綁長約/);
   assert.match(guideData, /不含本地門號、語音與簡訊/);
-  assert.match(guideData, /可能需要依電信業者與現行規定核對證件/);
+  assert.match(guideData, /目前本站上架的台灣 eSIM 方案皆免 KYC、免實名與證件核驗/);
   assert.match(guidesIndex, /在台灣臨時需要網路/);
+  assert.match(guidesIndex, /目前上架方案皆免 KYC、免證件核驗/);
   assert.match(destinationPage, /getEsimGuideHrefForDestination/);
 });
 

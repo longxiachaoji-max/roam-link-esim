@@ -81,8 +81,8 @@ export default function EsimGuidesPage() {
           <div>
             <div className="flex items-center gap-3"><span className="text-3xl" aria-hidden="true">🇹🇼</span><p className="text-xs font-black tracking-[0.15em] text-[#56d5ea]">TAIWAN SHORT-TERM eSIM</p></div>
             <h2 id="taiwan-short-term-heading" className="mt-4 text-2xl font-black md:text-3xl">在台灣臨時需要網路，不必申辦月租或綁長約</h2>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">適合來台旅遊、返台探親、短期出差、活動工作、原門號故障，或臨時需要第二條備用網路。依天數一次選購，並先確認方案是否為純數據、是否含台灣門號、熱點及身分驗證規則。</p>
-            <div className="mt-6 flex flex-wrap gap-2 text-xs text-white/50"><span className="rounded-full border border-white/10 px-3 py-1.5">短天數選購</span><span className="rounded-full border border-white/10 px-3 py-1.5">免月租</span><span className="rounded-full border border-white/10 px-3 py-1.5">免綁長約</span><span className="rounded-full border border-white/10 px-3 py-1.5">免換實體卡</span></div>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">適合來台旅遊、返台探親、短期出差、活動工作、原門號故障，或臨時需要第二條備用網路。依天數一次選購；目前上架方案皆免 KYC、免證件核驗，再依需求確認純數據、台灣門號與熱點功能。</p>
+            <div className="mt-6 flex flex-wrap gap-2 text-xs text-white/50"><span className="rounded-full border border-white/10 px-3 py-1.5">短天數選購</span><span className="rounded-full border border-white/10 px-3 py-1.5">免月租</span><span className="rounded-full border border-white/10 px-3 py-1.5">免綁長約</span><span className="rounded-full border border-white/10 px-3 py-1.5">免 KYC</span></div>
           </div>
           <div className="mt-7 flex flex-col gap-3 md:mt-0">
             <Link href="/guides/taiwan-esim" className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#ff5a69] px-5 text-sm font-black text-white hover:bg-[#ff7180]">台灣短期 eSIM 指南 <ArrowRight size={15} /></Link>

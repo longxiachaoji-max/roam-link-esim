@@ -26,6 +26,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { getEsimCountryInfo } from "@/lib/esim-country-info";
+import { productRequiresKyc } from "@/lib/product-kyc";
 import type { DealerSalesMode } from "@/lib/dealer-sales-mode";
 
 interface Dealer {
@@ -1073,7 +1074,7 @@ export default function DealerPage() {
                                   : ""}
                                 {product.network_type ? ` · ${product.network_type}` : ""}
                               </p>
-                              {product.carrier_names && <p className="mt-1 text-xs text-white/35">電信業者：{product.carrier_names.replaceAll(' / ', '、')}</p>}
+                              {product.carrier_names && <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/35"><span>電信業者：{product.carrier_names.replaceAll(' / ', '、')}</span>{productRequiresKyc(product.name, product.description) && <span className="rounded border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">需實名認證</span>}</p>}
                             </div>
                             <div className="flex items-center justify-between gap-4 sm:justify-end">
                               <div className="text-right">
@@ -1794,7 +1795,7 @@ function MultiReferralCatalog({
                         {product.data_amount ? ` · ${product.data_amount}` : ""}
                         {product.network_type ? ` · ${product.network_type}` : ""}
                       </p>
-                      {product.carrier_names && <p className="mt-1 text-xs text-white/35">電信業者：{product.carrier_names.replaceAll(' / ', '、')}</p>}
+                      {product.carrier_names && <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/35"><span>電信業者：{product.carrier_names.replaceAll(' / ', '、')}</span>{productRequiresKyc(product.name, product.description) && <span className="rounded border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">需實名認證</span>}</p>}
                       <p className="mt-1 text-xs text-white/30">
                         官網售價 {money(product.retail_price)}
                       </p>

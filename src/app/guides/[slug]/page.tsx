@@ -74,14 +74,17 @@ const planTypes = [
 ];
 
 function buildFaqItems(guide: NonNullable<ReturnType<typeof getEsimGuide>>) {
+  const isTaiwanGuide = guide.destinationSlug === 'taiwan';
   return [
     {
       question: `${guide.name} eSIM 吃到飽就一定完全不限速嗎？`,
       answer: '不一定。吃到飽方案仍可能有高速流量門檻、公平使用政策、尖峰流量管理或熱點分享限制，應以每個商品頁的降速與使用規則為準。'
     },
     {
-      question: `${guide.name} eSIM 應該在台灣安裝嗎？`,
-      answer: '通常可在出發前使用穩定 Wi-Fi 安裝，但方案可能從安裝、啟用或首次連上目的地網路後開始計算。請先閱讀商品的效期起算規則，再決定安裝時間。'
+      question: isTaiwanGuide ? '台灣 eSIM 什麼時候安裝？' : `${guide.name} eSIM 應該在台灣安裝嗎？`,
+      answer: isTaiwanGuide
+        ? '先閱讀商品的效期起算規則，再於穩定 Wi-Fi 下安裝。人在台灣臨時購買時，也要先保留可接收安裝資料的網路。'
+        : '通常可在出發前使用穩定 Wi-Fi 安裝，但方案可能從安裝、啟用或首次連上目的地網路後開始計算。請先閱讀商品的效期起算規則，再決定安裝時間。'
     },
     {
       question: `抵達${guide.name}後需要開啟數據漫遊嗎？`,
@@ -95,6 +98,7 @@ export default async function DestinationEsimGuidePage({ params }: { params: Pro
   const guide = getEsimGuide((await params).slug);
   if (!guide) notFound();
 
+  const isTaiwanGuide = guide.destinationSlug === 'taiwan';
   const canonicalUrl = `https://firstesim.space/guides/${guide.slug}`;
   const destinationUrl = `https://firstesim.space/esim/${guide.destinationSlug}`;
   const faqItems = buildFaqItems(guide);
@@ -173,7 +177,7 @@ export default async function DestinationEsimGuidePage({ params }: { params: Pro
               ['裝置相容性', '手機必須支援 eSIM，而且沒有電信商鎖定。'],
               ['完整行程', `確認 ${guide.cities.join('、')} 等停留地與交通路線。`],
               ['每日使用量', '依導航、通訊、社群、影音、工作與熱點估算。'],
-              ['商品限制', '核對高速額度、降速、熱點、APN、KYC 與語音功能。'],
+              ['商品限制', isTaiwanGuide ? '目前上架方案皆免 KYC；再核對高速額度、降速、熱點、APN 與語音功能。' : '核對高速額度、降速、熱點、APN、KYC 與語音功能。'],
               ['效期起算', '確認從安裝、啟用或首次連線開始，以及每日重置時區。']
             ].map(([title, body], index) => <li key={title} className="flex gap-3 rounded-lg border border-white/10 bg-[#141421] p-4 last:md:col-span-2">
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#56d5ea] text-xs font-black text-[#07141b]">{index + 1}</span>
@@ -294,7 +298,7 @@ export default async function DestinationEsimGuidePage({ params }: { params: Pro
 
       <section className="mt-11 rounded-xl border border-white/10 bg-[#171724] p-6 md:p-8" aria-labelledby="source-heading">
         <h2 id="source-heading" className="text-lg font-bold">官方資料來源與內容原則</h2>
-        <p className="mt-3 text-sm leading-7 text-white/50">裝置、目的地與排名資訊依官方資料查核，最後查核日為 2026 年 9 月 9 日。手機支援、網路涵蓋與法規可能更新；實際商品的流量、效期、啟用、APN、熱點、KYC 與退費規則，以購買當下商品頁及訂單說明為準。</p>
+        <p className="mt-3 text-sm leading-7 text-white/50">裝置、目的地與排名資訊依官方資料查核，最後查核日為 2026 年 9 月 9 日。手機支援與網路涵蓋可能更新；{isTaiwanGuide ? '目前上架的台灣方案皆免 KYC、免證件核驗，' : 'KYC 規則依商品而異，'}實際流量、效期、啟用、APN、熱點與退費規則，以購買當下商品頁及訂單說明為準。</p>
         <ul className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           {sources.map(source => <li key={source.href}><a href={source.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-start gap-2 text-[#56d5ea] hover:text-white"><ExternalLink className="mt-1 shrink-0" size={13} />{source.label}</a></li>)}
         </ul>
@@ -302,7 +306,7 @@ export default async function DestinationEsimGuidePage({ params }: { params: Pro
 
       <section className="mt-11 border-y border-[#56d5ea]/20 bg-[#56d5ea]/[0.05] px-5 py-8 text-center md:px-8">
         <h2 className="text-2xl font-black">已經確認用量、天數與限制？</h2>
-        <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-white/55">前往{guide.name}方案頁比較目前上架商品，結帳前再核對啟用、限速、熱點、KYC 與涵蓋規則。</p>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-white/55">前往{guide.name}方案頁比較目前上架商品，{isTaiwanGuide ? '目前方案皆免 KYC；結帳前再核對啟用、限速、熱點與涵蓋規則。' : '結帳前再核對啟用、限速、熱點、KYC 與涵蓋規則。'}</p>
         <Link href={`/esim/${guide.destinationSlug}`} className="mt-6 inline-flex h-11 items-center gap-2 rounded-md bg-[#ff5a69] px-5 text-sm font-black text-white hover:bg-[#ff7180]">比較{guide.name} eSIM 方案 <ArrowRight size={16} /></Link>
       </section>
 
