@@ -12,6 +12,7 @@ export interface EsimSeoPlan {
   price: number;
   description: string;
   networkType: string;
+  carrierNames: string;
 }
 
 export interface EsimSeoPlanGroup {
@@ -30,6 +31,7 @@ export interface EsimPlanDetail {
   dataAmount: string;
   description: string;
   networkTypes: string[];
+  carrierNames: string[];
   options: EsimSeoPlan[];
 }
 
@@ -67,7 +69,7 @@ interface PublicProductApiResponse {
     country?: string;
     plans?: Array<{
       data?: string;
-      options?: Array<{ id?: string; days?: number; price?: number; hotspot_sharing?: string; network_type?: string }>;
+      options?: Array<{ id?: string; days?: number; price?: number; hotspot_sharing?: string; network_type?: string; carrier_names?: string }>;
     }>;
   }>;
 }
@@ -100,7 +102,8 @@ async function getDestinationPlansFromPublicApi(destination: EsimDestination): P
             validityDays,
             price,
             description: String(option.hotspot_sharing || '').trim(),
-            networkType: String(option.network_type || '').trim()
+            networkType: String(option.network_type || '').trim(),
+            carrierNames: String(option.carrier_names || '').trim()
           });
         }
       }
@@ -143,7 +146,7 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
   const supabase = createClient(url, serviceRoleKey);
   const fetchPlans = () => supabase
       .from('products')
-      .select('id, name, country, data_amount, validity_days, price, description, network_type')
+      .select('id, name, country, data_amount, validity_days, price, description, network_type, carrier_names')
       .eq('is_active', true)
       .in('country', destination.countries)
       .order('price', { ascending: true })
@@ -174,7 +177,8 @@ export async function getEsimDestinationPlanSummary(destination: EsimDestination
     validityDays: Number(row.validity_days || 0),
     price: Number(row.price || 0),
     description: String(row.description || '').trim(),
-    networkType: String(row.network_type || '').trim()
+    networkType: String(row.network_type || '').trim(),
+    carrierNames: String(row.carrier_names || '').trim()
   })).filter(plan => plan.validityDays > 0 && plan.price > 0);
 
   return summarizeEsimPlans(normalized);
@@ -232,7 +236,7 @@ export async function getEsimPlanDetail(productId: string, destination: EsimDest
   const supabase = createClient(url, serviceRoleKey);
   const { data: selected, error: selectedError } = await supabase
     .from('products')
-    .select('id, name, country, data_amount, validity_days, price, description, network_type')
+    .select('id, name, country, data_amount, validity_days, price, description, network_type, carrier_names')
     .eq('id', productId)
     .eq('is_active', true)
     .maybeSingle();
@@ -241,7 +245,7 @@ export async function getEsimPlanDetail(productId: string, destination: EsimDest
 
   const { data, error } = await supabase
     .from('products')
-    .select('id, name, country, data_amount, validity_days, price, description, network_type')
+    .select('id, name, country, data_amount, validity_days, price, description, network_type, carrier_names')
     .eq('is_active', true)
     .eq('country', selected.country)
     .eq('data_amount', selected.data_amount)
@@ -258,7 +262,8 @@ export async function getEsimPlanDetail(productId: string, destination: EsimDest
     validityDays: Number(row.validity_days || 0),
     price: Number(row.price || 0),
     description: String(row.description || '').trim(),
-    networkType: String(row.network_type || '').trim()
+    networkType: String(row.network_type || '').trim(),
+    carrierNames: String(row.carrier_names || '').trim()
   })).filter(option => option.validityDays > 0 && option.price > 0);
 
   const seenDays = new Set<number>();
@@ -276,6 +281,7 @@ export async function getEsimPlanDetail(productId: string, destination: EsimDest
     dataAmount: options[0].dataAmount,
     description: options.find(option => option.description)?.description || '',
     networkTypes: [...new Set(options.map(option => option.networkType).filter(Boolean))],
+    carrierNames: [...new Set(options.flatMap(option => option.carrierNames.split(/\s*\/\s*/)).filter(Boolean))],
     options
   };
 }

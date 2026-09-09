@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const { dealer, supabase } = await requireDealerUser(request, true);
     let query = supabase
       .from('products')
-      .select('id, name, country, description, data_amount, network_type, validity_days, price, supplier_cost_twd')
+      .select('id, name, country, description, data_amount, network_type, carrier_names, validity_days, price, supplier_cost_twd')
       .eq('is_active', true)
       .order('country')
       .order('validity_days');

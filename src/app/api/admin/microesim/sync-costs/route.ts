@@ -96,7 +96,8 @@ export async function POST(request: Request) {
         supplier_cost_currency: plan.cost_currency,
         supplier_cost_original: plan.cost_original,
         supplier_raw: plan.raw,
-        network_type: plan.network_type || null
+        network_type: plan.network_type || null,
+        carrier_names: plan.carrier || null
       };
 
       if (currentCost === nextCost) {

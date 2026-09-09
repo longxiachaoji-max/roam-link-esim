@@ -48,6 +48,7 @@ interface Product {
   description: string | null;
   data_amount: string | null;
   network_type: string | null;
+  carrier_names: string | null;
   validity_days: number;
   retail_price: number;
   dealer_price?: number;
@@ -1072,6 +1073,7 @@ export default function DealerPage() {
                                   : ""}
                                 {product.network_type ? ` · ${product.network_type}` : ""}
                               </p>
+                              {product.carrier_names && <p className="mt-1 text-xs text-white/35">電信業者：{product.carrier_names.replaceAll(' / ', '、')}</p>}
                             </div>
                             <div className="flex items-center justify-between gap-4 sm:justify-end">
                               <div className="text-right">
@@ -1792,6 +1794,7 @@ function MultiReferralCatalog({
                         {product.data_amount ? ` · ${product.data_amount}` : ""}
                         {product.network_type ? ` · ${product.network_type}` : ""}
                       </p>
+                      {product.carrier_names && <p className="mt-1 text-xs text-white/35">電信業者：{product.carrier_names.replaceAll(' / ', '、')}</p>}
                       <p className="mt-1 text-xs text-white/30">
                         官網售價 {money(product.retail_price)}
                       </p>

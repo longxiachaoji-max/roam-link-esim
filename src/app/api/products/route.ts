@@ -23,7 +23,7 @@ export async function GET() {
     // 1. 取得所有 active 商品
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, country, data_amount, description, network_type, validity_days, price, is_hidden_gem')
+      .select('id, name, country, data_amount, description, network_type, carrier_names, validity_days, price, is_hidden_gem')
       .eq('is_active', true)
       .order('country', { ascending: true })
       .order('price', { ascending: true });
@@ -63,7 +63,7 @@ export async function GET() {
       flag: string;
       totalSales: number;
       isHiddenGem: boolean;
-      plansMap: Record<string, { data: string; options: { id: string; days: number; price: number; hotspot_sharing: string; network_type: string }[] }>;
+      plansMap: Record<string, { data: string; options: { id: string; days: number; price: number; hotspot_sharing: string; network_type: string; carrier_names: string }[] }>;
     }> = {};
 
     for (const item of data) {
@@ -97,7 +97,8 @@ export async function GET() {
         days: item.validity_days,
         price: Number(item.price),
         hotspot_sharing: getHotspotSharing(item.description, item.name),
-        network_type: String(item.network_type || '')
+        network_type: String(item.network_type || ''),
+        carrier_names: String(item.carrier_names || '')
       });
       // 標記此方案是否為金探子
       if (item.is_hidden_gem) {

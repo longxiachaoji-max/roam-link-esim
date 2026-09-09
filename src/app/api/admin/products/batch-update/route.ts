@@ -21,9 +21,10 @@ type ProductTextUpdate = {
   description?: string | null;
   internal_note?: string | null;
   network_type?: string | null;
+  carrier_names?: string | null;
 };
 
-const textFields = ['name', 'country', 'data_amount', 'description', 'internal_note', 'network_type'] as const;
+const textFields = ['name', 'country', 'data_amount', 'description', 'internal_note', 'network_type', 'carrier_names'] as const;
 
 export async function POST(request: Request) {
   const denied = await adminApiGuard(request);
@@ -82,9 +83,10 @@ export async function POST(request: Request) {
         .update(updateData)
         .eq('id', item.id);
 
-      if (error && /internal_note|network_type|column/i.test(error.message || '')) {
+      if (error && /internal_note|network_type|carrier_names|column/i.test(error.message || '')) {
         delete updateData.internal_note;
         delete updateData.network_type;
+        delete updateData.carrier_names;
         const fallback = await supabase
           .from('products')
           .update(updateData)

@@ -44,7 +44,8 @@ function cleanPlan(plan: Partial<TransformedMicroesimPlan>) {
     supplier_cost_currency: String(plan.cost_currency || '').trim(),
     supplier_cost_original: Number(plan.cost_original || 0),
     supplier_raw: plan.raw || null,
-    network_type: String(plan.network_type || '').trim() || null
+    network_type: String(plan.network_type || '').trim() || null,
+    carrier_names: String(plan.carrier || '').trim() || null
   };
 }
 
@@ -180,7 +181,8 @@ export async function POST(request: Request) {
           supplier_cost_currency: item.product.supplier_cost_currency,
           supplier_cost_original: item.product.supplier_cost_original,
           supplier_raw: item.product.supplier_raw,
-          network_type: item.product.network_type
+          network_type: item.product.network_type,
+          carrier_names: item.product.carrier_names
         };
         const { error: updateError } = await supabase
           .from('products')

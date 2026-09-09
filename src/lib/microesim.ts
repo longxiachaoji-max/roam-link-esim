@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getProductNetworkType } from '@/lib/product-network-type';
+import { getProductCarrierNames } from '@/lib/product-carriers';
 
 const MICROESIM_TEST_PLAN_ID = 'b1a926e1-d770-4e03-804e-c527b9397eb9';
 const MICROESIM_PRODUCT_MARKER = 'MicroEsim 測試';
@@ -318,64 +319,22 @@ function getRegionCountryName(plan: MicroesimPlan) {
   return '多國/區域';
 }
 
-function normalizeCarrierName(rawCarrier: string, countryCode: string) {
-  const raw = rawCarrier.trim().replace(/\s+/g, ' ');
-  const lower = raw.toLowerCase();
-  const code = countryCode.toUpperCase();
-
-  if (code === 'TW') {
-    if (lower.includes('chunghwa') || lower === 'cht' || lower.includes('中華')) return '中華電信';
-    if (lower.includes('taiwan mobile') || lower.includes('台灣大')) return '台灣大哥大';
-    if (lower.includes('far eastone') || lower === 'fet' || lower.includes('遠傳')) return '遠傳電信';
-    if (lower.includes('taiwan star') || lower.includes('台灣之星')) return '台灣之星';
-    if (lower.includes('asia pacific') || lower.includes('亞太')) return '亞太電信';
-  }
-
-  if (code === 'JP') {
-    if (lower.includes('softbank') || lower.includes('sottbank')) return 'SoftBank';
-    if (lower.includes('docomo') || lower.includes('iij')) return 'Docomo';
-    if (lower.includes('kddi') || lower.includes('au')) return 'KDDI';
-    if (lower.includes('rakuten')) return 'Rakuten';
-  }
-
-  if (code === 'KR') {
-    if (lower.includes('skt') || lower.includes('sk telecom')) return 'SKT';
-    if (/\bkt\b/.test(lower) || lower.includes('korea telecom')) return 'KT';
-    if (lower.includes('lg u') || lower.includes('lgu') || lower.includes('lg+')) return 'LG U+';
-  }
-
-  return raw;
-}
-
 function getCarrier(plan: MicroesimPlan, countryCode?: string) {
   const code = (countryCode || plan.code || '').trim().toUpperCase();
-  const networks = normalizeText(plan.networks);
-  const carriers: string[] = [];
-
-  if (code && networks) {
-    const networkEntries = networks.split('|').map(entry => entry.trim()).filter(Boolean);
-    for (const entry of networkEntries) {
-      if (!entry.toUpperCase().startsWith(`${code}:`)) continue;
-      const carrierPart = entry.slice(code.length + 1).trim();
-      for (const carrierCandidate of carrierPart.split(',')) {
-        const carrierName = carrierCandidate.split('[')[0]?.trim();
-        if (carrierName) carriers.push(normalizeCarrierName(carrierName, code));
-      }
-    }
-  }
-
-  if (carriers.length > 0) {
-    return Array.from(new Set(carriers)).join('/');
-  }
+  const parsedCarriers = getProductCarrierNames(plan.networks, code);
+  if (parsedCarriers) return parsedCarriers;
 
   if (code === 'KR') {
+    const networks = normalizeText(plan.networks);
+    const carriers: string[] = [];
     const text = `${plan.channel_dataplan_name} ${networks}`.toLowerCase();
     if (text.includes('skt') || text.includes('sk telecom')) carriers.push('SKT');
     if (/\bkt\b/.test(text) || text.includes('korea telecom')) carriers.push('KT');
     if (text.includes('lgu') || text.includes('lg u') || text.includes('lg+')) carriers.push('LG U+');
+    return carriers.length ? Array.from(new Set(carriers)).join(' / ') : '';
   }
 
-  return carriers.length ? Array.from(new Set(carriers)).join('/') : '';
+  return '';
 }
 
 function parseDataLabel(plan: MicroesimPlan) {
