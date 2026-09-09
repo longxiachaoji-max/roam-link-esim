@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getProductNetworkType } from '@/lib/product-network-type';
-import { getProductCarrierNames } from '@/lib/product-carriers';
+import { getProductCarrierNames, isLocalCarrierPlanName } from '@/lib/product-carriers';
 
 const MICROESIM_TEST_PLAN_ID = 'b1a926e1-d770-4e03-804e-c527b9397eb9';
 const MICROESIM_PRODUCT_MARKER = 'MicroEsim 測試';
@@ -492,7 +492,7 @@ export function transformMicroesimPlan(
     terminateAfterUse: normalizeText(plan.rule_desc).toLowerCase().includes('terminate')
   };
   const hotspot = getHotspotSharing(plan, flags.noHotspot);
-  const isLocalCarrierPlan = /\blocal\b/i.test(plan.channel_dataplan_name || '');
+  const isLocalCarrierPlan = isLocalCarrierPlanName(plan.channel_dataplan_name);
   const localCarrierLabel = isLocalCarrierPlan ? ` 本地網路${carrier || ''}` : '';
   const costOriginal = Number(plan.price || 0);
   const costTwd = Math.ceil(convertCostToTwd(costOriginal, plan.currency || 'HKD', {

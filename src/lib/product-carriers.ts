@@ -10,6 +10,7 @@ const CARRIER_ALIASES: Record<string, Record<string, string>> = {
     au: 'KDDI',
     kddi: 'KDDI',
     iij: 'Docomo',
+    'iij(docomo)': 'Docomo',
     docomo: 'Docomo',
     softbank: 'SoftBank',
     sottbank: 'SoftBank',
@@ -36,6 +37,11 @@ const CARRIER_ALIASES: Record<string, Record<string, string>> = {
     'asia pacific': '亞太電信'
   }
 };
+
+export function isLocalCarrierPlanName(supplierPlanName: string | null | undefined) {
+  const name = String(supplierPlanName || '');
+  return /local|japan(?:-?local)?iij/i.test(name);
+}
 
 export function normalizeCarrierName(rawCarrier: string, countryCode = '') {
   const raw = rawCarrier.trim().replace(/\s+/g, ' ');

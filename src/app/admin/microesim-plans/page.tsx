@@ -1,6 +1,7 @@
 'use client';
 
 import { adminFetch } from '@/lib/admin-fetch';
+import { isLocalCarrierPlanName } from '@/lib/product-carriers';
 import { compareEsimPlanOrder } from '@/lib/esim-plan-sort';
 import { getMicroesimPlanSpeedTier } from '@/lib/microesim-plan-group';
 
@@ -147,9 +148,9 @@ function getPlanFamily(plan: SupplierPlan) {
 }
 
 function getPlanFamilyTitle(plan: SupplierPlan) {
-  const isLocalPlan = /local/i.test(plan.supplier_plan_name);
+  const isLocalPlan = isLocalCarrierPlanName(plan.supplier_plan_name);
   const networkLabel = isLocalPlan
-    ? `${plan.carrier || (/local\s*iij/i.test(plan.supplier_plan_name) ? 'Docomo' : '未標示電信商')} 本地網路`
+    ? `本地網路${plan.carrier || (/iij/i.test(plan.supplier_plan_name) ? 'Docomo' : '未標示電信商')}`
     : '';
   return [plan.country, networkLabel, plan.data_amount].filter(Boolean).join('｜');
 }
@@ -807,7 +808,7 @@ export default function MicroesimPlansPage() {
                   <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/10 pt-4 text-sm sm:grid-cols-4">
                     <div><p className="text-[11px] text-white/35">成本</p><p className="mt-0.5 font-bold text-white">{money(focusedPlan.cost_twd)}</p><p className="text-[10px] text-white/30">{focusedPlan.cost_original} {focusedPlan.cost_currency}</p></div>
                     <div><p className="text-[11px] text-white/35">建議售價</p><p className="mt-0.5 font-bold text-emerald-200">{money(focusedPlan.suggested_price)}</p><p className="text-[10px] text-white/30">毛利 {money(focusedPlan.margin_twd)}</p></div>
-                    <div><p className="text-[11px] text-white/35">電信商</p><p className="mt-0.5 font-semibold text-white/75">{/local\s*iij/i.test(focusedPlan.supplier_plan_name) ? 'Docomo' : focusedPlan.carrier || '未標示'}</p></div>
+                    <div><p className="text-[11px] text-white/35">電信商</p><p className="mt-0.5 font-semibold text-white/75">{/iij/i.test(focusedPlan.supplier_plan_name) ? 'Docomo' : focusedPlan.carrier || '未標示'}</p></div>
                     <div><p className="text-[11px] text-white/35">APN</p><p className="mt-0.5 break-all font-mono text-white/75">{apn || '未提供'}</p></div>
                   </div>
 
