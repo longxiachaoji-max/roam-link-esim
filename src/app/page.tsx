@@ -10,6 +10,7 @@ import {
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import { ArrowRight, AtSign, Barcode, Camera, CreditCard, LogOut, MapPin, Send, ShoppingBag, ShoppingCart, User, Wifi, X, Zap } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -1246,12 +1247,20 @@ export default function Home() {
       )}
 
       {/* 結帳對話框 */}
-      {isCheckoutOpen && (
-        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-end md:items-center">
-          <div className="bg-[#1A1A2E] w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setIsCheckoutOpen(false)} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
-            
-            <h3 className="text-xl font-black mb-6">確認訂單</h3>
+      {isCheckoutOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[200] grid place-items-center bg-black/70 p-3 backdrop-blur-sm sm:p-4" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-dialog-title"
+            className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[420px] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#202039] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-2rem)] sm:p-6"
+          >
+            <button onClick={() => setIsCheckoutOpen(false)} aria-label="關閉結帳視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
+
+            <div className="mb-5 pr-12">
+              <p className="text-xs font-bold text-cyan">安全結帳</p>
+              <h3 id="checkout-dialog-title" className="mt-1 text-xl font-black">確認訂單與付款方式</h3>
+            </div>
             
             <div className="bg-card-bg border border-white/10 rounded-xl p-4 mb-6">
               <div className="flex justify-between items-center mb-4">
@@ -1356,7 +1365,8 @@ export default function Home() {
               {checkoutPaymentMethod === 'Credit' ? '正在前往綠界...' : `信用卡付款 (NT$${payableTotal})`}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 成功畫面 */}
