@@ -153,6 +153,10 @@
     --card-light-x: 50%;
     --card-light-y: 42%;
     --card-scroll-shift: -6%;
+    --card-scroll-rotate-x: 0deg;
+    --card-scroll-rotate-y: 0deg;
+    --card-scroll-lift: 0px;
+    --card-scroll-scale: 1;
     border: 1px solid rgb(255 255 255 / 0.25);
     background:
       linear-gradient(142deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.055) 36%, rgb(8 18 32 / 0.24) 72%),
@@ -165,7 +169,11 @@
       inset 0 -1px 0 rgb(130 229 255 / 0.08);
     backdrop-filter: blur(46px) saturate(165%) contrast(106%);
     -webkit-backdrop-filter: blur(46px) saturate(165%) contrast(106%);
-    transform: perspective(1400px) rotateX(var(--card-rotate-x)) rotateY(var(--card-rotate-y)) translateZ(0);
+    transform: perspective(1400px)
+      translate3d(0, var(--card-scroll-lift), 0)
+      rotateX(calc(var(--card-rotate-x) + var(--card-scroll-rotate-x)))
+      rotateY(calc(var(--card-rotate-y) + var(--card-scroll-rotate-y)))
+      scale(var(--card-scroll-scale));
     transform-style: preserve-3d;
     will-change: transform;
     transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), border-color 300ms ease, box-shadow 300ms ease;
@@ -173,6 +181,10 @@
 
   .card-glass-shell[data-interacting='true'] {
     transition: transform 90ms linear, border-color 300ms ease, box-shadow 300ms ease;
+  }
+
+  .card-glass-shell[data-scroll-active='true'] {
+    transition: transform 100ms linear, border-color 300ms ease, box-shadow 300ms ease;
   }
 
   .card-glass-shell::before {
@@ -448,6 +460,7 @@
 
     .card-glass-shell,
     .card-glass-shell[data-interacting='true'],
+    .card-glass-shell[data-scroll-active='true'],
     .card-glass-link,
     .card-glass-feature,
     .card-glass-arrow,

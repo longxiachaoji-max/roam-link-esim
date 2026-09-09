@@ -27,6 +27,9 @@ const links = [
 export default function CardExperience() {
   const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastScrollRef = useRef({ position: 0, time: 0 });
   const orientationBaselineRef = useRef<{ beta: number; gamma: number } | null>(null);
 
   const setGlassMotion = (x: number, y: number, immediate = true) => {
@@ -52,16 +55,60 @@ export default function CardExperience() {
   };
 
   useEffect(() => {
-    const updateScrollLight = () => {
+    const coarsePointer = window.matchMedia('(pointer: coarse)');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    const applyScrollMotion = (velocity = 0) => {
       const shell = shellRef.current;
       if (!shell) return;
       const pageRange = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
       const progress = Math.max(0, Math.min(1, window.scrollY / pageRange));
-      shell.style.setProperty('--card-scroll-shift', `${(-6 + progress * 12).toFixed(1)}%`);
+      const centeredProgress = progress * 2 - 1;
+
+      shell.style.setProperty('--card-scroll-shift', `${(-10 + progress * 20).toFixed(1)}%`);
+      if (!coarsePointer.matches || reducedMotion.matches) return;
+
+      const rotateX = -centeredProgress * 2.8 - velocity * 1.15;
+      const rotateY = Math.sin(progress * Math.PI * 1.4) * 1.35 + velocity * 0.85;
+      const lightX = Math.max(18, Math.min(82, 28 + progress * 44 + velocity * 7));
+      const lightY = Math.max(20, Math.min(78, 30 + progress * 34 - velocity * 5));
+
+      shell.style.setProperty('--card-scroll-rotate-x', `${rotateX.toFixed(2)}deg`);
+      shell.style.setProperty('--card-scroll-rotate-y', `${rotateY.toFixed(2)}deg`);
+      shell.style.setProperty('--card-scroll-lift', `${(-velocity * 3.2).toFixed(2)}px`);
+      shell.style.setProperty('--card-scroll-scale', `${(1 + Math.abs(velocity) * 0.0035).toFixed(4)}`);
+      shell.style.setProperty('--card-light-x', `${lightX.toFixed(1)}%`);
+      shell.style.setProperty('--card-light-y', `${lightY.toFixed(1)}%`);
     };
 
-    updateScrollLight();
-    window.addEventListener('scroll', updateScrollLight, { passive: true });
+    const updateScrollMotion = () => {
+      if (scrollFrameRef.current !== null) return;
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        const now = performance.now();
+        const previous = lastScrollRef.current;
+        const elapsed = Math.max(16, now - previous.time);
+        const distance = window.scrollY - previous.position;
+        const velocity = previous.time === 0 ? 0 : Math.max(-1, Math.min(1, distance / elapsed * 5));
+
+        lastScrollRef.current = { position: window.scrollY, time: now };
+        if (shellRef.current && coarsePointer.matches && !reducedMotion.matches) {
+          shellRef.current.dataset.scrollActive = 'true';
+        }
+        applyScrollMotion(velocity);
+        scrollFrameRef.current = null;
+
+        if (scrollIdleTimerRef.current !== null) clearTimeout(scrollIdleTimerRef.current);
+        scrollIdleTimerRef.current = setTimeout(() => {
+          applyScrollMotion(0);
+          if (shellRef.current) shellRef.current.dataset.scrollActive = 'false';
+          scrollIdleTimerRef.current = null;
+        }, 130);
+      });
+    };
+
+    applyScrollMotion();
+    lastScrollRef.current = { position: window.scrollY, time: performance.now() };
+    window.addEventListener('scroll', updateScrollMotion, { passive: true });
 
     const resetOrientationBaseline = () => {
       orientationBaselineRef.current = null;
@@ -99,10 +146,12 @@ export default function CardExperience() {
     window.addEventListener('deviceorientation', handleOrientation, { passive: true });
     window.screen.orientation?.addEventListener('change', resetOrientationBaseline);
     return () => {
-      window.removeEventListener('scroll', updateScrollLight);
+      window.removeEventListener('scroll', updateScrollMotion);
       window.removeEventListener('deviceorientation', handleOrientation);
       window.screen.orientation?.removeEventListener('change', resetOrientationBaseline);
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
+      if (scrollIdleTimerRef.current !== null) clearTimeout(scrollIdleTimerRef.current);
     };
   }, []);
 
@@ -123,6 +172,7 @@ export default function CardExperience() {
             onPointerLeave={() => setGlassMotion(0, 0, false)}
             onPointerCancel={() => setGlassMotion(0, 0, false)}
             data-sensor-active="false"
+            data-scroll-active="false"
             className="card-glass-shell relative w-full overflow-hidden rounded-[36px] p-2 sm:p-2.5"
           >
             <div className="card-glass-edge-light" />
