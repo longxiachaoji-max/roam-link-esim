@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Clock3,
@@ -75,8 +76,9 @@ const breadcrumbData = {
   '@type': 'BreadcrumbList',
   itemListElement: [
     { '@type': 'ListItem', position: 1, name: '首頁', item: 'https://firstesim.space/' },
-    { '@type': 'ListItem', position: 2, name: '日本 eSIM', item: 'https://firstesim.space/esim/japan' },
-    { '@type': 'ListItem', position: 3, name: '日本 eSIM 怎麼選', item: canonicalUrl }
+    { '@type': 'ListItem', position: 2, name: '出國 eSIM 指南', item: 'https://firstesim.space/guides' },
+    { '@type': 'ListItem', position: 3, name: '日本 eSIM', item: 'https://firstesim.space/esim/japan' },
+    { '@type': 'ListItem', position: 4, name: '日本 eSIM 怎麼選', item: canonicalUrl }
   ]
 };
 
@@ -167,6 +169,7 @@ export default function JapanEsimGuidePage() {
     <article className="mx-auto max-w-5xl px-4 pb-16 pt-6 md:px-6 md:pb-24">
       <nav className="flex flex-wrap items-center gap-2 text-xs text-white/40" aria-label="麵包屑">
         <Link href="/" className="hover:text-white">首頁</Link><span>/</span>
+        <Link href="/guides" className="hover:text-white">出國 eSIM 指南</Link><span>/</span>
         <Link href="/esim/japan" className="hover:text-white">日本 eSIM</Link><span>/</span>
         <span className="text-white/65">日本 eSIM 怎麼選</span>
       </nav>
@@ -341,6 +344,11 @@ export default function JapanEsimGuidePage() {
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-white/55">前往日本方案頁比較目前上架的每日流量、總量型與吃到飽方案。購買前再核對商品頁的啟用、限速與熱點規則。</p>
         <Link href="/esim/japan" className="mt-6 inline-flex h-11 items-center gap-2 rounded-md bg-[#ff5a69] px-5 text-sm font-black text-white hover:bg-[#ff7180]">比較日本 eSIM 方案 <ArrowRight size={16} /></Link>
       </section>
+
+      <nav className="mt-8 flex flex-col justify-between gap-3 border-t border-white/10 pt-7 sm:flex-row" aria-label="其他指南">
+        <Link href="/guides" className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={15} />查看全部出國 eSIM 指南</Link>
+        <Link href="/guides/china-esim" className="inline-flex items-center gap-2 text-sm font-bold text-[#56d5ea] hover:text-white">下一個優先目的地：中國 <ArrowRight size={15} /></Link>
+      </nav>
     </article>
   </main>;
 }

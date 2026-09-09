@@ -5,7 +5,9 @@ import test from 'node:test';
 const guidePage = readFileSync(new URL('../../src/app/guides/japan-esim/page.tsx', import.meta.url), 'utf8');
 const destinationPage = readFileSync(new URL('../../src/app/esim/[slug]/page.tsx', import.meta.url), 'utf8');
 const homePage = readFileSync(new URL('../../src/app/page.tsx', import.meta.url), 'utf8');
+const guidesIndex = readFileSync(new URL('../../src/app/guides/page.tsx', import.meta.url), 'utf8');
 const sitemap = readFileSync(new URL('../../src/app/sitemap.ts', import.meta.url), 'utf8');
+const guideData = readFileSync(new URL('../../src/lib/esim-guides.ts', import.meta.url), 'utf8');
 
 test('Japan eSIM guide targets the observed search intent without promising unrestricted service', () => {
   assert.match(guidePage, /日本網卡吃到飽/);
@@ -32,9 +34,12 @@ test('Japan guide cites first-party device and network sources', () => {
 });
 
 test('Japan guide is discoverable from important internal pages and the sitemap', () => {
-  for (const source of [destinationPage, homePage, sitemap]) {
+  for (const source of [guideData, sitemap]) {
     assert.match(source, /\/guides\/japan-esim/);
   }
+  assert.match(guidesIndex, /RANKED_ESIM_GUIDES\.map/);
+  assert.match(destinationPage, /getEsimGuideHrefForDestination/);
+  assert.match(homePage, /href="\/guides"/);
   assert.match(guidePage, /canonical: '\/guides\/japan-esim'/);
   assert.match(guidePage, /FAQPage/);
   assert.match(guidePage, /BreadcrumbList/);

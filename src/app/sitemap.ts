@@ -7,6 +7,7 @@ import {
 } from '@/lib/esim-destinations';
 import { getActiveEsimCountries, getActiveEsimPlanSitemapEntries } from '@/lib/esim-seo-products';
 import { getActivePhysicalProductSitemapEntries } from '@/lib/physical-store-seo';
+import { ESIM_GUIDES } from '@/lib/esim-guides';
 
 export const revalidate = 3600;
 
@@ -61,11 +62,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9
     },
     {
+      url: 'https://firstesim.space/guides',
+      lastModified: new Date('2026-09-09'),
+      changeFrequency: 'monthly',
+      priority: 0.88
+    },
+    {
       url: 'https://firstesim.space/guides/japan-esim',
       lastModified: new Date('2026-09-05'),
       changeFrequency: 'monthly',
       priority: 0.85
     },
+    ...ESIM_GUIDES.map(guide => ({
+      url: `https://firstesim.space/guides/${guide.slug}`,
+      lastModified: new Date('2026-09-09'),
+      changeFrequency: 'monthly' as const,
+      priority: guide.priorityRank ? 0.85 : 0.8
+    })),
     ...[...destinationByPath.keys()].map(path => ({
       url: `https://firstesim.space${path}`,
       lastModified: latestModified(

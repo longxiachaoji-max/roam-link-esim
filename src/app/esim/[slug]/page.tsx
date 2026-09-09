@@ -10,6 +10,7 @@ import {
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
 import { getEsimDestinationPlanSummary } from '@/lib/esim-seo-products';
+import { getEsimGuideHrefForDestination } from '@/lib/esim-guides';
 import { serializeJsonLd } from '@/lib/json-ld';
 import EsimPageHeader from '../esim-page-header';
 
@@ -90,6 +91,7 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
   const summary = await getEsimDestinationPlanSummary(destination);
   if (!curatedDestination && summary.planCount === 0) notFound();
   const canonicalUrl = `https://firstesim.space/esim/${destination.slug}`;
+  const guideHref = getEsimGuideHrefForDestination(destination.slug);
   const breadcrumbData = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -137,14 +139,14 @@ export default async function EsimDestinationPage({ params }: { params: Promise<
         </div>
       </section>
 
-      {destination.slug === 'japan' && <section className="border-b border-white/10 py-9" aria-labelledby="japan-guide-link-heading">
+      {guideHref && <section className="border-b border-white/10 py-9" aria-labelledby="destination-guide-link-heading">
         <div className="flex flex-col justify-between gap-5 rounded-lg border border-[#56d5ea]/25 bg-[#56d5ea]/[0.06] p-6 md:flex-row md:items-center md:p-7">
           <div>
             <p className="text-xs font-bold text-[#56d5ea]">完整選購指南</p>
-            <h2 id="japan-guide-link-heading" className="mt-2 text-xl font-bold">日本 eSIM 吃到飽、每日流量、總量型怎麼選？</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">依流量、旅遊天數、KDDI／SoftBank 涵蓋、手機相容性與啟用方式逐項比較，並附出發前安裝及抵達日本後的設定清單。</p>
+            <h2 id="destination-guide-link-heading" className="mt-2 text-xl font-bold">{destination.shortName} eSIM 吃到飽、每日流量、總量型怎麼選？</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">依流量、旅遊天數、合作網路、手機相容性與啟用方式逐項比較，並整理當地特殊限制、出發前安裝及抵達後的設定清單。</p>
           </div>
-          <Link href="/guides/japan-esim" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-[#56d5ea]/35 px-4 text-sm font-bold text-[#56d5ea] hover:bg-[#56d5ea] hover:text-[#07141b]">閱讀日本 eSIM 怎麼選 <ArrowRight size={16} /></Link>
+          <Link href={guideHref} className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-[#56d5ea]/35 px-4 text-sm font-bold text-[#56d5ea] hover:bg-[#56d5ea] hover:text-[#07141b]">閱讀{destination.shortName} eSIM 怎麼選 <ArrowRight size={16} /></Link>
         </div>
       </section>}
 
