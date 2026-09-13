@@ -1099,12 +1099,17 @@ export default function Home() {
       </section>
 
       {/* 登入 / 註冊對話框 */}
-      {isLoginOpen && (
-        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-center px-4">
-          <div className="bg-[#1A1A2E] w-full max-w-sm rounded-3xl p-8 shadow-2xl relative">
-            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); }} className="absolute top-4 right-4 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-white">✕</button>
+      {isLoginOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-4" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="member-auth-dialog-title"
+            className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#202039] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-2rem)] sm:p-7"
+          >
+            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); }} aria-label="關閉會員登入視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
             
-            <h3 className="text-2xl font-black mb-6 text-center">{isRegisterMode ? '建立新帳號' : '會員登入'}</h3>
+            <h3 id="member-auth-dialog-title" className="mb-6 pr-10 text-2xl font-black">{isForgotPassword ? '忘記密碼' : isRegisterMode ? '建立新帳號' : '會員登入'}</h3>
             
             <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
               <div>
@@ -1186,7 +1191,8 @@ export default function Home() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       
