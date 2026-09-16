@@ -1259,25 +1259,26 @@ export default function Home() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="checkout-dialog-title"
-            className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[420px] overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#202039] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-2rem)] sm:p-6"
+            className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[520px] flex-col overflow-hidden rounded-xl border border-white/15 bg-[#202039] shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-2rem)]"
           >
             <button onClick={() => setIsCheckoutOpen(false)} aria-label="關閉結帳視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
 
-            <div className="mb-5 pr-12">
+            <div className="shrink-0 px-5 pb-3 pt-5 pr-16">
               <p className="text-xs font-bold text-cyan">安全結帳</p>
               <h3 id="checkout-dialog-title" className="mt-1 text-xl font-black">確認訂單與付款方式</h3>
             </div>
             
-            <div className="bg-card-bg border border-white/10 rounded-xl p-4 mb-6">
-              <div className="flex justify-between items-center mb-4">
+            <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-3">
+            <div className="border-t border-white/10 pt-3">
+              <div className="flex justify-between items-center mb-2 text-sm">
                 <span className="text-muted">購買項目</span>
                 <span className="font-bold">{cart.length} 件</span>
               </div>
-              <div className="flex justify-between items-center mb-3">
+              <div className="flex justify-between items-center mb-3 text-sm">
                 <span className="text-muted">小計</span>
                 <span className="font-bold">NT${cartTotal.toLocaleString('zh-TW')}</span>
               </div>
-              <div className="mb-4 border-b border-white/5 pb-4">
+              <div className="mb-3 border-b border-white/5 pb-3">
                 <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void applyCheckoutCode(); }}>
                   <input
                     type="text"
@@ -1307,7 +1308,7 @@ export default function Home() {
               </div>
 
               {appliedDiscount && <div className="mb-3 flex items-center justify-between text-sm text-emerald-300"><span>優惠折抵</span><span className="font-bold">-NT${discountAmount.toLocaleString('zh-TW')}</span></div>}
-              <div className="mb-4 flex items-end justify-between border-b border-white/5 pb-4">
+              <div className="mb-3 flex items-end justify-between">
                 <span className="font-bold text-white">{appliedDiscount ? '折扣後應付總額' : '應付總額'}</span>
                 <span className={`text-2xl font-black ${appliedDiscount ? 'text-emerald-300' : 'text-yellow'}`}>NT${payableTotal.toLocaleString('zh-TW')}</span>
               </div>
@@ -1321,31 +1322,34 @@ export default function Home() {
                   <div className="text-sm text-coral">請先登入以使用儲值金付款</div>
               )}
             </div>
+            </div>
 
+            <div className="shrink-0 border-t border-white/10 bg-[#202039] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             {user && user.token_balance >= payableTotal ? (
-                <button onClick={completeOrder} disabled={isTokenCheckoutSubmitting} className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-4 rounded-xl hover:-translate-y-1 disabled:opacity-60 disabled:cursor-wait disabled:translate-y-0 transition-all flex items-center justify-center gap-2">
+                <button onClick={completeOrder} disabled={isTokenCheckoutSubmitting} className="w-full bg-gradient-to-r from-yellow to-[#f5d061] text-dark font-black py-3 rounded-lg hover:-translate-y-1 disabled:opacity-60 disabled:cursor-wait disabled:translate-y-0 transition-all flex items-center justify-center gap-2">
                     <Zap size={20} />
                     {isTokenCheckoutSubmitting ? '儲值金扣款處理中...' : `使用儲值金扣款 (NT${payableTotal})`}
                 </button>
             ) : (
-                <button disabled className="w-full bg-white/10 text-white/50 font-black py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-2 mb-3">
+                <button disabled className="w-full bg-white/10 text-white/50 font-bold py-2 rounded-lg cursor-not-allowed flex items-center justify-center gap-2 text-sm">
                     <Zap size={20} />
                     儲值金餘額不足
                 </button>
             )}
 
-            <div className="relative flex py-5 items-center">
+            <div className="relative flex py-3 items-center">
                 <div className="flex-grow border-t border-white/10"></div>
                 <span className="flex-shrink-0 mx-4 text-muted text-xs">或使用其他付款方式</span>
                 <div className="flex-grow border-t border-white/10"></div>
             </div>
 
+            <div className="grid grid-cols-2 gap-2">
             {isApplePayAvailable && (
               <button
                 onClick={() => startEcpayCheckout('ApplePay')}
                 disabled={checkoutPaymentMethod !== null}
                 aria-label={`Apple Pay 付款 NT$${payableTotal}`}
-                className="w-full h-12 bg-black border border-white/20 text-white rounded-xl hover:bg-[#171717] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center mb-3"
+                className="col-span-2 w-full h-11 bg-black border border-white/20 text-white rounded-lg hover:bg-[#171717] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center"
               >
                 <span className="text-[22px] leading-none font-semibold tracking-normal" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
                   {checkoutPaymentMethod === 'ApplePay' ? '正在前往 Apple Pay...' : ` Pay NT$${payableTotal}`}
@@ -1356,20 +1360,22 @@ export default function Home() {
             <button
               onClick={() => startEcpayCheckout('BARCODE')}
               disabled={checkoutPaymentMethod !== null}
-              className="w-full bg-[#168b55] border border-emerald-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center gap-2 mb-3"
+              className="min-w-0 bg-[#168b55] border border-emerald-300/20 text-white text-sm font-bold px-2 py-3 rounded-lg hover:bg-[#1a9d62] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-colors flex items-center justify-center gap-2"
             >
               <Barcode size={19} />
-              {checkoutPaymentMethod === 'BARCODE' ? '正在產生條碼...' : `超商條碼付款 (NT$${payableTotal})`}
+              {checkoutPaymentMethod === 'BARCODE' ? '產生條碼中...' : '超商條碼付款'}
             </button>
 
             <button
               onClick={() => startEcpayCheckout('Credit')}
               disabled={checkoutPaymentMethod !== null}
-              className="w-full bg-[#2f63e9] border border-blue-300/20 text-white font-bold py-3 rounded-xl hover:bg-[#3b70f1] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-all flex items-center justify-center gap-2"
+              className="min-w-0 bg-[#2f63e9] border border-blue-300/20 text-white text-sm font-bold px-2 py-3 rounded-lg hover:bg-[#3b70f1] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-wait transition-all flex items-center justify-center gap-2"
             >
               <CreditCard size={18} />
-              {checkoutPaymentMethod === 'Credit' ? '正在前往綠界...' : `信用卡付款 (NT$${payableTotal})`}
+              {checkoutPaymentMethod === 'Credit' ? '前往綠界中...' : '信用卡付款'}
             </button>
+            </div>
+            </div>
           </div>
         </div>,
         document.body
