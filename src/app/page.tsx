@@ -1198,17 +1198,17 @@ export default function Home() {
       
 
       {/* 購物車側邊欄 (Overlay) */}
-      {isCartOpen && (
-        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-end">
-          <div className="bg-[#1A1A2E] w-full max-w-md h-full shadow-2xl p-6 flex flex-col animate-slide-in-right">
-            <div className="flex justify-between items-center mb-6">
+      {isCartOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[200] h-[100dvh] overflow-hidden bg-black/70 backdrop-blur-sm flex justify-end">
+          <div role="dialog" aria-modal="true" aria-label="購物車" className="bg-[#1A1A2E] w-full max-w-md h-full min-h-0 overflow-hidden shadow-2xl px-5 pt-5 flex flex-col animate-slide-in-right">
+            <div className="shrink-0 flex justify-between items-center mb-5">
               <h3 className="text-xl font-black">購物車 ({cart.length})</h3>
               <button onClick={() => setIsCartOpen(false)} className="text-muted hover:text-white transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-2">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain flex flex-col gap-4 pb-4">
               {cart.length === 0 ? (
                 <div className="text-center text-muted mt-20">
                   <ShoppingCart size={48} className="mx-auto mb-4 opacity-20" />
@@ -1216,18 +1216,18 @@ export default function Home() {
                 </div>
               ) : (
                 cart.map(item => (
-                  <div key={item.uid} className="bg-card-bg p-4 rounded-2xl flex items-center justify-between border border-white/5">
-                    <div className="flex items-center gap-4">
+                  <div key={item.uid} className="shrink-0 bg-card-bg p-4 rounded-xl flex items-center justify-between gap-3 border border-white/5">
+                    <div className="min-w-0 flex items-center gap-3">
                       <span className="text-3xl">{item.flag}</span>
-                      <div>
+                      <div className="min-w-0 break-words">
                         <div className="font-bold">{item.country} {item.data}</div>
                         {item.hotspot_sharing && <div className="text-sm text-cyan">{item.hotspot_sharing}</div>}
                         <div className="text-sm text-muted">{item.days}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="shrink-0 flex items-center gap-2">
                       <div className="font-black text-coral">NT${item.price}</div>
-                      <button onClick={() => removeFromCart(item.uid)} className="text-muted hover:text-white">✕</button>
+                      <button onClick={() => removeFromCart(item.uid)} aria-label="移除商品" className="grid h-11 w-11 place-items-center text-muted hover:text-white"><X size={18} /></button>
                     </div>
                   </div>
                 ))
@@ -1235,8 +1235,8 @@ export default function Home() {
             </div>
 
             {cart.length > 0 && (
-              <div className="pt-6 border-t border-white/10 mt-4">
-                <div className="flex justify-between items-center mb-6 text-lg">
+              <div className="shrink-0 border-t border-white/10 bg-[#1A1A2E] pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <div className="flex justify-between items-center mb-3 text-lg">
                   <span className="text-muted">合計</span>
                   <span className="text-2xl font-black text-yellow">NT${cartTotal}</span>
                 </div>
@@ -1249,7 +1249,8 @@ export default function Home() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 結帳對話框 */}
