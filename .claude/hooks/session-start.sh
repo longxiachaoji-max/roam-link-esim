@@ -10,4 +10,4 @@ fi
 cd "$CLAUDE_PROJECT_DIR"
 export PUPPETEER_SKIP_DOWNLOAD=1
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
