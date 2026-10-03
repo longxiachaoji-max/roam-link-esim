@@ -51,6 +51,14 @@
   .animate-fade-in-up {
     animation: fadeInUp 0.4s ease-out forwards;
   }
+  .animate-cart-sheet {
+    animation: slideInUp 0.3s ease-out forwards;
+  }
+  @media (min-width: 640px) {
+    .animate-cart-sheet {
+      animation-name: slideInRight;
+    }
+  }
 
   .site-motion-page {
     min-height: 100svh;
@@ -395,6 +403,10 @@
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
   }
+  @keyframes slideInUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
   @keyframes fadeInUp {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
@@ -459,6 +471,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .animate-slide-in-right,
+    .animate-cart-sheet,
     .animate-fade-in-up,
     .site-motion-page,
     .site-motion-page.site-page-leaving,

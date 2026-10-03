@@ -73,6 +73,8 @@ export default function Home() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
+  // 註冊成功但需要收信驗證時，記下 Email，在對話框裡顯示完成畫面
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   // TopUp modal moved to /member
   const [toastMsg, setToastMsg] = useState("");
   const [checkoutCode, setCheckoutCode] = useState("");
@@ -444,7 +446,14 @@ export default function Home() {
       password: authPassword,
     });
     if (error) {
-      showToast("❌ 登入失敗: " + error.message);
+      const code = (error as { code?: string }).code;
+      if (code === 'email_not_confirmed' || /email not confirmed/i.test(error.message)) {
+        showToast("⚠️ 尚未完成 Email 驗證，請先點驗證信中的連結");
+      } else if (code === 'invalid_credentials' || /invalid login credentials/i.test(error.message)) {
+        showToast("❌ Email 或密碼錯誤");
+      } else {
+        showToast("❌ 登入失敗: " + error.message);
+      }
     } else {
       const savedReferral = validReferralCode(data.user.user_metadata?.referral_code) || readRememberedReferralCode();
       if (savedReferral) {
@@ -464,7 +473,7 @@ export default function Home() {
       return;
     }
     const registrationReferralCode = validReferralCode(authPromoCode);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: authEmail,
       password: authPassword,
       options: registrationReferralCode
@@ -473,16 +482,26 @@ export default function Home() {
     });
     if (error) {
       showToast("❌ 註冊失敗: " + error.message);
-    } else {
-      // 這裡如果 Supabase 開啟了 Email Confirm，會需要收信驗證。
-      // 開發期建議到 Supabase 關閉 Confirm email 功能。
-      showToast("✅ 註冊成功，請登入測試。");
-      if (registrationReferralCode) {
-        rememberReferralCode(registrationReferralCode);
-        showToast("✅ 註冊成功，推薦碼已記錄；完成付款後會依規則回饋");
-      }
+      return;
+    }
+    // 開啟 Email 驗證時，已註冊過的信箱會回傳沒有 identities 的 user，不會再寄信
+    if (data.user && data.user.identities?.length === 0) {
       setIsRegisterMode(false);
+      setAuthPassword("");
       setAuthConfirmPassword("");
+      showToast("⚠️ 這個 Email 已經註冊過，請直接登入");
+      return;
+    }
+    if (registrationReferralCode) rememberReferralCode(registrationReferralCode);
+    setAuthPassword("");
+    setAuthConfirmPassword("");
+    setIsRegisterMode(false);
+    if (data.session) {
+      // 不需要驗證信：已經直接登入，關掉對話框即可
+      setIsLoginOpen(false);
+      showToast(registrationReferralCode ? "🎉 註冊完成，已自動登入，推薦碼已記錄" : "🎉 註冊完成，已自動登入");
+    } else {
+      setRegisteredEmail(authEmail);
     }
   };
 
@@ -1107,8 +1126,30 @@ export default function Home() {
             aria-labelledby="member-auth-dialog-title"
             className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#202039] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-2rem)] sm:p-7"
           >
-            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); }} aria-label="關閉會員登入視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
+            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); setRegisteredEmail(null); }} aria-label="關閉會員登入視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
             
+            {registeredEmail ? (
+              <div className="text-center">
+                <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-emerald-400/15 text-3xl">✅</div>
+                <h3 id="member-auth-dialog-title" className="mb-3 text-2xl font-black">註冊完成！</h3>
+                <p className="text-sm leading-6 text-muted">
+                  我們已寄出驗證信到<br />
+                  <span className="break-all font-bold text-white">{registeredEmail}</span>
+                </p>
+                <ol className="mt-5 space-y-2 rounded-xl bg-black/25 p-4 text-left text-sm leading-6 text-white/85">
+                  <li>1. 打開信箱，點信中的「驗證」連結</li>
+                  <li>2. 回到本網站，用剛剛的 Email 和密碼登入</li>
+                </ol>
+                <p className="mt-3 text-xs text-muted">沒收到信？請檢查垃圾郵件或促銷內容匣。</p>
+                <button
+                  type="button"
+                  onClick={() => { setAuthEmail(registeredEmail); setRegisteredEmail(null); setIsRegisterMode(false); }}
+                  className="mt-5 w-full bg-gradient-to-r from-coral to-yellow text-dark font-black py-3 rounded-xl hover:-translate-y-1 transition-all"
+                >
+                  我已完成驗證，前往登入
+                </button>
+              </div>
+            ) : (<>
             <h3 id="member-auth-dialog-title" className="mb-6 pr-10 text-2xl font-black">{isForgotPassword ? '忘記密碼' : isRegisterMode ? '建立新帳號' : '會員登入'}</h3>
             
             <form onSubmit={isRegisterMode ? handleRegister : handleLogin} className="space-y-4">
@@ -1190,6 +1231,7 @@ export default function Home() {
                 </button>
               </div>
             )}
+            </>)}
           </div>
         </div>,
         document.body
@@ -1199,18 +1241,22 @@ export default function Home() {
 
       {/* 購物車側邊欄 (Overlay) */}
       {isCartOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[200] h-[100dvh] overflow-hidden bg-black/70 backdrop-blur-sm flex justify-end">
-          <div role="dialog" aria-modal="true" aria-label="購物車" className="bg-[#1A1A2E] w-full max-w-md h-full min-h-0 overflow-hidden shadow-2xl px-5 pt-5 flex flex-col animate-slide-in-right">
+        <div
+          className="fixed inset-0 z-[200] h-[100dvh] overflow-hidden bg-black/70 backdrop-blur-sm flex items-end justify-center sm:items-stretch sm:justify-end"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setIsCartOpen(false); }}
+        >
+          {/* 手機：由下往上的面板，高度跟著內容走，結帳按鈕緊接在商品下方；桌機：右側全高抽屜 */}
+          <div role="dialog" aria-modal="true" aria-label="購物車" className="bg-[#1A1A2E] w-full max-h-[85dvh] rounded-t-2xl sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none min-h-0 overflow-hidden shadow-2xl px-5 pt-5 flex flex-col animate-cart-sheet">
             <div className="shrink-0 flex justify-between items-center mb-5">
               <h3 className="text-xl font-black">購物車 ({cart.length})</h3>
-              <button onClick={() => setIsCartOpen(false)} className="text-muted hover:text-white transition-colors">
+              <button onClick={() => setIsCartOpen(false)} aria-label="關閉購物車" className="grid h-10 w-10 place-items-center text-muted hover:text-white transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain flex flex-col gap-4 pb-4">
+            <div className="min-h-0 sm:flex-1 overflow-y-auto overscroll-contain flex flex-col gap-4 pb-4">
               {cart.length === 0 ? (
-                <div className="text-center text-muted mt-20">
+                <div className="text-center text-muted my-10 sm:mt-20">
                   <ShoppingCart size={48} className="mx-auto mb-4 opacity-20" />
                   <p>購物車是空的</p>
                 </div>
