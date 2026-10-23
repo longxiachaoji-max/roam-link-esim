@@ -50,6 +50,8 @@ interface PaymentConfirmationOptions {
   source?: 'ecpay' | 'manual';
   adminUserId?: string;
   merchantTradeNo?: string;
+  // 傳入時，付款確認後立即返回，配發 eSIM／寄信改交給這個函式在背景執行（例如 next/server 的 after）
+  runInBackground?: (task: () => Promise<void>) => void;
 }
 
 function getAdminClient() {
@@ -202,6 +204,26 @@ export async function markEcpayOrderPaidAndFulfill(
   if (paidError) throw paidError;
   if (!claimedOrders?.length) return { alreadyProcessed: true, order };
 
+  if (options.runInBackground) {
+    // 多張卡要逐張向供應商下單，可能要幾十秒；不要讓付款完成的回應（客人的瀏覽器、綠界通知）等它
+    options.runInBackground(async () => {
+      try {
+        await fulfillPaidEcpayOrder(supabase, orderId, order);
+      } catch (error) {
+        console.error('Background ECPay fulfillment failed:', { orderId, error });
+      }
+    });
+    return { alreadyProcessed: false, order, pendingItems: null };
+  }
+
+  return fulfillPaidEcpayOrder(supabase, orderId, order);
+}
+
+async function fulfillPaidEcpayOrder(
+  supabase: ReturnType<typeof getAdminClient>,
+  orderId: string,
+  order: PaidOrder
+) {
   const { error: promoRedemptionError } = await supabase.rpc('record_checkout_promo_redemption', {
     p_order_id: orderId
   });

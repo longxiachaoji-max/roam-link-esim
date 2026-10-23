@@ -6,6 +6,7 @@ import { expirePendingBarcodeOrders } from '@/lib/barcode-order-expiry';
 import { getBarcodeAmount } from '@/lib/barcode-receipt-matching';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 const BUCKET = 'barcode-payment-proofs';
 const MAX_FILE_SIZE = 5 * 1024 * 1024;

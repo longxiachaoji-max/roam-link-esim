@@ -1,8 +1,11 @@
+import { after } from 'next/server';
 import { formDataToParams, getEcpayConfig, verifyCheckMacValue } from '@/lib/ecpay';
 import { markEcpayOrderPaidAndFulfill } from '@/lib/ecpay-orders';
 import { decryptEcpayBackgroundData } from '@/lib/ecpay-background-barcode';
 
 export const dynamic = 'force-dynamic';
+// 背景配發多張 eSIM 需要時間
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -28,7 +31,8 @@ export async function POST(request: Request) {
         throw new Error('綠界幕後條碼付款資料驗證失敗');
       }
       await markEcpayOrderPaidAndFulfill(result.CustomField, tradeAmount, {
-        merchantTradeNo: result.OrderInfo.MerchantTradeNo
+        merchantTradeNo: result.OrderInfo.MerchantTradeNo,
+        runInBackground: task => after(task)
       });
       return new Response('1|OK', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     }
@@ -45,7 +49,8 @@ export async function POST(request: Request) {
     const tradeAmount = Number(params.TradeAmt);
     if (params.RtnCode === '1' && params.SimulatePaid !== '1' && params.CustomField1 && Number.isFinite(tradeAmount)) {
       await markEcpayOrderPaidAndFulfill(params.CustomField1, tradeAmount, {
-        merchantTradeNo: params.MerchantTradeNo
+        merchantTradeNo: params.MerchantTradeNo,
+        runInBackground: task => after(task)
       });
     } else {
       console.warn('ECPay payment was not fulfilled', {
