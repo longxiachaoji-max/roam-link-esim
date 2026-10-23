@@ -1,10 +1,12 @@
 'use client';
 
 import { adminFetch } from '@/lib/admin-fetch';
+import { parseManualEsimInput } from '@/lib/manual-esim';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 
 import { Fragment, useState, useEffect } from 'react';
-import { Activity, ChevronDown, RefreshCw, Search } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Activity, ChevronDown, PenLine, RefreshCw, Search, X } from 'lucide-react';
 
 interface MicroesimUsage {
   status: string;
@@ -180,6 +182,15 @@ function getReceivedRevenue(transaction: TokenTransaction) {
   return amount;
 }
 
+const EMPTY_MANUAL_ESIM_FORM = {
+  lpa: '',
+  smdp_address: '',
+  activation_code: '',
+  iccid: '',
+  expiry_date: '',
+  cost: ''
+};
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
@@ -188,6 +199,10 @@ export default function OrdersPage() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [fulfillingMicroItemId, setFulfillingMicroItemId] = useState<string | null>(null);
   const [checkingStatusItemId, setCheckingStatusItemId] = useState<string | null>(null);
+  const [manualEsimItem, setManualEsimItem] = useState<OrderItem | null>(null);
+  const [manualEsimForm, setManualEsimForm] = useState(EMPTY_MANUAL_ESIM_FORM);
+  const [manualEsimError, setManualEsimError] = useState('');
+  const [savingManualEsim, setSavingManualEsim] = useState(false);
   const [restoringItemId, setRestoringItemId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -456,6 +471,77 @@ export default function OrdersPage() {
     }
   };
 
+  const openManualEsim = (item: OrderItem) => {
+    setManualEsimItem(item);
+    setManualEsimForm(EMPTY_MANUAL_ESIM_FORM);
+    setManualEsimError('');
+  };
+
+  const closeManualEsim = () => {
+    if (savingManualEsim) return;
+    setManualEsimItem(null);
+  };
+
+  const getManualEsimPreview = () => {
+    try {
+      return parseManualEsimInput(manualEsimForm);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleSubmitManualEsim = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!manualEsimItem) return;
+
+    let parsed;
+    try {
+      parsed = parseManualEsimInput(manualEsimForm);
+    } catch (err) {
+      setManualEsimError((err as Error).message);
+      return;
+    }
+
+    const ok = window.confirm(
+      `確定要把這組 eSIM 配發給客戶嗎？\n\n商品：${manualEsimItem.products?.name || '未知商品'}\nSM-DP+：${parsed.smdp_address}\n啟用碼：${parsed.activation_code}\n\n訂單所有商品都配發完成後，會自動寄 eSIM 信給客戶。`
+    );
+    if (!ok) return;
+
+    setSavingManualEsim(true);
+    setManualEsimError('');
+    try {
+      const res = await adminFetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: manualEsimItem.id,
+          action: 'manual_esim',
+          ...manualEsimForm
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '手動配發失敗');
+      setManualEsimItem(null);
+      await fetchOrders(false);
+      alert(json.completed ? '已配發，訂單完成並已寄出 eSIM 信給客戶' : '已配發；訂單還有其他商品尚未配發');
+    } catch (err) {
+      setManualEsimError(err instanceof Error ? err.message : '手動配發失敗');
+    } finally {
+      setSavingManualEsim(false);
+    }
+  };
+
+  const renderManualEsimButton = (item: OrderItem, compact = false) => (
+    <button
+      type="button"
+      onClick={() => openManualEsim(item)}
+      className={`${compact ? 'px-3 py-1.5' : 'px-4 py-2'} inline-flex items-center justify-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs font-bold text-amber-100 hover:bg-amber-500/20 whitespace-nowrap`}
+    >
+      <PenLine size={13} />
+      手動輸入 eSIM
+    </button>
+  );
+
   const renderAssignControls = (item: OrderItem, compact = false) => {
     const cachedUsage = item.e_sim_inventory?.microesim_usage_cache;
     const usage = cachedUsage ? sanitizeMicroesimUsageForDisplay(cachedUsage) : null;
@@ -467,6 +553,9 @@ export default function OrdersPage() {
       return (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-green-400 text-xs">已配發</span>
+          {item.supplier_status === 'MANUAL' && (
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-100">手動輸入</span>
+          )}
           {usage?.status && (
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] ${getUsageBadgeClass(usage.status)}`}>
               <Activity size={12} />
@@ -525,6 +614,7 @@ export default function OrdersPage() {
                     : '自動配發 Micro'}
             </button>
           )}
+          {renderManualEsimButton(item, compact)}
         </div>
       );
     }
@@ -561,6 +651,7 @@ export default function OrdersPage() {
             {fulfillingMicroItemId === item.id ? '配發中...' : '自動配發 Micro'}
           </button>
         )}
+        {renderManualEsimButton(item, compact)}
       </div>
     );
   };
@@ -1041,6 +1132,110 @@ export default function OrdersPage() {
           </table>
         </div>
       </div>
+
+      {manualEsimItem && typeof document !== 'undefined' && createPortal((() => {
+        const order = orders.find(o => o.order_items.some(orderItem => orderItem.id === manualEsimItem.id));
+        const preview = getManualEsimPreview();
+        const inputClass = 'mt-1 w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400 font-mono placeholder:font-sans placeholder:text-white/25';
+        const updateField = (field: keyof typeof EMPTY_MANUAL_ESIM_FORM) => (
+          event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+        ) => {
+          setManualEsimForm(current => ({ ...current, [field]: event.target.value }));
+          setManualEsimError('');
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            onMouseDown={event => { if (event.target === event.currentTarget) closeManualEsim(); }}
+          >
+            <div role="dialog" aria-modal="true" aria-labelledby="manual-esim-title" className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-[#1A1A2E] p-6 text-white shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h2 id="manual-esim-title" className="text-xl font-bold">手動輸入 eSIM</h2>
+                  <p className="mt-1 text-sm text-white/50">
+                    {manualEsimItem.products?.name || '未知商品'}
+                    {order && <> · {order.order_number || order.id.slice(0, 8)} · {order.customers?.email || '未知客戶'}</>}
+                  </p>
+                </div>
+                <button type="button" onClick={closeManualEsim} aria-label="關閉" className="text-white/50 hover:text-white">
+                  <X size={22} />
+                </button>
+              </div>
+
+              {manualEsimItem.supplier_error && (
+                <p className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200/80">
+                  自動配發錯誤：{manualEsimItem.supplier_error}
+                </p>
+              )}
+
+              <form onSubmit={handleSubmitManualEsim} className="space-y-4">
+                <label className="block text-sm text-white/70">
+                  LPA 字串（建議直接貼上）
+                  <textarea
+                    value={manualEsimForm.lpa}
+                    onChange={updateField('lpa')}
+                    rows={2}
+                    placeholder="LPA:1$rsp.example.com$ACTIVATION-CODE"
+                    className={inputClass}
+                  />
+                </label>
+
+                <div className="flex items-center gap-3 text-xs text-white/30">
+                  <span className="h-px flex-1 bg-white/10" />或分開填寫<span className="h-px flex-1 bg-white/10" />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block text-sm text-white/70">
+                    SM-DP+ 地址
+                    <input value={manualEsimForm.smdp_address} onChange={updateField('smdp_address')} disabled={Boolean(manualEsimForm.lpa.trim())} placeholder="rsp.example.com" className={`${inputClass} disabled:opacity-40`} />
+                  </label>
+                  <label className="block text-sm text-white/70">
+                    啟用碼
+                    <input value={manualEsimForm.activation_code} onChange={updateField('activation_code')} disabled={Boolean(manualEsimForm.lpa.trim())} placeholder="ACTIVATION-CODE" className={`${inputClass} disabled:opacity-40`} />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block text-sm text-white/70 sm:col-span-3">
+                    ICCID（選填）
+                    <input value={manualEsimForm.iccid} onChange={updateField('iccid')} inputMode="numeric" placeholder="8988..." className={inputClass} />
+                  </label>
+                  <label className="block text-sm text-white/70 sm:col-span-2">
+                    安裝期限（選填）
+                    <input type="date" value={manualEsimForm.expiry_date} onChange={updateField('expiry_date')} className={inputClass} />
+                  </label>
+                  <label className="block text-sm text-white/70">
+                    成本 NT$（選填）
+                    <input value={manualEsimForm.cost} onChange={updateField('cost')} inputMode="decimal" placeholder="0" className={inputClass} />
+                  </label>
+                </div>
+
+                {preview && (
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-100/80">
+                    <p className="font-bold text-emerald-200">將配發給客戶</p>
+                    <p className="mt-1 break-all font-mono">SM-DP+：{preview.smdp_address}</p>
+                    <p className="break-all font-mono">啟用碼：{preview.activation_code}</p>
+                  </div>
+                )}
+
+                {manualEsimError && (
+                  <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-200">{manualEsimError}</p>
+                )}
+
+                <p className="text-xs text-white/40">送出後客戶的會員中心會立即顯示這組 eSIM；訂單所有商品都配發完成時，會自動寄 eSIM 信給客戶。</p>
+
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={closeManualEsim} disabled={savingManualEsim} className="rounded-lg px-4 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white">取消</button>
+                  <button type="submit" disabled={savingManualEsim || !preview} className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 disabled:bg-gray-600 disabled:text-gray-400">
+                    {savingManualEsim ? '配發中...' : '確認配發'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })(), document.body)}
     </div>
   );
 }

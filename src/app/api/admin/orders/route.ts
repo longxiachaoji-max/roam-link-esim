@@ -3,6 +3,7 @@ import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
 import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
+import { cleanText, parseManualEsimInput } from '@/lib/manual-esim';
 import {
   fetchMicroesimDeviceDetail,
   fetchMicroesimEventDetail,
@@ -64,6 +65,27 @@ function hideSupersededPaymentAttempts(orders: AdminOrderListItem[]) {
       && Math.abs(new Date(paidOrder.created_at).getTime() - new Date(order.created_at).getTime()) <= relatedAttemptWindowMs
     ));
   });
+}
+
+type ServerSupabase = ReturnType<typeof getServerSupabase>;
+
+// 訂單內所有明細都綁好 eSIM 時，把訂單標為完成並寄出 eSIM 信
+async function completeOrderIfFullyAssigned(supabase: ServerSupabase, orderId: string) {
+  const { data: remainingItems, error: remainingError } = await supabase
+    .from('order_items')
+    .select('id, inventory_id')
+    .eq('order_id', orderId);
+
+  if (remainingError || !remainingItems?.every(item => item.inventory_id)) return false;
+
+  await supabase
+    .from('orders')
+    .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
+    .eq('id', orderId);
+  await sendCustomerEsimDeliveryEmail(supabase, orderId).catch(emailError => {
+    console.error('Admin customer eSIM delivery email failed:', emailError);
+  });
+  return true;
 }
 
 // GET - 取得所有訂單
@@ -316,22 +338,99 @@ export async function PUT(request: Request) {
         });
       }
 
-      const { data: remainingItems, error: remainingError } = await supabase
-        .from('order_items')
-        .select('id, inventory_id')
-        .eq('order_id', orderItem.order_id);
-
-      if (!remainingError && remainingItems?.every(item => item.inventory_id)) {
-        await supabase
-          .from('orders')
-          .update({ order_status: 'COMPLETED', updated_at: new Date().toISOString() })
-          .eq('id', orderItem.order_id);
-        await sendCustomerEsimDeliveryEmail(supabase, orderItem.order_id).catch(emailError => {
-          console.error('Admin customer eSIM delivery email failed:', emailError);
-        });
-      }
+      await completeOrderIfFullyAssigned(supabase, orderItem.order_id);
 
       return NextResponse.json({ success: true, inventory });
+    }
+
+    if (action === 'manual_esim') {
+      let esim;
+      try {
+        esim = parseManualEsimInput(body);
+      } catch (parseError) {
+        return NextResponse.json({ error: (parseError as Error).message }, { status: 400 });
+      }
+      const iccid = cleanText(body.iccid).replace(/\s+/g, '') || null;
+      const expiryInput = cleanText(body.expiry_date);
+      // 只填日期時，以台灣時間當天 23:59:59 為安裝期限
+      const expiryDate = expiryInput
+        ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(expiryInput) ? `${expiryInput}T23:59:59+08:00` : expiryInput)
+        : null;
+      if (expiryDate && Number.isNaN(expiryDate.getTime())) {
+        return NextResponse.json({ error: '安裝期限日期格式不正確' }, { status: 400 });
+      }
+      const costInput = cleanText(String(body.cost ?? ''));
+      const cost = costInput ? Number(costInput) : 0;
+      if (!Number.isFinite(cost) || cost < 0) {
+        return NextResponse.json({ error: '成本必須是 0 以上的數字' }, { status: 400 });
+      }
+
+      const { data: orderItem, error: itemError } = await supabase
+        .from('order_items')
+        .select('id, order_id, product_id, inventory_id')
+        .eq('id', order_item_id)
+        .single();
+
+      if (itemError || !orderItem) {
+        return NextResponse.json({ error: itemError?.message || '找不到訂單明細' }, { status: 404 });
+      }
+      if (orderItem.inventory_id) {
+        return NextResponse.json({ error: '此訂單明細已經綁定 eSIM' }, { status: 400 });
+      }
+
+      if (iccid) {
+        const { data: existing } = await supabase
+          .from('e_sim_inventory')
+          .select('id')
+          .eq('iccid', iccid)
+          .maybeSingle();
+        if (existing) {
+          return NextResponse.json({ error: `ICCID ${iccid} 已經存在於 eSIM 庫存，請確認是否重複輸入` }, { status: 400 });
+        }
+      }
+
+      const now = new Date().toISOString();
+      const { data: inventory, error: insertError } = await supabase
+        .from('e_sim_inventory')
+        .insert({
+          product_id: orderItem.product_id,
+          iccid,
+          smdp_address: esim.smdp_address,
+          activation_code: esim.activation_code,
+          status: 'SOLD',
+          sold_at: now,
+          expiry_date: expiryDate ? expiryDate.toISOString() : null,
+          cost
+        })
+        .select('id')
+        .single();
+
+      if (insertError || !inventory) {
+        return NextResponse.json({ error: insertError?.message || '新增 eSIM 資料失敗' }, { status: 500 });
+      }
+
+      // 只綁定仍未配發的明細，避免和自動配發同時寫入
+      const { data: updatedItems, error: updateItemError } = await supabase
+        .from('order_items')
+        .update({
+          inventory_id: inventory.id,
+          supplier_status: 'MANUAL',
+          supplier_last_checked_at: now,
+          supplier_error: null
+        })
+        .eq('id', order_item_id)
+        .is('inventory_id', null)
+        .select('id');
+
+      if (updateItemError || !updatedItems?.length) {
+        await supabase.from('e_sim_inventory').delete().eq('id', inventory.id);
+        return NextResponse.json({
+          error: updateItemError?.message || '這筆明細剛剛已被配發，請重新整理頁面'
+        }, { status: updateItemError ? 500 : 409 });
+      }
+
+      const completed = await completeOrderIfFullyAssigned(supabase, orderItem.order_id);
+      return NextResponse.json({ success: true, completed });
     }
 
     if (!inventory_id) {
@@ -392,20 +491,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: updateItemError.message }, { status: 500 });
     }
 
-    const { data: remainingItems, error: remainingError } = await supabase
-      .from('order_items')
-      .select('id, inventory_id')
-      .eq('order_id', orderItem.order_id);
-
-    if (!remainingError && remainingItems?.every(item => item.inventory_id)) {
-      await supabase
-        .from('orders')
-        .update({ order_status: 'COMPLETED' })
-        .eq('id', orderItem.order_id);
-      await sendCustomerEsimDeliveryEmail(supabase, orderItem.order_id).catch(emailError => {
-        console.error('Admin customer eSIM delivery email failed:', emailError);
-      });
-    }
+    await completeOrderIfFullyAssigned(supabase, orderItem.order_id);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
