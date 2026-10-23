@@ -48,11 +48,25 @@ export async function POST(request: Request) {
       customer = createdCustomer;
     }
 
-    const referralCode = String(body.referralCode || authUser.user_metadata?.referral_code || '').trim();
+    const enteredReferralCode = String(body.referralCode || '').trim();
+    // 註冊時留下的推薦碼只在有效時自動套用；失效時照常儲值，不能讓整筆儲值失敗
+    const registrationReferralCode = enteredReferralCode ? '' : String(authUser.user_metadata?.referral_code || '').trim();
     let referralQuote: ReturnType<typeof buildReferralRewardQuote> | null = null;
-    if (referralCode) {
+    if (enteredReferralCode || registrationReferralCode) {
       const { config } = await readReferralConfig(supabase);
-      referralQuote = buildReferralRewardQuote(config, authUser.email, referralCode, amount);
+      try {
+        referralQuote = buildReferralRewardQuote(config, authUser.email, enteredReferralCode || registrationReferralCode, amount);
+      } catch (referralError) {
+        if (enteredReferralCode) {
+          return NextResponse.json({
+            error: referralError instanceof Error ? `推薦碼無法使用：${referralError.message}` : '推薦碼無法使用，請移除後再儲值'
+          }, { status: 400 });
+        }
+        console.warn('Ignoring invalid registration referral code at top-up:', {
+          code: registrationReferralCode,
+          error: referralError instanceof Error ? referralError.message : referralError
+        });
+      }
     }
 
     const merchantTradeNo = createMerchantTradeNo();

@@ -104,7 +104,8 @@ export async function POST(request: Request) {
     const supabase = getServerSupabase();
     const body = await request.json();
     const { name, productIds, discountCode } = parseTokenCheckoutRequest(body);
-    const effectiveDiscountCode = discountCode || String(authUser.user_metadata?.referral_code || '').trim();
+    // 註冊時留下的推薦碼只在有效時自動套用；失效（停用、刪除、自己的碼）時照原價結帳，不能讓整筆付款失敗
+    const registrationReferralCode = discountCode ? '' : String(authUser.user_metadata?.referral_code || '').trim();
     const email = authUser.email.toLowerCase();
 
     // 1. Get or create customer
@@ -150,8 +151,23 @@ export async function POST(request: Request) {
     const originalTotalAmount = products.reduce((sum, product) => sum + Math.round(Number(product.price)), 0);
     let discountQuote: CheckoutDiscountQuote | null = null;
 
-    if (effectiveDiscountCode) {
-      discountQuote = await resolveCheckoutDiscount(supabase, email, effectiveDiscountCode, originalTotalAmount);
+    if (discountCode) {
+      try {
+        discountQuote = await resolveCheckoutDiscount(supabase, email, discountCode, originalTotalAmount);
+      } catch (discountError) {
+        return NextResponse.json({
+          error: discountError instanceof Error ? `折扣碼無法使用：${discountError.message}` : '折扣碼無法使用，請移除後再結帳'
+        }, { status: 400 });
+      }
+    } else if (registrationReferralCode) {
+      discountQuote = await resolveCheckoutDiscount(supabase, email, registrationReferralCode, originalTotalAmount)
+        .catch(discountError => {
+          console.warn('Ignoring invalid registration referral code at token checkout:', {
+            code: registrationReferralCode,
+            error: discountError instanceof Error ? discountError.message : discountError
+          });
+          return null;
+        });
     }
     const tokensUsed = discountQuote?.payableTotal ?? originalTotalAmount;
 
