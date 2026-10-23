@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
+import { toMemberTransactionReason } from '@/lib/member-transaction-reason';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     // Then, fetch transactions for that customer_id
     const { data: transactions, error } = await supabase
       .from('token_transactions')
-      .select('*')
+      .select('id, customer_id, amount, transaction_type, balance_after, reason, created_at')
       .eq('customer_id', customer.id)
       .order('created_at', { ascending: false });
 
@@ -38,7 +39,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch token transactions' }, { status: 500 });
     }
 
-    return NextResponse.json(transactions || []);
+    // 後台備註與收款金額只留在後台，回給會員的只有系統說明
+    return NextResponse.json((transactions || []).map(transaction => ({
+      ...transaction,
+      reason: toMemberTransactionReason(transaction.reason, Number(transaction.amount))
+    })));
   } catch (e: any) {
     const authError = authenticationErrorResponse(e);
     if (authError) return authError;
