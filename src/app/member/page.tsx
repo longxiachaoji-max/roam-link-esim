@@ -48,6 +48,8 @@ export default function MemberCenter() {
   
   // Modals
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [qrShareItemId, setQrShareItemId] = useState<string | null>(null);
+  const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
   
   // Note editing
@@ -63,7 +65,7 @@ export default function MemberCenter() {
   const [usageByItemId, setUsageByItemId] = useState<Record<string, any>>({});
   const [usageLoadingId, setUsageLoadingId] = useState<string | null>(null);
   const [purchaseReminderOpen, setPurchaseReminderOpen] = useState(false);
-  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'android' | 'qr'; lpa: string; installUrl?: string | null } | null>(null);
+  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'android' | 'qr'; lpa: string; installUrl?: string | null; orderItemId?: string } | null>(null);
   const [detectedPlatform, setDetectedPlatform] = useState<'ios' | 'android' | 'other'>('other');
   const [installPlatformOverride, setInstallPlatformOverride] = useState<'ios' | 'android' | null>(null);
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
@@ -127,6 +129,24 @@ export default function MemberCenter() {
     }
     return false;
   };
+
+  // 付款後 eSIM 在背景配發：有處理中的 eSIM 時每 8 秒自動更新，最多 3 分鐘
+  const hasPendingEsim = orders.some(order => (order.order_items || []).some(
+    (item: { e_sim_inventory?: unknown; user_deleted_at?: string | null }) => !item.e_sim_inventory && !item.user_deleted_at
+  ));
+  useEffect(() => {
+    if (!hasPendingEsim || !user?.email) return;
+    const email = user.email;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - startedAt > 3 * 60_000) {
+        window.clearInterval(timer);
+        return;
+      }
+      if (document.visibilityState === 'visible') void fetchOrders(email);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingEsim, user?.email]);
 
   const refreshOrders = async () => {
     if (!user?.email || ordersRefreshing) return;
@@ -358,6 +378,7 @@ export default function MemberCenter() {
       window.location.href = installConfirmation.installUrl;
     } else {
       setQrCodeData(installConfirmation.lpa);
+      setQrShareItemId(installConfirmation.orderItemId || null);
     }
     setInstallConfirmation(null);
   };
@@ -934,7 +955,7 @@ export default function MemberCenter() {
                          return (
                        <button
                          type="button"
-                         onClick={() => setInstallConfirmation({ type: isAndroid ? 'android' : 'ios', lpa, installUrl })}
+                         onClick={() => setInstallConfirmation({ type: isAndroid ? 'android' : 'ios', lpa, installUrl, orderItemId: item.id })}
                          className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
                        >
                          <Smartphone size={16} /> {isAndroid
@@ -945,7 +966,7 @@ export default function MemberCenter() {
                        })()}
                        <button 
                          className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
-                         onClick={() => setInstallConfirmation({ type: 'qr', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}` })}
+                         onClick={() => setInstallConfirmation({ type: 'qr', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`, orderItemId: item.id })}
                        >
                          <QrCode size={16} /> 顯示 QRCODE
                        </button>
@@ -1138,7 +1159,7 @@ export default function MemberCenter() {
       {qrCodeData && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-center px-4 transition-opacity">
           <div className="bg-[#1A1A2E] w-full max-w-xs rounded-[2rem] p-8 shadow-2xl relative border border-white/10 flex flex-col items-center">
-            <button onClick={() => setQrCodeData(null)} className="absolute top-5 right-5 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
+            <button onClick={() => { setQrCodeData(null); setQrShareItemId(null); }} className="absolute top-5 right-5 bg-white/5 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
             <h3 className="text-xl font-bold mb-6">掃描加入 eSIM</h3>
             <div className="qr-share-area bg-white p-4 rounded-2xl mb-6 flex justify-center items-center w-[232px] h-[232px]">
                <QRCodeSVG value={qrCodeData} size={200} />
@@ -1152,47 +1173,46 @@ export default function MemberCenter() {
                 className="bg-white/10 hover:bg-white/20 text-white text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5">
                 📋 複製
               </button>
-              <button onClick={async () => {
-                  const installUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData!)}`;
-                  const siteUrl = window.location.origin;
-                  const shareText = `Roam Link eSIM 安裝資訊\n\niOS 17.4+ 一鍵安裝:\n${installUrl}\n\nLPA 碼:\n${qrCodeData}\n\n購買網站: ${siteUrl}`;
-                  // 嘗試生成 QR Code 圖片並分享
-                  const svgEl = document.querySelector('.qr-share-area svg') as SVGElement | null;
-                  let shareFile: File | null = null;
-                  if (svgEl) {
+              <button
+                disabled={isCreatingShareLink}
+                onClick={async () => {
+                  // 分享一飛通的安裝網頁（QR Code＋一鍵安裝），讓朋友回到網站安裝
+                  let shareUrl = '';
+                  if (qrShareItemId) {
+                    setIsCreatingShareLink(true);
                     try {
-                      const canvas = document.createElement('canvas');
-                      canvas.width = 400; canvas.height = 400;
-                      const ctx = canvas.getContext('2d')!;
-                      ctx.fillStyle = 'white';
-                      ctx.fillRect(0, 0, 400, 400);
-                      const svgData = new XMLSerializer().serializeToString(svgEl);
-                      const img = new Image();
-                      await new Promise<void>((resolve, reject) => {
-                        img.onload = () => resolve();
-                        img.onerror = reject;
-                        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                      const res = await authenticatedFetch('/api/member/esim-share', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ order_item_id: qrShareItemId })
                       });
-                      ctx.drawImage(img, 20, 20, 360, 360);
-                      const blob = await new Promise<Blob>((r) => canvas.toBlob(b => r(b!), 'image/png'));
-                      shareFile = new File([blob], 'esim-qrcode.png', { type: 'image/png' });
-                    } catch(e) { /* fallback to text only */ }
+                      const json = await res.json();
+                      if (!res.ok || !json.url) throw new Error(json.error || '產生分享網址失敗');
+                      shareUrl = json.url;
+                    } catch (err) {
+                      showToast('❌ ' + (err instanceof Error ? err.message : '產生分享網址失敗'));
+                      return;
+                    } finally {
+                      setIsCreatingShareLink(false);
+                    }
                   }
+                  const installUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${encodeURIComponent(qrCodeData!)}`;
+                  const shareText = shareUrl
+                    ? '一飛通 eSIM 安裝連結：打開網頁即可掃描 QR Code 或一鍵安裝'
+                    : `一飛通 eSIM 安裝資訊\n\niOS 17.4+ 一鍵安裝:\n${installUrl}\n\nLPA 碼:\n${qrCodeData}\n\n購買網站: ${window.location.origin}`;
                   if (navigator.share) {
                     try {
-                      const shareData: ShareData = { title: 'Roam Link eSIM', text: shareText };
-                      if (shareFile && navigator.canShare?.({ files: [shareFile] })) {
-                        shareData.files = [shareFile];
-                      }
-                      await navigator.share(shareData);
-                    } catch(e) { /* cancelled */ }
+                      await navigator.share(shareUrl
+                        ? { title: '一飛通 eSIM 安裝', text: shareText, url: shareUrl }
+                        : { title: '一飛通 eSIM 安裝', text: shareText });
+                    } catch { /* cancelled */ }
                   } else {
-                    navigator.clipboard.writeText(shareText);
-                    showToast('✅ 已複製安裝資訊');
+                    await navigator.clipboard.writeText(shareUrl ? `${shareText}\n${shareUrl}` : shareText);
+                    showToast(shareUrl ? '✅ 已複製安裝網址' : '✅ 已複製安裝資訊');
                   }
                 }} 
-                className="bg-[#F05A28]/20 hover:bg-[#F05A28]/30 text-[#F05A28] text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5">
-                <Share2 size={14} /> 分享給親友
+                className="bg-[#F05A28]/20 hover:bg-[#F05A28]/30 text-[#F05A28] text-sm font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-60">
+                <Share2 size={14} /> {isCreatingShareLink ? '產生連結中' : '分享給親友'}
               </button>
             </div>
           </div>
