@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
 import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
@@ -94,11 +94,14 @@ export async function GET(request: Request) {
   if (denied) return denied;
   try {
     const supabase = getServerSupabase();
-    try {
-      await reconcilePendingMicroesimItems(supabase, { limit: 10, minAgeSeconds: 10 });
-    } catch (reconcileError) {
-      console.error('Admin MicroEsim reconciliation failed:', reconcileError);
-    }
+    // 向 MicroEsim 補查配發中的訂單很慢，放到回應之後再做，不要卡住後台列表
+    after(async () => {
+      try {
+        await reconcilePendingMicroesimItems(supabase, { limit: 10, minAgeSeconds: 10 });
+      } catch (reconcileError) {
+        console.error('Admin MicroEsim reconciliation failed:', reconcileError);
+      }
+    });
 
     const { data, error } = await supabase
       .from('orders')
@@ -137,8 +140,7 @@ export async function GET(request: Request) {
             supplier,
             supplier_plan_id,
             supplier_plan_name,
-            supplier_cost_twd,
-            supplier_raw
+            supplier_cost_twd
           ),
           e_sim_inventory (
             id,

@@ -213,20 +213,21 @@ export default function OrdersPage() {
   const fetchOrders = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const res = await adminFetch('/api/admin/orders');
-      const json = await res.json();
+      // 三個請求互不相依，同時送出
+      const [res, txRes, invRes] = await Promise.all([
+        adminFetch('/api/admin/orders'),
+        adminFetch('/api/admin/topup-history'),
+        adminFetch('/api/admin/esim-inventory')
+      ]);
+      const [json, txJson, invJson] = await Promise.all([res.json(), txRes.json(), invRes.json()]);
       if (json.orders) {
         setOrders(json.orders);
       }
 
-      const txRes = await adminFetch('/api/admin/topup-history');
-      const txJson = await txRes.json();
       if (Array.isArray(txJson)) {
         setTransactions(txJson);
       }
 
-      const invRes = await adminFetch('/api/admin/esim-inventory');
-      const invJson = await invRes.json();
       if (invJson.inventory) {
         setInventoryOptions(invJson.inventory.filter((item: InventoryOption) => item.status === 'AVAILABLE'));
       }
