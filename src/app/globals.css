@@ -62,7 +62,9 @@
 
   .site-motion-page {
     min-height: 100svh;
-    animation: sitePageEnter 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    /* 用 backwards 而非 both：動畫結束後不能留下 filter/translate，
+       否則整頁會變成 fixed 元素的定位容器，彈窗被撐成整頁高、提示訊息跑到頁面最底下 */
+    animation: sitePageEnter 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
 
   .site-motion-page.site-page-leaving {

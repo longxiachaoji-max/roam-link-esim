@@ -75,6 +75,8 @@ export default function Home() {
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   // 註冊成功但需要收信驗證時，記下 Email，在對話框裡顯示完成畫面
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  // 登入／註冊錯誤直接顯示在對話框裡，避免只靠會消失的吐司通知
+  const [authError, setAuthError] = useState("");
   // TopUp modal moved to /member
   const [toastMsg, setToastMsg] = useState("");
   const [checkoutCode, setCheckoutCode] = useState("");
@@ -441,6 +443,7 @@ export default function Home() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError("");
     const { data, error } = await supabase.auth.signInWithPassword({
       email: authEmail,
       password: authPassword,
@@ -448,11 +451,11 @@ export default function Home() {
     if (error) {
       const code = (error as { code?: string }).code;
       if (code === 'email_not_confirmed' || /email not confirmed/i.test(error.message)) {
-        showToast("⚠️ 尚未完成 Email 驗證，請先點驗證信中的連結");
+        setAuthError("尚未完成 Email 驗證，請先點驗證信中的連結再登入");
       } else if (code === 'invalid_credentials' || /invalid login credentials/i.test(error.message)) {
-        showToast("❌ Email 或密碼錯誤");
+        setAuthError("Email 或密碼錯誤，請再確認一次");
       } else {
-        showToast("❌ 登入失敗: " + error.message);
+        setAuthError("登入失敗：" + error.message);
       }
     } else {
       const savedReferral = validReferralCode(data.user.user_metadata?.referral_code) || readRememberedReferralCode();
@@ -468,8 +471,9 @@ export default function Home() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError("");
     if (authPassword !== authConfirmPassword) {
-      showToast("❌ 兩次密碼輸入不一致");
+      setAuthError("兩次密碼輸入不一致");
       return;
     }
     const registrationReferralCode = validReferralCode(authPromoCode);
@@ -481,7 +485,7 @@ export default function Home() {
         : undefined,
     });
     if (error) {
-      showToast("❌ 註冊失敗: " + error.message);
+      setAuthError("註冊失敗：" + error.message);
       return;
     }
     // 開啟 Email 驗證時，已註冊過的信箱會回傳沒有 identities 的 user，不會再寄信
@@ -489,7 +493,7 @@ export default function Home() {
       setIsRegisterMode(false);
       setAuthPassword("");
       setAuthConfirmPassword("");
-      showToast("⚠️ 這個 Email 已經註冊過，請直接登入");
+      setAuthError("這個 Email 已經註冊過，請直接登入");
       return;
     }
     if (registrationReferralCode) rememberReferralCode(registrationReferralCode);
@@ -1126,7 +1130,7 @@ export default function Home() {
             aria-labelledby="member-auth-dialog-title"
             className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#202039] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-2rem)] sm:p-7"
           >
-            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); setRegisteredEmail(null); }} aria-label="關閉會員登入視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
+            <button onClick={() => { setIsLoginOpen(false); setIsForgotPassword(false); setRegisteredEmail(null); setAuthError(""); }} aria-label="關閉會員登入視窗" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/7 text-muted transition-colors hover:bg-white/12 hover:text-white">✕</button>
             
             {registeredEmail ? (
               <div className="text-center">
@@ -1177,8 +1181,12 @@ export default function Home() {
               
               {!isRegisterMode && !isForgotPassword && (
                   <div className="text-right">
-                      <button type="button" onClick={() => setIsForgotPassword(true)} className="text-xs text-cyan hover:underline">忘記密碼？</button>
+                      <button type="button" onClick={() => { setIsForgotPassword(true); setAuthError(""); }} className="text-xs text-cyan hover:underline">忘記密碼？</button>
                   </div>
+              )}
+
+              {authError && (
+                <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-200">{authError}</p>
               )}
 
               {!isForgotPassword && (
@@ -1195,12 +1203,13 @@ export default function Home() {
                 <button 
                   type="button"
                   onClick={async () => {
-                    if (!authEmail) { showToast('⚠️ 請先輸入 Email'); return; }
+                    setAuthError('');
+                    if (!authEmail) { setAuthError('請先輸入 Email'); return; }
                     const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
                       redirectTo: `${window.location.origin}/auth/reset-password`
                     });
                     if (error) {
-                      showToast('❌ ' + error.message);
+                      setAuthError(error.message);
                     } else {
                       showToast('✅ 重設密碼信件已寄出，請檢查信箱');
                       setIsForgotPassword(false);
@@ -1212,7 +1221,7 @@ export default function Home() {
                 </button>
                 <button 
                   type="button" 
-                  onClick={() => setIsForgotPassword(false)} 
+                  onClick={() => { setIsForgotPassword(false); setAuthError(""); }} 
                   className="w-full text-sm text-muted hover:text-white mt-3 py-2"
                 >
                   返回登入
@@ -1224,7 +1233,7 @@ export default function Home() {
               <div className="mt-6 text-center text-sm text-muted">
                 {isRegisterMode ? '已經有帳號了？' : '還沒有帳號？'}
                 <button 
-                  onClick={() => setIsRegisterMode(!isRegisterMode)} 
+                  onClick={() => { setIsRegisterMode(!isRegisterMode); setAuthError(""); }} 
                   className="text-cyan font-bold ml-2 hover:underline"
                 >
                   {isRegisterMode ? '返回登入' : '立即註冊'}
@@ -1448,11 +1457,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* 吐司通知 */}
-      {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white text-dark px-6 py-3 rounded-full font-bold shadow-2xl z-[300] animate-fade-in-up">
+      {/* 吐司通知：放到 body 最上層，才不會被頁面圖層或對話框蓋住 */}
+      {toastMsg && typeof document !== 'undefined' && createPortal(
+        <div role="status" className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 bg-white text-dark px-6 py-3 rounded-full font-bold shadow-2xl z-[300] animate-fade-in-up max-w-[calc(100vw-2rem)] text-center">
           {toastMsg}
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
