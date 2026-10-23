@@ -29,6 +29,7 @@ export const ADMIN_NAVIGATION_ITEMS: AdminNavigationItem[] = [
   { id: 'physical-orders', name: '實體商品訂單', href: '/admin/physical-orders' },
   { id: 'microesim-plans', name: 'MicroEsim 方案庫', href: '/admin/microesim-plans' },
   { id: 'esim-inventory', name: 'eSIM 庫存', href: '/admin/esim-inventory' },
+  { id: 'supplier-topups', name: '廠商儲值紀錄', href: '/admin/supplier-topups' },
   { id: 'promo-codes', name: '優惠代碼', href: '/admin/promo-codes' },
   { id: 'payment-limits', name: '付款限制', href: '/admin/payment-limits' },
   { id: 'notifications', name: '訂單提醒設定', href: '/admin/notifications' },
@@ -57,7 +58,7 @@ export const DEFAULT_ADMIN_NAVIGATION: AdminNavigationConfig = {
     {
       id: 'catalog',
       name: '商品與庫存',
-      itemIds: ['products', 'physical-products', 'microesim-plans', 'esim-inventory']
+      itemIds: ['products', 'physical-products', 'microesim-plans', 'esim-inventory', 'supplier-topups']
     },
     {
       id: 'system',
