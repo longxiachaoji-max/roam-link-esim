@@ -18,6 +18,8 @@ interface SupplierTopupsResponse {
   microBalanceError?: string | null;
   microRecharges?: MicroesimAccountTransaction[];
   microRechargesError?: string | null;
+  hkdPerUsd?: number;
+  hkdPerUsdLive?: boolean;
 }
 
 const taipeiDate = (value: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(value));
@@ -43,13 +45,23 @@ export default function SupplierTopupsPage() {
   };
 
   const recordedMicroIds = new Set(records.map(record => record.microTransactionId).filter(Boolean));
+  const hkdPerUsd = micro.hkdPerUsd || 7.8;
+
+  // Micro 帳戶金額換成美金（帳戶是港幣時用當日匯率換算）
+  const toUsd = (amount: number, currency: string) => (currency === 'HKD' ? amount / hkdPerUsd : amount);
+  const formatMicroAmount = (amount: number, currency: string) => {
+    if (currency === 'USD') return formatUsd(amount);
+    const local = `${currency === 'HKD' ? 'HK$' : `${currency} `}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return currency === 'HKD' ? `${local} ≈ ${formatUsd(toUsd(amount, currency))}` : local;
+  };
 
   const fillFromRecharge = (transaction: MicroesimAccountTransaction) => {
     setForm(current => ({
       ...current,
       date: taipeiDate(transaction.created_at),
-      usd: String(Number(transaction.amount)),
-      balanceAfterUsd: String(Number(transaction.balance_after)),
+      usd: toUsd(Number(transaction.amount), transaction.currency).toFixed(2),
+      balanceAfterUsd: toUsd(Number(transaction.balance_after), transaction.currency).toFixed(2),
+      note: transaction.currency === 'USD' ? current.note : `Micro 入帳 ${transaction.currency} ${Number(transaction.amount).toFixed(2)}`,
       microTransactionId: transaction.transaction_id
     }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -119,9 +131,14 @@ export default function SupplierTopupsPage() {
           {micro.microBalance ? (
             <>
               <p className="mt-1 text-xl font-bold text-emerald-100">
-                {micro.microBalance.currency === 'USD' ? formatUsd(Number(micro.microBalance.balance)) : `${micro.microBalance.currency} ${Number(micro.microBalance.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                {formatUsd(toUsd(Number(micro.microBalance.balance), micro.microBalance.currency))}
               </p>
-              <p className="mt-1 text-[11px] text-emerald-200/50">即時查詢 MicroEsim</p>
+              {micro.microBalance.currency !== 'USD' && (
+                <p className="text-sm text-emerald-100/70">{micro.microBalance.currency === 'HKD' ? 'HK$' : `${micro.microBalance.currency} `}{Number(micro.microBalance.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              )}
+              <p className="mt-1 text-[11px] text-emerald-200/50">
+                即時查詢 MicroEsim{micro.microBalance.currency === 'HKD' && `・1 美金 = ${hkdPerUsd.toFixed(3)} 港幣${micro.hkdPerUsdLive ? '' : '（估計）'}`}
+              </p>
             </>
           ) : (
             <>
@@ -188,7 +205,7 @@ export default function SupplierTopupsPage() {
 
       <section className="mb-6 rounded-xl border border-white/10 bg-white/5 p-5">
         <h2 className="text-lg font-bold">Micro 近 30 天入帳</h2>
-        <p className="mb-3 mt-1 text-xs text-white/40">直接從 MicroEsim 查詢。按「帶入」會把美金和儲值後餘額填進上面的表單，你只要填付出的台幣。</p>
+        <p className="mb-3 mt-1 text-xs text-white/40">直接從 MicroEsim 查詢（帳戶以港幣計價，美金依當日匯率換算）。按「帶入」會把換算後的美金和儲值後餘額填進上面的表單，你只要填付出的台幣。</p>
         {micro.microRechargesError && <p className="text-sm text-amber-200/80">查詢失敗：{micro.microRechargesError}</p>}
         {!micro.microRechargesError && (micro.microRecharges || []).length === 0 && <p className="text-sm text-white/40">近 30 天沒有入帳紀錄</p>}
         <div className="space-y-2">
@@ -201,8 +218,8 @@ export default function SupplierTopupsPage() {
                   <p className="text-xs text-white/40">{transaction.description || '儲值入帳'}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold">+{transaction.currency} {Number(transaction.amount).toFixed(2)}</p>
-                  <p className="text-xs text-white/40">入帳後餘額 {Number(transaction.balance_after).toFixed(2)}</p>
+                  <p className="font-bold">+{formatMicroAmount(Number(transaction.amount), transaction.currency)}</p>
+                  <p className="text-xs text-white/40">入帳後餘額 {formatMicroAmount(Number(transaction.balance_after), transaction.currency)}</p>
                 </div>
                 {recorded ? (
                   <span className="rounded-md bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200">已記錄</span>

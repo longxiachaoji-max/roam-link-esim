@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
 import { fetchMicroesimAccountBalance, fetchMicroesimRechargeTransactions } from '@/lib/microesim';
+import { getHkdPerUsd } from '@/lib/fx-rates';
 import {
   normalizeSupplierTopupInput,
   parseSupplierTopups,
@@ -48,11 +49,14 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 
 // 即時向 MicroEsim 查餘額與近 30 天入帳；查不到時頁面仍可使用手動紀錄
 async function loadMicroAccount() {
-  const [balance, recharges] = await Promise.allSettled([
-    fetchMicroesimAccountBalance(),
-    fetchMicroesimRechargeTransactions(30)
+  const [balance, recharges, fx] = await Promise.all([
+    Promise.allSettled([fetchMicroesimAccountBalance()]).then(([result]) => result),
+    Promise.allSettled([fetchMicroesimRechargeTransactions(30)]).then(([result]) => result),
+    getHkdPerUsd()
   ]);
   return {
+    hkdPerUsd: fx.rate,
+    hkdPerUsdLive: fx.live,
     microBalance: balance.status === 'fulfilled' ? balance.value : null,
     microBalanceError: balance.status === 'rejected' ? messageOf(balance.reason) : null,
     microRecharges: recharges.status === 'fulfilled' ? recharges.value : [],
