@@ -2,13 +2,25 @@
 
 import { adminFetch } from '@/lib/admin-fetch';
 import { rateOf, type SupplierTopup, type SupplierTopupSummary } from '@/lib/supplier-topups';
+import type { MicroesimAccountBalance, MicroesimAccountTransaction } from '@/lib/microesim';
 
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 
 const todayInTaipei = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date());
 
-const emptyForm = () => ({ date: todayInTaipei(), twd: '', usd: '', balanceAfterUsd: '', note: '' });
+const emptyForm = () => ({ date: todayInTaipei(), twd: '', usd: '', balanceAfterUsd: '', note: '', microTransactionId: '' });
+
+interface SupplierTopupsResponse {
+  records?: SupplierTopup[];
+  summary?: SupplierTopupSummary;
+  microBalance?: MicroesimAccountBalance | null;
+  microBalanceError?: string | null;
+  microRecharges?: MicroesimAccountTransaction[];
+  microRechargesError?: string | null;
+}
+
+const taipeiDate = (value: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(value));
 
 const formatTwd = (value: number) => `NT$${Math.round(value).toLocaleString('zh-TW')}`;
 const formatUsd = (value: number) => `US$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -21,10 +33,26 @@ export default function SupplierTopupsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [micro, setMicro] = useState<SupplierTopupsResponse>({});
 
-  const applyResponse = (json: { records?: SupplierTopup[]; summary?: SupplierTopupSummary }) => {
+  const applyResponse = (json: SupplierTopupsResponse) => {
     setRecords(json.records || []);
     setSummary(json.summary || null);
+    // 新增／刪除的回應不含 Micro 即時資料，保留上次查到的
+    if ('microBalance' in json || 'microRecharges' in json) setMicro(json);
+  };
+
+  const recordedMicroIds = new Set(records.map(record => record.microTransactionId).filter(Boolean));
+
+  const fillFromRecharge = (transaction: MicroesimAccountTransaction) => {
+    setForm(current => ({
+      ...current,
+      date: taipeiDate(transaction.created_at),
+      usd: String(Number(transaction.amount)),
+      balanceAfterUsd: String(Number(transaction.balance_after)),
+      microTransactionId: transaction.transaction_id
+    }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -87,9 +115,20 @@ export default function SupplierTopupsPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-          <p className="text-xs text-emerald-200/70">Micro 餘額（最近記錄）</p>
-          <p className="mt-1 text-xl font-bold text-emerald-100">{summary?.latestBalanceUsd !== null && summary?.latestBalanceUsd !== undefined ? formatUsd(summary.latestBalanceUsd) : '-'}</p>
-          <p className="mt-1 text-[11px] text-emerald-200/50">{summary?.latestBalanceDate ? `${summary.latestBalanceDate} 儲值後` : '儲值時填寫「儲值後餘額」即可顯示'}</p>
+          <p className="text-xs text-emerald-200/70">Micro 目前餘額</p>
+          {micro.microBalance ? (
+            <>
+              <p className="mt-1 text-xl font-bold text-emerald-100">
+                {micro.microBalance.currency === 'USD' ? formatUsd(Number(micro.microBalance.balance)) : `${micro.microBalance.currency} ${Number(micro.microBalance.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+              </p>
+              <p className="mt-1 text-[11px] text-emerald-200/50">即時查詢 MicroEsim</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-xl font-bold text-emerald-100">{summary?.latestBalanceUsd !== null && summary?.latestBalanceUsd !== undefined ? formatUsd(summary.latestBalanceUsd) : '-'}</p>
+              <p className="mt-1 text-[11px] text-amber-200/70">{micro.microBalanceError ? `即時查詢失敗，顯示手動記錄` : summary?.latestBalanceDate ? `${summary.latestBalanceDate} 儲值後（手動記錄）` : '尚無資料'}</p>
+            </>
+          )}
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs text-white/50">最近一次匯率</p>
@@ -132,6 +171,9 @@ export default function SupplierTopupsPage() {
             <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="例如：轉帳方式" className={inputClass} />
           </label>
         </div>
+        {form.microTransactionId && (
+          <p className="mt-3 text-xs text-emerald-200/70">已從 Micro 入帳紀錄帶入美金與餘額，只要填付出的台幣。<button type="button" onClick={() => setForm(current => ({ ...current, microTransactionId: '' }))} className="ml-2 underline">取消關聯</button></p>
+        )}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-white/60">
             這筆匯率：<span className="font-bold text-white">{formatRate(previewRate)}</span>
@@ -143,6 +185,35 @@ export default function SupplierTopupsPage() {
         </div>
         {error && <p role="alert" className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>}
       </form>
+
+      <section className="mb-6 rounded-xl border border-white/10 bg-white/5 p-5">
+        <h2 className="text-lg font-bold">Micro 近 30 天入帳</h2>
+        <p className="mb-3 mt-1 text-xs text-white/40">直接從 MicroEsim 查詢。按「帶入」會把美金和儲值後餘額填進上面的表單，你只要填付出的台幣。</p>
+        {micro.microRechargesError && <p className="text-sm text-amber-200/80">查詢失敗：{micro.microRechargesError}</p>}
+        {!micro.microRechargesError && (micro.microRecharges || []).length === 0 && <p className="text-sm text-white/40">近 30 天沒有入帳紀錄</p>}
+        <div className="space-y-2">
+          {(micro.microRecharges || []).map(transaction => {
+            const recorded = recordedMicroIds.has(transaction.transaction_id);
+            return (
+              <div key={transaction.transaction_id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm">
+                <div>
+                  <p className="font-mono text-white/80">{taipeiDate(transaction.created_at)}</p>
+                  <p className="text-xs text-white/40">{transaction.description || '儲值入帳'}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold">+{transaction.currency} {Number(transaction.amount).toFixed(2)}</p>
+                  <p className="text-xs text-white/40">入帳後餘額 {Number(transaction.balance_after).toFixed(2)}</p>
+                </div>
+                {recorded ? (
+                  <span className="rounded-md bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200">已記錄</span>
+                ) : (
+                  <button type="button" onClick={() => fillFromRecharge(transaction)} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-500">帶入</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/5">
         <table className="w-full min-w-[640px] text-left text-sm">

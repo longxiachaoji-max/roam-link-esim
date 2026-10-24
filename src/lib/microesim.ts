@@ -595,6 +595,46 @@ export async function fetchKoreaMicroesimPlans(options: { hkdRate?: number; usdR
   return fetchMicroesimPlansByCountry('KR', options);
 }
 
+export interface MicroesimAccountBalance {
+  balance: number;
+  currency: string;
+  account: string;
+}
+
+export interface MicroesimAccountTransaction {
+  transaction_id: string;
+  transaction_type: 'consume' | 'recharge' | 'order_refund' | 'adjustment' | string;
+  amount: string;
+  direction: 'debit' | 'credit' | string;
+  currency: string;
+  balance_after: string;
+  topup_id: string | null;
+  device_id: string | null;
+  description: string;
+  created_at: string;
+}
+
+export async function fetchMicroesimAccountBalance() {
+  return microesimPost<MicroesimAccountBalance>('/allesim/v1/accountBalance', {});
+}
+
+// MicroEsim 時間參數用 Asia/Shanghai（UTC+8）：yyyy-MM-dd HH:mm:ss；單次查詢最多 30 天
+function formatShanghaiTime(date: Date) {
+  return new Date(date.getTime() + 8 * 60 * 60_000).toISOString().replace('T', ' ').slice(0, 19);
+}
+
+export async function fetchMicroesimRechargeTransactions(days = 30) {
+  const end = new Date(Date.now() + 60_000);
+  const start = new Date(end.getTime() - Math.min(days, 30) * 24 * 60 * 60_000 + 60_000);
+  const result = await microesimPost<{ transactions?: MicroesimAccountTransaction[] }>('/allesim/v1/accountTransactionList', {
+    start_time: formatShanghaiTime(start),
+    end_time: formatShanghaiTime(end),
+    transaction_type: 'recharge',
+    page_size: '100'
+  });
+  return result.transactions || [];
+}
+
 export async function fetchMicroesimTopupDetail(topupId: string) {
   const normalizedTopupId = topupId.trim();
   if (!normalizedTopupId) throw new Error('MicroEsim topup_id 不可為空');

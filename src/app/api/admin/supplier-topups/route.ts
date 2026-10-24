@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { adminApiGuard, getServerSupabase } from '@/lib/server-auth';
+import { fetchMicroesimAccountBalance, fetchMicroesimRechargeTransactions } from '@/lib/microesim';
 import {
   normalizeSupplierTopupInput,
   parseSupplierTopups,
@@ -39,8 +40,24 @@ async function updateRecords(change: (records: SupplierTopup[]) => SupplierTopup
   throw new Error('設定剛好被其他操作更新，請再按一次儲存');
 }
 
-function respond(records: SupplierTopup[]) {
-  return NextResponse.json({ records, summary: summarizeSupplierTopups(records) });
+function respond(records: SupplierTopup[], extra: Record<string, unknown> = {}) {
+  return NextResponse.json({ records, summary: summarizeSupplierTopups(records), ...extra });
+}
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : '查詢失敗');
+
+// 即時向 MicroEsim 查餘額與近 30 天入帳；查不到時頁面仍可使用手動紀錄
+async function loadMicroAccount() {
+  const [balance, recharges] = await Promise.allSettled([
+    fetchMicroesimAccountBalance(),
+    fetchMicroesimRechargeTransactions(30)
+  ]);
+  return {
+    microBalance: balance.status === 'fulfilled' ? balance.value : null,
+    microBalanceError: balance.status === 'rejected' ? messageOf(balance.reason) : null,
+    microRecharges: recharges.status === 'fulfilled' ? recharges.value : [],
+    microRechargesError: recharges.status === 'rejected' ? messageOf(recharges.reason) : null
+  };
 }
 
 function errorResponse(error: unknown) {
@@ -51,8 +68,8 @@ export async function GET(request: Request) {
   const denied = await adminApiGuard(request);
   if (denied) return denied;
   try {
-    const { usageGuide } = await readSettings();
-    return respond(parseSupplierTopups(usageGuide));
+    const [{ usageGuide }, micro] = await Promise.all([readSettings(), loadMicroAccount()]);
+    return respond(parseSupplierTopups(usageGuide), micro);
   } catch (error) {
     return errorResponse(error);
   }

@@ -10,7 +10,7 @@ import {
 } from '../src/lib/supplier-topups.ts';
 
 const record = (overrides: Partial<SupplierTopup>): SupplierTopup => ({
-  id: 'r1', date: '2026-10-23', twd: 1000, usd: 27.83, balanceAfterUsd: null, note: '', createdAt: '2026-10-23T08:00:00.000Z',
+  id: 'r1', date: '2026-10-23', twd: 1000, usd: 27.83, balanceAfterUsd: null, note: '', microTransactionId: null, createdAt: '2026-10-23T08:00:00.000Z',
   ...overrides
 });
 
@@ -21,7 +21,7 @@ test('computes the TWD per USD rate', () => {
 test('validates input', () => {
   assert.deepEqual(
     normalizeSupplierTopupInput({ date: '2026-10-23', twd: '1000', usd: '27.83', balanceAfterUsd: '', note: ' 街口轉帳 ' }),
-    { date: '2026-10-23', twd: 1000, usd: 27.83, balanceAfterUsd: null, note: '街口轉帳' }
+    { date: '2026-10-23', twd: 1000, usd: 27.83, balanceAfterUsd: null, note: '街口轉帳', microTransactionId: null }
   );
   assert.throws(() => normalizeSupplierTopupInput({ date: '', twd: 1000, usd: 27 }), /日期/);
   assert.throws(() => normalizeSupplierTopupInput({ date: '2026-10-23', twd: 0, usd: 27 }), /台幣/);

@@ -8,6 +8,7 @@ export interface SupplierTopup {
   usd: number;
   balanceAfterUsd: number | null; // 儲值後 Micro 後台顯示的餘額（選填）
   note: string;
+  microTransactionId: string | null; // 從 Micro 入帳紀錄帶入時，記下對應的交易 ID，避免重複記錄
   createdAt: string;
 }
 
@@ -41,6 +42,7 @@ export function normalizeSupplierTopupInput(input: {
   usd?: unknown;
   balanceAfterUsd?: unknown;
   note?: unknown;
+  microTransactionId?: unknown;
 }) {
   const date = String(input.date || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('請選擇儲值日期');
@@ -53,7 +55,8 @@ export function normalizeSupplierTopupInput(input: {
   if (balanceAfterUsd !== null && (!Number.isFinite(balanceAfterUsd) || balanceAfterUsd < 0)) {
     throw new Error('儲值後餘額必須是 0 以上的數字');
   }
-  return { date, twd, usd, balanceAfterUsd, note: String(input.note || '').trim().slice(0, 200) };
+  const microTransactionId = String(input.microTransactionId || '').trim().slice(0, 100) || null;
+  return { date, twd, usd, balanceAfterUsd, note: String(input.note || '').trim().slice(0, 200), microTransactionId };
 }
 
 function sortRecords(records: SupplierTopup[]) {
@@ -76,6 +79,7 @@ export function parseSupplierTopups(usageGuide: string | null | undefined): Supp
       usd: Number(record.usd),
       balanceAfterUsd: record.balanceAfterUsd === null || record.balanceAfterUsd === undefined ? null : Number(record.balanceAfterUsd),
       note: String(record.note || ''),
+      microTransactionId: typeof record.microTransactionId === 'string' ? record.microTransactionId : null,
       createdAt: String(record.createdAt || '')
     })));
   } catch {
