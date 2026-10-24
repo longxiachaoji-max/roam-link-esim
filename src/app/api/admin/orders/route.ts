@@ -4,6 +4,7 @@ import { fulfillMicroesimOrderItem, reconcilePendingMicroesimItems } from '@/lib
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
 import { cleanText, parseManualEsimInput } from '@/lib/manual-esim';
+import { fetchReviewUnlocks } from '@/lib/review-unlocks';
 import {
   fetchMicroesimDeviceDetail,
   fetchMicroesimEventDetail,
@@ -163,7 +164,16 @@ export async function GET(request: Request) {
     }
 
     const visibleOrders = hideSupersededPaymentAttempts((data || []) as unknown as AdminOrderListItem[]);
-    return NextResponse.json({ orders: visibleOrders });
+    const itemIds = visibleOrders.flatMap(order => (order.order_items as unknown as Array<{ id: string }>).map(item => item.id));
+    const reviewUnlocks = await fetchReviewUnlocks(supabase, itemIds);
+    const ordersWithUnlocks = visibleOrders.map(order => ({
+      ...order,
+      order_items: (order.order_items as unknown as Array<{ id: string }>).map(item => ({
+        ...item,
+        review_unlocked_at: reviewUnlocks.get(item.id) || null
+      }))
+    }));
+    return NextResponse.json({ orders: ordersWithUnlocks });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -343,6 +353,23 @@ export async function PUT(request: Request) {
       await completeOrderIfFullyAssigned(supabase, orderItem.order_id);
 
       return NextResponse.json({ success: true, inventory });
+    }
+
+    if (action === 'set_review_unlocked') {
+      const unlocked = body.unlocked === true;
+      const { data: updated, error: unlockError } = await supabase
+        .from('order_items')
+        .update({ review_unlocked_at: unlocked ? new Date().toISOString() : null })
+        .eq('id', order_item_id)
+        .select('id, review_unlocked_at');
+      if (unlockError) {
+        const missingColumn = /review_unlocked_at/.test(unlockError.message);
+        return NextResponse.json({
+          error: missingColumn ? '資料庫還沒新增「允許評價」欄位，請先在 Supabase 執行 migration' : unlockError.message
+        }, { status: missingColumn ? 409 : 500 });
+      }
+      if (!updated?.length) return NextResponse.json({ error: '找不到訂單明細' }, { status: 404 });
+      return NextResponse.json({ success: true, review_unlocked_at: updated[0].review_unlocked_at });
     }
 
     if (action === 'manual_esim') {

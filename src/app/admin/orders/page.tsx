@@ -56,6 +56,7 @@ interface OrderItem {
   supplier_status: string | null;
   supplier_last_checked_at: string | null;
   supplier_error: string | null;
+  review_unlocked_at?: string | null;
   products: Product | null;
   e_sim_inventory: ESimInventory | null;
 }
@@ -203,6 +204,7 @@ export default function OrdersPage() {
   const [manualEsimForm, setManualEsimForm] = useState(EMPTY_MANUAL_ESIM_FORM);
   const [manualEsimError, setManualEsimError] = useState('');
   const [savingManualEsim, setSavingManualEsim] = useState(false);
+  const [togglingReviewItemId, setTogglingReviewItemId] = useState<string | null>(null);
   const [restoringItemId, setRestoringItemId] = useState<string | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -532,6 +534,44 @@ export default function OrdersPage() {
     }
   };
 
+  const handleToggleReviewUnlock = async (item: OrderItem) => {
+    const unlocked = !item.review_unlocked_at;
+    setTogglingReviewItemId(item.id);
+    try {
+      const res = await adminFetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_item_id: item.id, action: 'set_review_unlocked', unlocked })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || '更新失敗');
+      setOrders(current => current.map(order => ({
+        ...order,
+        order_items: order.order_items.map(orderItem => (
+          orderItem.id === item.id ? { ...orderItem, review_unlocked_at: json.review_unlocked_at } : orderItem
+        ))
+      })));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '更新失敗');
+    } finally {
+      setTogglingReviewItemId(null);
+    }
+  };
+
+  const renderReviewUnlockButton = (item: OrderItem) => (
+    <button
+      type="button"
+      onClick={() => handleToggleReviewUnlock(item)}
+      disabled={togglingReviewItemId === item.id}
+      title="沒有用量的 eSIM 預設不能評價；按下後客戶可以留下評價"
+      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-bold disabled:opacity-50 ${item.review_unlocked_at
+        ? 'border-amber-400/30 bg-amber-400/15 text-amber-100 hover:bg-amber-400/25'
+        : 'border-white/15 bg-white/5 text-white/60 hover:bg-white/10'}`}
+    >
+      {togglingReviewItemId === item.id ? '更新中' : item.review_unlocked_at ? '已允許評價 ✕' : '允許評價'}
+    </button>
+  );
+
   const renderManualEsimButton = (item: OrderItem, compact = false) => (
     <button
       type="button"
@@ -574,6 +614,7 @@ export default function OrdersPage() {
               {checkingStatusItemId === item.id ? '查詢中' : '查詢用量'}
             </button>
           )}
+          {renderReviewUnlockButton(item)}
         </div>
       );
     }

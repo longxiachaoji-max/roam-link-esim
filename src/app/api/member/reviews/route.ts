@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
 import { isVerifiedReviewPurchase, parseProductReviewInput } from '@/lib/product-reviews';
+import { fetchReviewUnlocks } from '@/lib/review-unlocks';
+import { canReviewEsim } from '@/lib/review-eligibility';
 
 type QueryRelation<T> = T | T[] | null;
 
@@ -51,7 +53,9 @@ export async function POST(request: Request) {
         id,
         order_id,
         product_id,
-        orders!inner ( id, customer_id, payment_status, order_status )
+        orders!inner ( id, customer_id, payment_status, order_status ),
+        e_sim_inventory ( microesim_usage_cache ),
+        product_reviews ( id )
       `)
       .eq('id', orderItemId)
       .maybeSingle();
@@ -68,6 +72,23 @@ export async function POST(request: Request) {
     });
     if (!isVerifiedPurchase || !item || !order || !item.product_id) {
       return NextResponse.json({ error: '只有已付款且完成的本人訂單可以留下評價' }, { status: 403 });
+    }
+
+    // 有實際用量或後台開放後才可評價（已留過的評價可修改）
+    const eligibility = data as unknown as {
+      e_sim_inventory: { microesim_usage_cache: { status?: string; usedData?: string | null; activatedAt?: string | null } | null }
+        | Array<{ microesim_usage_cache: { status?: string; usedData?: string | null; activatedAt?: string | null } | null }> | null;
+      product_reviews: { id: string } | Array<{ id: string }> | null;
+    };
+    const inventory = firstRelation(eligibility.e_sim_inventory);
+    const existingReview = firstRelation(eligibility.product_reviews);
+    const unlocks = await fetchReviewUnlocks(supabase, [item.id]);
+    if (!canReviewEsim({
+      hasExistingReview: Boolean(existingReview),
+      reviewUnlockedAt: unlocks.get(item.id),
+      usage: inventory?.microesim_usage_cache
+    })) {
+      return NextResponse.json({ error: '開始使用 eSIM 後才能留下評價；使用上遇到問題請聯繫 LINE 客服' }, { status: 403 });
     }
 
     const { data: review, error: reviewError } = await supabase

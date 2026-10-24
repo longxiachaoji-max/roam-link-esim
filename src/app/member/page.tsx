@@ -9,6 +9,7 @@ import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 import { buildReferralShareUrl, readRememberedReferralCode, validReferralCode } from '@/lib/referral-link';
+import { hasEsimUsage, LINE_SUPPORT_URL } from '@/lib/review-eligibility';
 import PhysicalOrdersPanel from './physical-orders-panel';
 import BarcodeOrdersPanel from './barcode-orders-panel';
 
@@ -1036,7 +1037,7 @@ export default function MemberCenter() {
                   </div>
                 )}
 
-                {!deleted && order.order_status === 'COMPLETED' && (
+                {!deleted && order.order_status === 'COMPLETED' && ((item.can_review || hasEsimUsage(usageByItemId[item.id]?.usage)) ? (
                   <button
                     type="button"
                     onClick={() => openReview(item)}
@@ -1045,7 +1046,23 @@ export default function MemberCenter() {
                     {item.review ? <Star size={15} fill="currentColor" /> : <MessageSquareText size={15} />}
                     {item.review ? `已評價 ${item.review.rating} 星 · 查看或修改` : '留下使用評價'}
                   </button>
-                )}
+                ) : (
+                  // 還沒有用量時不開放評價，改成引導到 LINE 客服
+                  <div className="mb-3">
+                    <a
+                      href={LINE_SUPPORT_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#06c755]/30 bg-[#06c755]/10 py-2.5 text-xs font-bold text-[#7ee2a0] transition-colors hover:bg-[#06c755]/20"
+                    >
+                      <MessageSquareText size={15} />
+                      使用上遇到問題？聯繫 LINE 客服
+                    </a>
+                    {item.e_sim_inventory && (
+                      <p className="mt-1.5 text-center text-[11px] text-white/35">已經開始使用？按上方「查詢用量」，有用量後即可留下評價</p>
+                    )}
+                  </div>
+                ))}
 
                 {/* Delete button */}
                 {!deleted && (

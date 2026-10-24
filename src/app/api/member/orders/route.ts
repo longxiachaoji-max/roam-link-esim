@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
 import { fetchMicroesimTopupDetail, getMicroesimInstallationDeadline } from '@/lib/microesim';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
+import { fetchReviewUnlocks } from '@/lib/review-unlocks';
+import { canReviewEsim } from '@/lib/review-eligibility';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -24,6 +26,7 @@ interface MemberInventoryResult extends Record<string, unknown> {
   microesim_topup_id: string | null;
   ios_install_url: string | null;
   android_install_url: string | null;
+  microesim_usage_cache?: { status?: string; usedData?: string | null; activatedAt?: string | null } | null;
 }
 
 function safeInstallLink(value: unknown) {
@@ -32,6 +35,7 @@ function safeInstallLink(value: unknown) {
 }
 
 interface MemberOrderItemResult extends Record<string, unknown> {
+  id: string;
   products: MemberProductResult | MemberProductResult[] | null;
   e_sim_inventory: MemberInventoryResult | MemberInventoryResult[] | null;
   product_reviews: Record<string, unknown> | Record<string, unknown>[] | null;
@@ -153,6 +157,11 @@ export async function GET(request: Request) {
       Object.assign(inventory, updates);
     }));
 
+    const reviewUnlocks = await fetchReviewUnlocks(
+      supabase,
+      ((orders || []) as unknown as MemberOrderResult[]).flatMap(order => (order.order_items || []).map(item => item.id))
+    );
+
     const normalizedOrders = ((orders || []) as unknown as MemberOrderResult[]).map(order => ({
       ...order,
       order_items: (order.order_items || []).map(item => {
@@ -174,6 +183,11 @@ export async function GET(request: Request) {
           ...item,
           products: publicProduct,
           review: review || null,
+          can_review: canReviewEsim({
+            hasExistingReview: Boolean(review),
+            reviewUnlockedAt: reviewUnlocks.get(item.id),
+            usage: inventory?.microesim_usage_cache
+          }),
           e_sim_inventory: inventory ? {
             ...inventory,
             installation_deadline: installationDeadline
