@@ -76,6 +76,7 @@ type SyncCostResult = {
   missing?: number;
   failed?: number;
   message?: string;
+  rates?: { usdRate: number; hkdRate: number; source: 'supplier_topups' | 'legacy'; hkdPerUsd: number };
 };
 
 type ProductEditDraft = {
@@ -1075,6 +1076,13 @@ export default function ProductsPage() {
               Micro 成本同步完成：已連結 {syncCostResult.linkedProducts || 0} 筆，成本變動 {syncCostResult.updated || 0} 筆，成本相同 {syncCostResult.unchanged || 0} 筆，找不到方案 {syncCostResult.missing || 0} 筆
               {(syncCostResult.failed || 0) > 0 && `，失敗 ${syncCostResult.failed} 筆`}
               {syncCostResult.message ? `。${syncCostResult.message}` : ''}
+              {syncCostResult.rates && (
+                <span className="mt-1 block text-xs opacity-80">
+                  {syncCostResult.rates.source === 'supplier_topups'
+                    ? `換算匯率（廠商儲值紀錄成本）：1 美金 = ${syncCostResult.rates.usdRate.toFixed(2)} 台幣、1 港幣 = ${syncCostResult.rates.hkdRate.toFixed(3)} 台幣`
+                    : `尚無廠商儲值紀錄，暫用舊固定匯率：1 美金 = ${syncCostResult.rates.usdRate} 台幣、1 港幣 = ${syncCostResult.rates.hkdRate} 台幣`}
+                </span>
+              )}
             </>
           )}
         </div>

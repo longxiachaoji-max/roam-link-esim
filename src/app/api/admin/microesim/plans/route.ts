@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSupplierCostRates } from '@/lib/supplier-cost-rates';
 import { adminApiGuard } from '@/lib/server-auth';
 import { fetchMicroesimPlansByCountry, MICROESIM_COUNTRY_OPTIONS, MICROESIM_REGION_OPTION } from '@/lib/microesim';
 
@@ -22,15 +23,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: '不支援的國家代碼' }, { status: 400 });
     }
 
-    const hkdRate = getNumberParam(url, 'hkdRate', 4.15);
-    const usdRate = getNumberParam(url, 'usdRate', 32.5);
+    // 沒有手動填匯率時，用「廠商儲值紀錄」算出的成本匯率
+    const costRates = await getSupplierCostRates();
+    const hkdRate = getNumberParam(url, 'hkdRate', costRates.hkdRate);
+    const usdRate = getNumberParam(url, 'usdRate', costRates.usdRate);
+    const rateSource = url.searchParams.get('hkdRate') || url.searchParams.get('usdRate') ? 'manual' : costRates.source;
     const markup = getNumberParam(url, 'markup', 1.65);
     const maxPages = getNumberParam(url, 'maxPages', 60);
 
     const data = await fetchMicroesimPlansByCountry(countryCode, { hkdRate, usdRate, markup, maxPages });
     return NextResponse.json({
       ...data,
-      rates: { hkdRate, usdRate, markup },
+      rates: { hkdRate, usdRate, markup, source: rateSource },
       country
     });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { adminApiGuard } from '@/lib/server-auth';
 import { createClient } from '@supabase/supabase-js';
 import { fetchMicroesimPlanPage, transformMicroesimPlan } from '@/lib/microesim';
+import { getSupplierCostRates } from '@/lib/supplier-cost-rates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -22,8 +23,10 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     const body = await request.json().catch(() => ({}));
-    const hkdRate = Number(body.hkdRate || 4.15);
-    const usdRate = Number(body.usdRate || 32.5);
+    // 預設用「廠商儲值紀錄」算出的成本匯率；有手動傳入時才覆蓋
+    const costRates = await getSupplierCostRates();
+    const hkdRate = Number(body.hkdRate || costRates.hkdRate);
+    const usdRate = Number(body.usdRate || costRates.usdRate);
     const maxPages = Math.max(1, Math.min(Number(body.maxPages || 60), 80));
 
     const { data: products, error: productError } = await supabase
@@ -134,7 +137,8 @@ export async function POST(request: Request) {
       unchanged,
       missing,
       failed: failed.length,
-      failedItems: failed
+      failedItems: failed,
+      rates: { usdRate, hkdRate, source: costRates.source, hkdPerUsd: costRates.hkdPerUsd }
     });
   } catch (error) {
     return NextResponse.json({

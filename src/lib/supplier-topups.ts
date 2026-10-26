@@ -16,7 +16,8 @@ export interface SupplierTopupSummary {
   count: number;
   totalTwd: number;
   totalUsd: number;
-  averageRate: number | null; // 每 1 美金花多少台幣
+  averageRate: number | null; // 每 1 美金花多少台幣（全部累計：總台幣 ÷ 總美金）
+  costRate: number | null; // 帳上美金的成本匯率（移動加權平均：剩下的舊成本 + 這次儲值）
   latestRate: number | null;
   latestBalanceUsd: number | null;
   latestBalanceDate: string | null;
@@ -93,6 +94,27 @@ export function withSupplierTopups(usageGuide: string | null | undefined, record
   return `${cleanGuide}${cleanGuide ? '\n\n' : ''}<!--SUPPLIER_TOPUPS:${encoded}-->`;
 }
 
+// 移動加權平均：每次儲值時，帳上剩下的美金（儲值後餘額 − 這次入帳）沿用上一次的成本匯率，
+// 和這次付出的台幣一起平均，得到目前帳上美金的成本。沒有填餘額時，改用累計方式估算剩餘。
+export function movingAverageCostRate(records: SupplierTopup[]) {
+  const chronological = [...records].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  let rate: number | null = null;
+  let cumulativeUsd = 0;
+  for (const record of chronological) {
+    if (rate === null) {
+      // 第一筆之前的餘額沒有台幣成本資料，從這筆開始算
+      rate = record.twd / record.usd;
+    } else {
+      const remainingUsd = record.balanceAfterUsd !== null
+        ? Math.max(0, record.balanceAfterUsd - record.usd)
+        : cumulativeUsd;
+      rate = (remainingUsd * rate + record.twd) / (remainingUsd + record.usd);
+    }
+    cumulativeUsd += record.usd;
+  }
+  return rate;
+}
+
 export function summarizeSupplierTopups(records: SupplierTopup[]): SupplierTopupSummary {
   const sorted = sortRecords(records);
   const totalTwd = sorted.reduce((sum, record) => sum + record.twd, 0);
@@ -103,6 +125,7 @@ export function summarizeSupplierTopups(records: SupplierTopup[]): SupplierTopup
     totalTwd,
     totalUsd,
     averageRate: totalUsd > 0 ? totalTwd / totalUsd : null,
+    costRate: movingAverageCostRate(sorted),
     latestRate: sorted[0] ? rateOf(sorted[0]) : null,
     latestBalanceUsd: latestWithBalance?.balanceAfterUsd ?? null,
     latestBalanceDate: latestWithBalance?.date ?? null

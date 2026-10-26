@@ -153,9 +153,10 @@ export default function SupplierTopupsPage() {
           <p className="mt-1 text-[11px] text-white/35">每 1 美金花的台幣</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs text-white/50">平均匯率</p>
-          <p className="mt-1 text-xl font-bold">{formatRate(summary?.averageRate ?? null)}</p>
-          <p className="mt-1 text-[11px] text-white/35">累計台幣 ÷ 累計美金</p>
+          <p className="text-xs text-white/50">目前成本匯率</p>
+          <p className="mt-1 text-xl font-bold">{formatRate(summary?.costRate ?? null)}</p>
+          <p className="mt-1 text-[11px] text-white/35">剩餘舊成本＋新儲值加權平均・商品成本用這個換算</p>
+          <p className="text-[11px] text-white/30">全部累計平均 {formatRate(summary?.averageRate ?? null)}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs text-white/50">累計儲值（{summary?.count || 0} 筆）</p>

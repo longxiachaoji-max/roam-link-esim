@@ -56,6 +56,7 @@ type SyncResult = {
   rates: {
     hkdRate: number;
     usdRate: number;
+    source?: 'manual' | 'supplier_topups' | 'legacy';
     markup: number;
   };
 };
@@ -311,8 +312,9 @@ export default function MicroesimPlansPage() {
   const [hideNoHotspot, setHideNoHotspot] = useState(false);
   const [hideNoGpt, setHideNoGpt] = useState(false);
   const [hideNoReinstall, setHideNoReinstall] = useState(false);
-  const [hkdRate, setHkdRate] = useState('4.15');
-  const [usdRate, setUsdRate] = useState('32.5');
+  // 留空 = 自動使用「廠商儲值紀錄」的成本匯率
+  const [hkdRate, setHkdRate] = useState('');
+  const [usdRate, setUsdRate] = useState('');
   const [markup, setMarkup] = useState('1.65');
   const [sortField, setSortField] = useState<SortField>('default');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -534,12 +536,9 @@ export default function MicroesimPlansPage() {
     setMessage('');
     setSelected(new Set());
     try {
-      const params = new URLSearchParams({
-        country: selectedCountry,
-        hkdRate,
-        usdRate,
-        markup
-      });
+      const params = new URLSearchParams({ country: selectedCountry, markup });
+      if (hkdRate.trim()) params.set('hkdRate', hkdRate.trim());
+      if (usdRate.trim()) params.set('usdRate', usdRate.trim());
       const response = await adminFetch(`/api/admin/microesim/plans?${params.toString()}`, { cache: 'no-store' });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || '同步失敗');
@@ -662,11 +661,14 @@ export default function MicroesimPlansPage() {
           </label>
           <label className="text-xs text-white/50">
             HKD 匯率
-            <input value={hkdRate} onChange={(event) => setHkdRate(event.target.value)} className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white" />
+            <input value={hkdRate} onChange={(event) => setHkdRate(event.target.value)} placeholder={data?.rates ? `自動 ${data.rates.hkdRate}` : '自動'} className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/35" />
           </label>
           <label className="text-xs text-white/50">
             USD 匯率
-            <input value={usdRate} onChange={(event) => setUsdRate(event.target.value)} className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white" />
+            <input value={usdRate} onChange={(event) => setUsdRate(event.target.value)} placeholder={data?.rates ? `自動 ${data.rates.usdRate}` : '自動'} className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/35" />
+            <span className="mt-1 block text-[11px] text-white/35">
+              {data?.rates?.source === 'supplier_topups' ? '使用廠商儲值紀錄的成本匯率' : data?.rates?.source === 'legacy' ? '尚無儲值紀錄，使用舊固定匯率' : data?.rates?.source === 'manual' ? '使用手動填寫的匯率' : '留空會自動使用成本匯率'}
+            </span>
           </label>
           <label className="text-xs text-white/50">
             建議售價倍率
