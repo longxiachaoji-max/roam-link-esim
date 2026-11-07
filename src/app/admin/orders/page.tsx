@@ -245,6 +245,25 @@ export default function OrdersPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // 有 30 分鐘內的訂單還在等 Micro 配發時，每 15 秒自動重新整理（伺服器端同時會補查 Micro）
+  const latestMicroPendingAt = orders.reduce((latest, order) => {
+    const pending = (order.order_items || []).some(item => !item.inventory_id && (item.supplier_status === 'PROCESSING' || item.supplier_status === 'SUBMITTING'));
+    return pending ? Math.max(latest, new Date(order.created_at).getTime() || 0) : latest;
+  }, 0);
+  useEffect(() => {
+    if (!latestMicroPendingAt || Date.now() - latestMicroPendingAt > 30 * 60_000) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await adminFetch('/api/admin/orders');
+        const json = await res.json();
+        if (json.orders) setOrders(json.orders);
+      } catch (err) {
+        console.error('Auto refresh orders failed:', err);
+      }
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [latestMicroPendingAt]);
+
   const totalOrders = orders.length;
   const completedOrders = orders.filter(o => o.order_status === 'COMPLETED').length;
   const pendingOrders = orders.filter(o => o.order_status === 'PENDING').length;
@@ -626,7 +645,7 @@ export default function OrdersPage() {
         <div className="flex flex-col items-start gap-2">
           <span className="text-yellow-300/80 text-xs">
             {item.supplier_status === 'PROCESSING' || item.supplier_status === 'SUBMITTING'
-              ? 'Micro 配發中，開啟本頁會自動補查'
+              ? 'Micro 配發中，本頁每 15 秒自動補查'
               : item.supplier_status === 'FAILED'
                 ? 'Micro 下單失敗'
                 : '待補庫存'}
