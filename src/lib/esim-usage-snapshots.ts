@@ -41,13 +41,11 @@ export async function queryAndStoreUsage(
   source: UsageSnapshotSource
 ) {
   if (!inventory.microesim_topup_id || !inventory.iccid) throw new Error('缺少 MicroEsim 查詢資料');
-  const [detail, events] = await Promise.all([
-    fetchMicroesimDeviceDetail(inventory.microesim_topup_id, inventory.iccid),
-    fetchMicroesimEventDetail(inventory.iccid).catch(error => {
-      console.warn('MicroEsim event query failed:', error instanceof Error ? error.message : error);
-      return [];
-    })
-  ]);
+  const detail = await fetchMicroesimDeviceDetail(inventory.microesim_topup_id, inventory.iccid);
+  const events = await fetchMicroesimEventDetail(inventory.iccid).catch(error => {
+    console.warn('MicroEsim event query failed:', error instanceof Error ? error.message : error);
+    return [];
+  });
   const usage = normalizeMicroesimUsage(detail, events, installationDeadline);
   const checkedAt = new Date().toISOString();
   await supabase
@@ -62,10 +60,12 @@ export async function queryAndStoreUsage(
   return { usage, checkedAt };
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 const FINAL_STATUSES = new Set(['已到期', '已刪除', '已停用']);
 
 /** 排程用：更新所有還在使用期的 MicroEsim eSIM */
-export async function refreshAllActiveUsage(supabase: SupabaseClient, options: { limit?: number; concurrency?: number; minAgeMinutes?: number } = {}) {
+export async function refreshAllActiveUsage(supabase: SupabaseClient, options: { limit?: number; gapMs?: number; minAgeMinutes?: number } = {}) {
   const { data, error } = await supabase
     .from('e_sim_inventory')
     .select('id, iccid, microesim_topup_id, expiry_date, microesim_usage_cache, microesim_usage_checked_at')
@@ -81,19 +81,30 @@ export async function refreshAllActiveUsage(supabase: SupabaseClient, options: {
     if (FINAL_STATUSES.has(status)) return false;
     const checked = row.microesim_usage_checked_at ? new Date(row.microesim_usage_checked_at).getTime() : 0;
     return checked <= cutoff;
-  }).slice(0, options.limit ?? 200);
+  }).slice(0, options.limit ?? 90);
 
+  // MicroEsim 有帳號層級的頻率限制：一張一張查，中間停一下，遇到 Too Many Requests 等久一點再試一次
   let ok = 0;
   let failed = 0;
-  const concurrency = options.concurrency ?? 6;
-  for (let index = 0; index < due.length; index += concurrency) {
-    const results = await Promise.allSettled(due.slice(index, index + concurrency).map(row =>
-      queryAndStoreUsage(supabase, row, row.expiry_date, 'cron')
-    ));
-    for (const result of results) {
-      if (result.status === 'fulfilled') ok += 1;
-      else failed += 1;
+  const gapMs = options.gapMs ?? 800;
+  for (const row of due) {
+    try {
+      await queryAndStoreUsage(supabase, row, row.expiry_date, 'cron');
+      ok += 1;
+    } catch (error) {
+      if (/too many requests|rate limit/i.test(error instanceof Error ? error.message : '')) {
+        await sleep(5000);
+        try {
+          await queryAndStoreUsage(supabase, row, row.expiry_date, 'cron');
+          ok += 1;
+        } catch {
+          failed += 1;
+        }
+      } else {
+        failed += 1;
+      }
     }
+    await sleep(gapMs);
   }
   return { due: due.length, ok, failed };
 }
