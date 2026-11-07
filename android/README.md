@@ -1,5 +1,9 @@
 # 一飛通 eSIM Android App（APK）
 
+> **舊版（只有網頁 App）。** 從 2026-11-07 起，自用 APK 改用內建 USB 讀卡機功能的版本（EasyEUICC 修改版，GPL v3），
+> 原始碼在本機 `~/Developer/firstroamlink-esim-android`（`firstroamlink` 分支），說明見該專案的 `FIRSTROAMLINK.md`。
+> 兩者套件名稱、簽章相同，新版可直接覆蓋這版。
+
 用 Trusted Web Activity（Chrome 全螢幕）開啟 `https://firstesim.space/app`，App 內容就是網站的 `/app`，改網站即可更新畫面，不必重新發 APK。
 
 - 套件名稱：`space.firstesim.app`

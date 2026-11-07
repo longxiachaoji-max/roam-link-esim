@@ -8,7 +8,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
-import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL } from '@/lib/esim-install-links';
+import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
 import { LINE_SUPPORT_URL } from '@/lib/review-eligibility';
 
 interface Usage {
@@ -130,6 +130,19 @@ export default function EsimAppPage() {
   const [quantity, setQuantity] = useState(1);
   const [buying, setBuying] = useState<{ done: number; total: number } | null>(null);
   const [buyError, setBuyError] = useState('');
+  const [inNativeApp, setInNativeApp] = useState(false);
+
+  // 在一飛通 Android App 裡開啟時，eSIM 卡安裝交給 App 內建的讀卡機功能
+  useEffect(() => {
+    let remembered: string | null = null;
+    try { remembered = window.sessionStorage.getItem('firstroamlink-native-app'); } catch { /* 無法使用 sessionStorage */ }
+    const native = isInFirstRoamLinkApp(document.referrer, remembered);
+    if (native) {
+      try { window.sessionStorage.setItem('firstroamlink-native-app', '1'); } catch { /* 無法使用 sessionStorage */ }
+    }
+    const timer = window.setTimeout(() => setInNativeApp(native), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -483,13 +496,15 @@ export default function EsimAppPage() {
                 {selected.androidInstallUrl && (
                   <a href={selected.androidInstallUrl} className="flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-400 to-lime-300 text-sm font-black text-[#071317]">Android 一鍵安裝</a>
                 )}
-                <a href={buildEasyEuiccIntentUrl(lpa)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
-                  用 EasyEUICC 安裝
-                  <span className="text-[11px] font-normal text-white/45">Android ＋ 實體 eSIM 卡（可插拔 eSIM）</span>
+                <a href={buildEasyEuiccIntentUrl(lpa, inNativeApp ? FIRSTROAMLINK_APP_PACKAGE : undefined)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
+                  {inNativeApp ? '用讀卡機安裝' : '用 EasyEUICC 安裝'}
+                  <span className="text-[11px] font-normal text-white/45">{inNativeApp ? 'USB 讀卡機／實體 eSIM 卡' : 'Android ＋ 實體 eSIM 卡（可插拔 eSIM）'}</span>
                 </a>
               </div>
               <p className="mt-2 text-[11px] leading-5 text-white/40">
-                EasyEUICC 是開源的 eSIM 管理工具，只支援實體 eSIM 卡，不能寫入手機內建 eSIM。還沒安裝請到 <a href={EASYEUICC_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className="underline">easyeuicc.org</a> 下載。
+                {inNativeApp
+                  ? '先把 eSIM 卡插進 USB 讀卡機、接上手機，再按「用讀卡機安裝」。第一次使用會詢問 USB 權限，請按允許。只支援實體 eSIM 卡，不能寫入手機內建 eSIM。'
+                  : <>EasyEUICC 是開源的 eSIM 管理工具，只支援實體 eSIM 卡，不能寫入手機內建 eSIM。還沒安裝請到 <a href={EASYEUICC_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className="underline">easyeuicc.org</a> 下載。</>}
               </p>
               <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={lpa} size={180} /></div>
               <p className="mt-2 text-center text-[11px] text-white/40">用另一支手機掃描也可以安裝</p>

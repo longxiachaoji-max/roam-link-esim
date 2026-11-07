@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString } from '../src/lib/esim-install-links.ts';
+import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, isInFirstRoamLinkApp } from '../src/lib/esim-install-links.ts';
 
 const LPA = buildLpaString('rsp.example.com', 'ABC-123');
 
@@ -18,4 +18,11 @@ test('targets EasyEUICC with an LPA intent and a download fallback', () => {
     buildEasyEuiccIntentUrl(LPA),
     'intent:1$rsp.example.com$ABC-123#Intent;scheme=LPA;package=im.angry.easyeuicc;S.browser_fallback_url=https%3A%2F%2Feasyeuicc.org;end'
   );
+});
+
+test('targets the FirstRoamLink app package when running inside it', () => {
+  assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app').includes('package=space.firstesim.app;'));
+  assert.equal(isInFirstRoamLinkApp('android-app://space.firstesim.app/', null), true);
+  assert.equal(isInFirstRoamLinkApp('', '1'), true);
+  assert.equal(isInFirstRoamLinkApp('https://www.google.com/', null), false);
 });
