@@ -390,28 +390,34 @@ export default function EsimAppPage() {
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#12121f]/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-white/45">一飛通 eSIM 管理</p>
-            <h1 className="text-xl font-black">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
+            <p className="truncate text-[11px] text-white/45">一飛通 eSIM 管理</p>
+            <h1 className="whitespace-nowrap text-xl font-black">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
           </div>
+          {balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-3 py-1 text-xs text-yellow-200/80">儲值金 NT${balance.toLocaleString()}</span>}
+          <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
+            <Plus size={22} strokeWidth={3} />
+          </button>
+        </div>
+        <div className="mx-auto mt-3 flex max-w-5xl gap-2">
           {inNativeApp && (
-            <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-bold text-white/85">
+            <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-bold text-white/85 sm:flex-none">
               <Usb size={15} />
               讀卡機
             </a>
           )}
-          <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 text-xs font-bold text-cyan-100 disabled:opacity-70">
+          <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 text-xs font-bold text-cyan-100 disabled:opacity-70 sm:flex-none">
             <RefreshCw size={15} className={refreshProgress ? 'animate-spin' : ''} />
-            {refreshProgress ? `${refreshProgress.done}/${refreshProgress.total}` : '全部更新用量'}
+            {refreshProgress ? `更新中 ${refreshProgress.done}/${refreshProgress.total}` : '全部更新用量'}
           </button>
-          <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
-            <Plus size={22} strokeWidth={3} />
-          </button>
+          <div className="ml-auto hidden items-center gap-2 text-xs sm:flex">
+            <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">已啟用 {activeCount}</span>
+            <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">未安裝 {notInstalledCount}</span>
+          </div>
         </div>
-        <div className="mx-auto mt-3 flex max-w-5xl flex-wrap gap-2 text-xs">
+        <div className="mx-auto mt-2 flex max-w-5xl gap-2 text-xs sm:hidden">
           <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">已啟用 {activeCount}</span>
           <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">未安裝 {notInstalledCount}</span>
           <span className="rounded-full bg-white/5 px-3 py-1 text-white/40">每 30 分鐘自動更新</span>
-          {balance !== null && <span className="ml-auto rounded-full bg-white/5 px-3 py-1 text-yellow-200/80">儲值金 NT${balance.toLocaleString()}</span>}
         </div>
         <label className="mx-auto mt-3 flex max-w-5xl items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3">
           <Search size={16} className="text-white/35" />
