@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "space.firstesim.app",
+      "sha256_cert_fingerprints": [
+        "BB:CC:F1:4E:71:BA:B1:A2:04:55:15:A7:43:9E:0A:96:AD:22:11:26:FC:DE:08:D6:6A:C8:DE:07:82:AC:51:59"
+      ]
+    }
+  }
+]
