@@ -389,7 +389,7 @@ export default function EsimAppPage() {
     <main className="min-h-[100svh] bg-[#12121f] pb-10 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#12121f]/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-2">
-          <h1 className="min-w-0 flex-1 truncate text-lg font-black">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
+          <h1 className="min-w-0 flex-1 truncate text-sm font-bold">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
           {balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-yellow-200/80">NT${balance.toLocaleString()}</span>}
           {inNativeApp && (
             <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" title="讀卡機" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
