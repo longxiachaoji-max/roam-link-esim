@@ -4,6 +4,8 @@ export const EASYEUICC_PACKAGE = 'im.angry.easyeuicc';
 // 一飛通自用 Android App（內建 EasyEUICC 修改版，可用 USB 讀卡機寫入實體 eSIM 卡）
 export const FIRSTROAMLINK_APP_PACKAGE = 'space.firstesim.app';
 export const EASYEUICC_DOWNLOAD_URL = 'https://easyeuicc.org';
+// 一飛通 App 內建的讀卡機管理畫面（原 EasyEUICC 主畫面），只在 App 內有效
+export const FIRSTROAMLINK_READER_URL = `intent://open#Intent;scheme=firstesim-reader;package=${FIRSTROAMLINK_APP_PACKAGE};end`;
 
 export function buildLpaString(smdpAddress: string, activationCode: string) {
   return `LPA:1$${smdpAddress}$${activationCode}`;

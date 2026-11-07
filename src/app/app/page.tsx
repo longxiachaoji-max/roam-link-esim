@@ -5,10 +5,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, Usb, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
-import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
+import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
 import { LINE_SUPPORT_URL } from '@/lib/review-eligibility';
 
 interface Usage {
@@ -393,6 +393,12 @@ export default function EsimAppPage() {
             <p className="text-[11px] text-white/45">一飛通 eSIM 管理</p>
             <h1 className="text-xl font-black">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
           </div>
+          {inNativeApp && (
+            <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-bold text-white/85">
+              <Usb size={15} />
+              讀卡機
+            </a>
+          )}
           <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 text-xs font-bold text-cyan-100 disabled:opacity-70">
             <RefreshCw size={15} className={refreshProgress ? 'animate-spin' : ''} />
             {refreshProgress ? `${refreshProgress.done}/${refreshProgress.total}` : '全部更新用量'}
