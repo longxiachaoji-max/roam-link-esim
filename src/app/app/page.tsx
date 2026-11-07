@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, Usb, X } from 'lucide-react';
+import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, Trash2, Usb, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
@@ -298,6 +298,21 @@ export default function EsimAppPage() {
     showToast('已儲存備註');
   };
 
+  const deleteCard = async () => {
+    if (!selected) return;
+    const name = selected.note || selected.iccid || selected.planName;
+    if (!window.confirm(`確定要從列表刪除「${name}」嗎？\n刪除後這張 eSIM 不會再顯示在 App 和會員中心。`)) return;
+    const res = await authenticatedFetch('/api/member/esim', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_item_id: selected.id, action: 'soft_delete' })
+    });
+    if (!res.ok) { showToast('刪除失敗，請稍後再試'); return; }
+    setCards(current => current.filter(c => c.id !== selected.id));
+    setSelected(null);
+    showToast('已刪除');
+  };
+
   const copy = async (label: string, value: string) => {
     try { await navigator.clipboard.writeText(value); } catch { window.prompt('請長按複製', value); return; }
     setCopied(label);
@@ -530,6 +545,9 @@ export default function EsimAppPage() {
             <p className="mt-5 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-100/80">eSIM 配發中，完成後這裡會出現安裝方式。</p>
           )}
           <a href={LINE_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="mt-4 flex h-10 items-center justify-center rounded-xl border border-[#06c755]/30 bg-[#06c755]/10 text-xs font-bold text-[#7ee2a0]">使用上遇到問題？聯繫 LINE 客服</a>
+          <button type="button" onClick={deleteCard} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-bold text-red-200">
+            <Trash2 size={14} />刪除這張 eSIM
+          </button>
         </Sheet>
       )}
 
