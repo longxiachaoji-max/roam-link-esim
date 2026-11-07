@@ -2,7 +2,7 @@
 
 // 企業 eSIM 管理 App（PWA 初版）：卡片列出所有 eSIM、一次更新用量、右上「＋」選國家→方案→張數購買、
 // 點卡片選安裝方式（iPhone／Android／EasyEUICC 實體 eSIM 卡／QR Code）。
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, X } from 'lucide-react';
@@ -43,6 +43,7 @@ type BuyStep = { step: 'country' } | { step: 'plan'; destination: Destination } 
 
 const CHECKOUT_BATCH = 20; // 結帳 API 一次最多 20 張
 const USAGE_CONCURRENCY = 4;
+const AUTO_REFRESH_MS = 30 * 60_000; // 每 30 分鐘自動更新用量
 
 const formatTime = (value: string | null) => {
   if (!value) return '尚未更新';
@@ -116,7 +117,9 @@ export default function EsimAppPage() {
   const [loadingCards, setLoadingCards] = useState(false);
   const [query, setQuery] = useState('');
   const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null);
-  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+  const cardsRef = useRef<EsimCard[]>([]);
+  const refreshingAllRef = useRef(false);
   const [selected, setSelected] = useState<EsimCard | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [copied, setCopied] = useState('');
@@ -193,6 +196,19 @@ export default function EsimAppPage() {
   };
 
   const refreshOne = async (card: EsimCard) => {
+    setRefreshingIds(current => new Set(current).add(card.id));
+    try {
+      await queryUsage(card);
+    } finally {
+      setRefreshingIds(current => {
+        const next = new Set(current);
+        next.delete(card.id);
+        return next;
+      });
+    }
+  };
+
+  const queryUsage = async (card: EsimCard) => {
     const res = await authenticatedFetch('/api/member/esim-usage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -204,10 +220,11 @@ export default function EsimAppPage() {
     setSelected(current => (current?.id === card.id ? { ...current, usage: json.usage, usageCheckedAt: json.checkedAt } : current));
   };
 
-  const refreshAll = async () => {
-    const targets = cards.filter(card => card.canQueryUsage);
-    if (!targets.length || refreshProgress) return;
-    setRefreshProgress({ done: 0, total: targets.length });
+  // 一次更新多張用量（同時 4 張）；silent 用在自動更新，不顯示進度與提示
+  const refreshMany = useCallback(async (targets: EsimCard[], silent = false) => {
+    if (!targets.length || refreshingAllRef.current) return;
+    refreshingAllRef.current = true;
+    if (!silent) setRefreshProgress({ done: 0, total: targets.length });
     let done = 0;
     let failed = 0;
     const queue = [...targets];
@@ -216,12 +233,44 @@ export default function EsimAppPage() {
         const card = queue.shift()!;
         try { await refreshOne(card); } catch { failed += 1; }
         done += 1;
-        setRefreshProgress({ done, total: targets.length });
+        if (!silent) setRefreshProgress({ done, total: targets.length });
       }
     }));
-    setRefreshProgress(null);
-    showToast(failed ? `已更新 ${targets.length - failed} 張，${failed} 張查詢失敗` : `已更新 ${targets.length} 張 eSIM 用量`);
-  };
+    refreshingAllRef.current = false;
+    if (!silent) {
+      setRefreshProgress(null);
+      showToast(failed ? `已更新 ${targets.length - failed} 張，${failed} 張查詢失敗` : `已更新 ${targets.length} 張 eSIM 用量`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshAll = () => refreshMany(cards.filter(card => card.canQueryUsage));
+
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
+
+  // 自動更新：打開時先更新超過 30 分鐘沒更新的卡，之後每 30 分鐘全部更新一次（畫面在前景時）
+  const cardsLoaded = cards.length > 0;
+  useEffect(() => {
+    if (authState !== 'in' || !cardsLoaded) return;
+    const isStale = (card: EsimCard) => !card.usageCheckedAt || Date.now() - new Date(card.usageCheckedAt).getTime() > AUTO_REFRESH_MS;
+    void refreshMany(cardsRef.current.filter(card => card.canQueryUsage && isStale(card)), true);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshMany(cardsRef.current.filter(card => card.canQueryUsage), true);
+    }, AUTO_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshMany(cardsRef.current.filter(card => card.canQueryUsage && isStale(card)), true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [authState, cardsLoaded, refreshMany]);
 
   const saveNote = async () => {
     if (!selected) return;
@@ -339,9 +388,10 @@ export default function EsimAppPage() {
             <Plus size={22} strokeWidth={3} />
           </button>
         </div>
-        <div className="mx-auto mt-3 flex max-w-5xl gap-2 text-xs">
+        <div className="mx-auto mt-3 flex max-w-5xl flex-wrap gap-2 text-xs">
           <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">已啟用 {activeCount}</span>
           <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">未安裝 {notInstalledCount}</span>
+          <span className="rounded-full bg-white/5 px-3 py-1 text-white/40">每 30 分鐘自動更新</span>
           {balance !== null && <span className="ml-auto rounded-full bg-white/5 px-3 py-1 text-yellow-200/80">儲值金 NT${balance.toLocaleString()}</span>}
         </div>
         <label className="mx-auto mt-3 flex max-w-5xl items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3">
@@ -358,7 +408,14 @@ export default function EsimAppPage() {
           </div>
         )}
         {filtered.map(card => (
-          <button key={card.id} type="button" onClick={() => { setSelected(card); setNoteDraft(card.note); }} className="rounded-2xl border border-white/10 bg-[#1A1A2E] p-4 text-left transition-colors hover:border-white/25">
+          <div
+            key={card.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => { setSelected(card); setNoteDraft(card.note); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(card); setNoteDraft(card.note); } }}
+            className="cursor-pointer rounded-2xl border border-white/10 bg-[#1A1A2E] p-4 text-left transition-colors hover:border-white/25"
+          >
             <div className="flex items-start justify-between gap-2">
               <p className="min-w-0 truncate text-sm font-black">{card.note || '（未命名）'}</p>
               <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${card.pending ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200' : statusClass(card.usage?.status)}`}>
@@ -368,13 +425,29 @@ export default function EsimAppPage() {
             <dl className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1.5 text-xs">
               <dt className="text-white/40">方案</dt><dd className="min-w-0 truncate text-white/85">{card.planName}</dd>
               <dt className="text-white/40">ICCID</dt><dd className="min-w-0 truncate font-mono text-white/85">{card.iccid || '-'}</dd>
-              <dt className="text-white/40">用量</dt><dd className="font-bold text-white">{card.usage?.usedData ?? (card.usage ? '尚未回傳' : '-')}</dd>
-              <dt className="text-white/40">更新時間</dt>
-              <dd className="flex items-center gap-1 text-white/60">
-                {refreshingId === card.id ? '更新中…' : formatTime(card.usageCheckedAt)}
+              <dt className="self-center text-white/40">用量</dt>
+              <dd className="flex items-center justify-between gap-2">
+                <span className="font-bold text-white">{card.usage?.usedData ?? (card.usage ? '尚未回傳' : '-')}</span>
+                {card.canQueryUsage && (
+                  <button
+                    type="button"
+                    aria-label="更新這張用量"
+                    disabled={refreshingIds.has(card.id)}
+                    onClick={async e => {
+                      e.stopPropagation();
+                      try { await refreshOne(card); } catch (err) { showToast(err instanceof Error ? err.message : '查詢失敗'); }
+                    }}
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-60"
+                  >
+                    <RefreshCw size={12} className={refreshingIds.has(card.id) ? 'animate-spin' : ''} />
+                    {refreshingIds.has(card.id) ? '更新中' : '更新'}
+                  </button>
+                )}
               </dd>
+              <dt className="text-white/40">更新時間</dt>
+              <dd className="text-white/60">{formatTime(card.usageCheckedAt)}</dd>
             </dl>
-          </button>
+          </div>
         ))}
       </section>
 
@@ -388,12 +461,10 @@ export default function EsimAppPage() {
             <dt className="text-white/40">更新時間</dt><dd className="text-white/70">{formatTime(selected.usageCheckedAt)}</dd>
           </dl>
           {selected.canQueryUsage && (
-            <button type="button" disabled={refreshingId === selected.id} onClick={async () => {
-              setRefreshingId(selected.id);
+            <button type="button" disabled={refreshingIds.has(selected.id)} onClick={async () => {
               try { await refreshOne(selected); } catch (err) { showToast(err instanceof Error ? err.message : '查詢失敗'); }
-              setRefreshingId(null);
             }} className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-bold text-cyan-100 disabled:opacity-60">
-              <RefreshCw size={15} className={refreshingId === selected.id ? 'animate-spin' : ''} />更新這張用量
+              <RefreshCw size={15} className={refreshingIds.has(selected.id) ? 'animate-spin' : ''} />更新這張用量
             </button>
           )}
 
