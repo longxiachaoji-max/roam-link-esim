@@ -387,48 +387,36 @@ export default function EsimAppPage() {
 
   return (
     <main className="min-h-[100svh] bg-[#12121f] pb-10 text-white">
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#12121f]/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] text-white/45">一飛通 eSIM 管理</p>
-            <h1 className="whitespace-nowrap text-xl font-black">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
-          </div>
-          {balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-3 py-1 text-xs text-yellow-200/80">儲值金 NT${balance.toLocaleString()}</span>}
-          <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
-            <Plus size={22} strokeWidth={3} />
-          </button>
-        </div>
-        <div className="mx-auto mt-3 flex max-w-5xl gap-2">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#12121f]/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-2">
+          <h1 className="min-w-0 flex-1 truncate text-lg font-black">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
+          {balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-yellow-200/80">NT${balance.toLocaleString()}</span>}
           {inNativeApp && (
-            <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-bold text-white/85 sm:flex-none">
-              <Usb size={15} />
-              讀卡機
+            <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" title="讀卡機" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
+              <Usb size={17} />
             </a>
           )}
-          <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 text-xs font-bold text-cyan-100 disabled:opacity-70 sm:flex-none">
-            <RefreshCw size={15} className={refreshProgress ? 'animate-spin' : ''} />
-            {refreshProgress ? `更新中 ${refreshProgress.done}/${refreshProgress.total}` : '全部更新用量'}
+          <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} aria-label="全部更新用量" title="全部更新用量" className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-70">
+            <RefreshCw size={17} className={refreshProgress ? 'animate-spin' : ''} />
+            {refreshProgress && `${refreshProgress.done}/${refreshProgress.total}`}
           </button>
-          <div className="ml-auto hidden items-center gap-2 text-xs sm:flex">
-            <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">已啟用 {activeCount}</span>
-            <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">未安裝 {notInstalledCount}</span>
-          </div>
+          <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
+            <Plus size={20} strokeWidth={3} />
+          </button>
         </div>
-        <div className="mx-auto mt-2 flex max-w-5xl gap-2 text-xs sm:hidden">
-          <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">已啟用 {activeCount}</span>
-          <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">未安裝 {notInstalledCount}</span>
-          <span className="rounded-full bg-white/5 px-3 py-1 text-white/40">每 30 分鐘自動更新</span>
+        <div className="mx-auto mt-2 flex max-w-5xl items-center gap-2">
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3">
+            <Search size={15} className="text-white/35" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜尋備註、ICCID、方案" className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/30" />
+          </label>
+          <span className="shrink-0 whitespace-nowrap text-[11px] text-white/45" title="每 30 分鐘自動更新用量">啟用 {activeCount}・未裝 {notInstalledCount}</span>
         </div>
-        <label className="mx-auto mt-3 flex max-w-5xl items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3">
-          <Search size={16} className="text-white/35" />
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜尋備註、ICCID、方案" className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/30" />
-        </label>
       </header>
 
-      <section className="mx-auto grid max-w-5xl gap-3 px-4 pt-4 sm:grid-cols-2 lg:grid-cols-3">
-        {loadingCards && !cards.length && <p className="py-16 text-center text-white/40 sm:col-span-2 lg:col-span-3">載入中...</p>}
+      <section className="mx-auto grid max-w-5xl grid-cols-2 gap-2 px-3 pt-3 sm:gap-3 lg:grid-cols-3">
+        {loadingCards && !cards.length && <p className="py-16 text-center text-white/40 col-span-2 lg:col-span-3">載入中...</p>}
         {!loadingCards && !cards.length && (
-          <div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/50 sm:col-span-2 lg:col-span-3">
+          <div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/50 col-span-2 lg:col-span-3">
             還沒有 eSIM，按右上角「＋」選國家和方案購買
           </div>
         )}
@@ -439,39 +427,46 @@ export default function EsimAppPage() {
             tabIndex={0}
             onClick={() => { setSelected(card); setNoteDraft(card.note); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(card); setNoteDraft(card.note); } }}
-            className="cursor-pointer rounded-2xl border border-white/10 bg-[#1A1A2E] p-4 text-left transition-colors hover:border-white/25"
+            className="min-w-0 cursor-pointer rounded-2xl border border-white/10 bg-[#1A1A2E] p-2.5 sm:p-3 text-left transition-colors hover:border-white/25"
           >
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start justify-between gap-1">
               <p className="min-w-0 truncate text-sm font-black">{card.note || '（未命名）'}</p>
-              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${card.pending ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200' : statusClass(card.usage?.status)}`}>
+              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${card.pending ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200' : statusClass(card.usage?.status)}`}>
                 {card.pending ? '配發中' : card.usage?.status || '未查詢'}
               </span>
             </div>
-            <dl className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1.5 text-xs">
-              <dt className="text-white/40">方案</dt><dd className="min-w-0 truncate text-white/85">{card.planName}</dd>
-              <dt className="text-white/40">ICCID</dt><dd className="min-w-0 truncate font-mono text-white/85">{card.iccid || '-'}</dd>
-              <dt className="self-center text-white/40">用量</dt>
-              <dd className="flex items-center justify-between gap-2">
-                <span className="font-bold text-white">{card.usage?.usedData ?? (card.usage ? '尚未回傳' : '-')}</span>
-                {card.canQueryUsage && (
-                  <button
-                    type="button"
-                    aria-label="更新這張用量"
-                    disabled={refreshingIds.has(card.id)}
-                    onClick={async e => {
-                      e.stopPropagation();
-                      try { await refreshOne(card); } catch (err) { showToast(err instanceof Error ? err.message : '查詢失敗'); }
-                    }}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-60"
-                  >
-                    <RefreshCw size={12} className={refreshingIds.has(card.id) ? 'animate-spin' : ''} />
-                    {refreshingIds.has(card.id) ? '更新中' : '更新'}
-                  </button>
-                )}
-              </dd>
-              <dt className="text-white/40">更新時間</dt>
-              <dd className="text-white/60">{formatTime(card.usageCheckedAt)}</dd>
-            </dl>
+            <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/60">{card.planName}</p>
+            <div className="mt-2 flex items-center gap-1">
+              <span className="min-w-0 flex-1 font-mono text-[9.5px] tracking-tighter text-white/80 [overflow-wrap:anywhere]">{card.iccid || '-'}</span>
+              {card.iccid && (
+                <button
+                  type="button"
+                  aria-label="複製 ICCID"
+                  onClick={e => { e.stopPropagation(); copy(`iccid-${card.id}`, card.iccid || ''); }}
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/10 text-white/80"
+                >
+                  {copied === `iccid-${card.id}` ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              )}
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-1">
+              <span className="min-w-0 truncate text-base font-black text-white">{card.usage?.usedData ?? (card.usage ? '尚未回傳' : '-')}</span>
+              {card.canQueryUsage && (
+                <button
+                  type="button"
+                  aria-label="更新這張用量"
+                  disabled={refreshingIds.has(card.id)}
+                  onClick={async e => {
+                    e.stopPropagation();
+                    try { await refreshOne(card); } catch (err) { showToast(err instanceof Error ? err.message : '查詢失敗'); }
+                  }}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-cyan-100 disabled:opacity-60"
+                >
+                  <RefreshCw size={13} className={refreshingIds.has(card.id) ? 'animate-spin' : ''} />
+                </button>
+              )}
+            </div>
+            <p className="mt-0.5 text-[10px] text-white/40">更新 {formatTime(card.usageCheckedAt)}</p>
           </div>
         ))}
       </section>
