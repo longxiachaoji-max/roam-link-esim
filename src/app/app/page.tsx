@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, ChevronLeft, Copy, Plus, RefreshCw, Search, Trash2, Usb, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, Copy, Plus, RefreshCw, Search, Trash2, Usb, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
@@ -17,6 +17,16 @@ interface Usage {
   activatedAt?: string | null;
   expiresAt?: string | null;
 }
+
+interface UsageSnapshot {
+  checked_at: string;
+  status: string | null;
+  used_data: string | null;
+  used_mb: number | null;
+  source: string;
+}
+
+const formatMb = (mb: number) => (mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`);
 
 interface EsimCard {
   id: string;
@@ -122,6 +132,8 @@ export default function EsimAppPage() {
   const refreshingAllRef = useRef(false);
   const [selected, setSelected] = useState<EsimCard | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
+  const [history, setHistory] = useState<{ forId: string; rows: UsageSnapshot[]; unavailable?: boolean } | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [copied, setCopied] = useState('');
   const [toast, setToast] = useState('');
   const [buy, setBuy] = useState<BuyStep | null>(null);
@@ -296,6 +308,22 @@ export default function EsimAppPage() {
     setCards(current => current.map(c => (c.id === selected.id ? { ...c, note: noteDraft.trim() } : c)));
     setSelected({ ...selected, note: noteDraft.trim() });
     showToast('已儲存備註');
+  };
+
+  const loadHistory = async () => {
+    if (!selected) return;
+    if (history?.forId === selected.id) { setHistory(null); return; }
+    setHistoryLoading(true);
+    try {
+      const res = await authenticatedFetch(`/api/member/esim-usage?order_item_id=${encodeURIComponent(selected.id)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '查詢失敗');
+      setHistory({ forId: selected.id, rows: json.snapshots || [], unavailable: json.unavailable });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '查詢用量紀錄失敗');
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const deleteCard = async () => {
@@ -501,6 +529,37 @@ export default function EsimAppPage() {
             }} className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-bold text-cyan-100 disabled:opacity-60">
               <RefreshCw size={15} className={refreshingIds.has(selected.id) ? 'animate-spin' : ''} />更新這張用量
             </button>
+          )}
+
+          <button type="button" onClick={loadHistory} disabled={historyLoading} className="mt-3 flex h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold disabled:opacity-60">
+            <span>{historyLoading ? '載入中...' : '用量紀錄（每 30 分鐘）'}</span>
+            <ChevronDown size={16} className={history?.forId === selected.id ? 'rotate-180' : ''} />
+          </button>
+          {history?.forId === selected.id && (
+            <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/20">
+              {history.rows.length === 0 ? (
+                <p className="p-4 text-center text-xs text-white/45">{history.unavailable ? '用量紀錄功能尚未啟用' : '還沒有紀錄，之後每 30 分鐘會自動記錄一次'}</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-[#1A1A2E] text-white/40">
+                    <tr><th className="px-3 py-2 text-left font-normal">時間</th><th className="px-3 py-2 text-right font-normal">累計用量</th><th className="px-3 py-2 text-right font-normal">這段增加</th></tr>
+                  </thead>
+                  <tbody>
+                    {history.rows.map((row, index) => {
+                      const older = history.rows[index + 1];
+                      const delta = row.used_mb != null && older?.used_mb != null ? row.used_mb - older.used_mb : null;
+                      return (
+                        <tr key={`${row.checked_at}-${index}`} className="border-t border-white/5">
+                          <td className="px-3 py-1.5 text-white/60">{formatTime(row.checked_at)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono">{row.used_data ?? '-'}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono ${delta && delta > 0 ? 'text-cyan-200' : 'text-white/30'}`}>{delta == null ? '' : delta > 0 ? `+${formatMb(delta)}` : '0'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           )}
 
           <label className="mt-4 block text-sm text-white/60">備註（例如使用人）
