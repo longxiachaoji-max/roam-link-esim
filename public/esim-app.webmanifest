@@ -1,0 +1,14 @@
+{
+  "name": "一飛通 eSIM 管理",
+  "short_name": "一飛通eSIM",
+  "description": "企業 eSIM 一次管理：快速安裝、批次查詢用量、購買新卡",
+  "start_url": "/app",
+  "scope": "/app",
+  "display": "standalone",
+  "background_color": "#12121f",
+  "theme_color": "#12121f",
+  "icons": [
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/apple-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
