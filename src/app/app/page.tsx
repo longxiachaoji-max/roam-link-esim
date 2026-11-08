@@ -595,10 +595,16 @@ export default function EsimAppPage() {
                   {inNativeApp ? '用讀卡機安裝' : '用 EasyEUICC 安裝'}
                   <span className="text-[11px] font-normal text-white/45">{inNativeApp ? 'USB 讀卡機／實體 eSIM 卡' : 'Android ＋ 實體 eSIM 卡（可插拔 eSIM）'}</span>
                 </a>
+                {inNativeApp && (
+                  <a href={buildEasyEuiccIntentUrl(lpa)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
+                    用官方 EasyEUICC 安裝
+                    <span className="text-[11px] font-normal text-white/45">eSIM 卡直接插在手機 SIM 卡槽</span>
+                  </a>
+                )}
               </div>
               <p className="mt-2 text-[11px] leading-5 text-white/40">
                 {inNativeApp
-                  ? '先把 eSIM 卡插進 USB 讀卡機、接上手機，再按「用讀卡機安裝」。第一次使用會詢問 USB 權限，請按允許。只支援實體 eSIM 卡，不能寫入手機內建 eSIM。'
+                  ? <>用 USB 讀卡機：先把 eSIM 卡插進讀卡機、接上手機，再按「用讀卡機安裝」，第一次會詢問 USB 權限，請按允許。eSIM 卡直接插在手機 SIM 卡槽時，卡片通常只開放給官方 EasyEUICC 讀取，請按「用官方 EasyEUICC 安裝」（還沒安裝請到 <a href={EASYEUICC_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className="underline">easyeuicc.org</a> 下載）。都不能寫入手機內建 eSIM。</>
                   : <>EasyEUICC 是開源的 eSIM 管理工具，只支援實體 eSIM 卡，不能寫入手機內建 eSIM。還沒安裝請到 <a href={EASYEUICC_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className="underline">easyeuicc.org</a> 下載。</>}
               </p>
               <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={lpa} size={180} /></div>
