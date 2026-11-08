@@ -17,12 +17,30 @@ export function buildIosInstallUrl(lpa: string, storedUrl?: string | null) {
 
 // EasyEUICC 的 DeepLinkConfirmationActivity 接受 "LPA:1$..." 連結（ACTION_VIEW + BROWSABLE）。
 // 用 Android intent 連結指定 EasyEUICC，沒安裝時導到下載頁。
+// 在一飛通 App 裡找不到讀卡機畫面時，不要跳去 EasyEUICC 官網，留在管理頁並提示更新 App。
+export const FIRSTROAMLINK_READER_MISSING_URL = 'https://firstesim.space/app?reader=missing';
+
 export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE) {
   const data = lpa.replace(/^LPA:/i, '');
-  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};S.browser_fallback_url=${encodeURIComponent(EASYEUICC_DOWNLOAD_URL)};end`;
+  const fallback = targetPackage === FIRSTROAMLINK_APP_PACKAGE ? FIRSTROAMLINK_READER_MISSING_URL : EASYEUICC_DOWNLOAD_URL;
+  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
-// 從一飛通 Android App（Trusted Web Activity）開啟時，第一次載入的 referrer 是 android-app://space.firstesim.app
-export function isInFirstRoamLinkApp(referrer: string, remembered: string | null) {
-  return remembered === '1' || referrer.startsWith(`android-app://${FIRSTROAMLINK_APP_PACKAGE}`);
+// 判斷是否在一飛通 Android App（Trusted Web Activity）裡：
+// - 第一次載入的 referrer 是 android-app://space.firstesim.app（重新整理、登入跳轉後可能就沒了）
+// - App 啟動網址帶 ?source=app
+// - Android 上以獨立視窗（standalone / fullscreen）顯示，代表不是在一般瀏覽器分頁
+export interface NativeAppSignals {
+  referrer: string;
+  remembered: string | null;
+  search?: string;
+  standalone?: boolean;
+  userAgent?: string;
+}
+
+export function isInFirstRoamLinkApp({ referrer, remembered, search = '', standalone = false, userAgent = '' }: NativeAppSignals) {
+  if (remembered === '1') return true;
+  if (referrer.startsWith(`android-app://${FIRSTROAMLINK_APP_PACKAGE}`)) return true;
+  if (new URLSearchParams(search).get('source') === 'app') return true;
+  return standalone && /Android/i.test(userAgent);
 }

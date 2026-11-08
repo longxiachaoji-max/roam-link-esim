@@ -22,7 +22,12 @@ test('targets EasyEUICC with an LPA intent and a download fallback', () => {
 
 test('targets the FirstRoamLink app package when running inside it', () => {
   assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app').includes('package=space.firstesim.app;'));
-  assert.equal(isInFirstRoamLinkApp('android-app://space.firstesim.app/', null), true);
-  assert.equal(isInFirstRoamLinkApp('', '1'), true);
-  assert.equal(isInFirstRoamLinkApp('https://www.google.com/', null), false);
+  assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app').includes('firstesim.space%2Fapp%3Freader%3Dmissing'));
+  assert.equal(isInFirstRoamLinkApp({ referrer: 'android-app://space.firstesim.app/', remembered: null }), true);
+  assert.equal(isInFirstRoamLinkApp({ referrer: '', remembered: '1' }), true);
+  assert.equal(isInFirstRoamLinkApp({ referrer: '', remembered: null, search: '?source=app' }), true);
+  const androidUa = 'Mozilla/5.0 (Linux; Android 16; Pixel 8a) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36';
+  assert.equal(isInFirstRoamLinkApp({ referrer: '', remembered: null, standalone: true, userAgent: androidUa }), true);
+  assert.equal(isInFirstRoamLinkApp({ referrer: '', remembered: null, standalone: false, userAgent: androidUa }), false);
+  assert.equal(isInFirstRoamLinkApp({ referrer: 'https://www.google.com/', remembered: null }), false);
 });

@@ -148,11 +148,25 @@ export default function EsimAppPage() {
   useEffect(() => {
     let remembered: string | null = null;
     try { remembered = window.sessionStorage.getItem('firstroamlink-native-app'); } catch { /* 無法使用 sessionStorage */ }
-    const native = isInFirstRoamLinkApp(document.referrer, remembered);
+    const standalone = ['standalone', 'fullscreen', 'minimal-ui'].some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches);
+    const native = isInFirstRoamLinkApp({
+      referrer: document.referrer,
+      remembered,
+      search: window.location.search,
+      standalone,
+      userAgent: navigator.userAgent,
+    });
     if (native) {
       try { window.sessionStorage.setItem('firstroamlink-native-app', '1'); } catch { /* 無法使用 sessionStorage */ }
     }
-    const timer = window.setTimeout(() => setInNativeApp(native), 0);
+    const readerMissing = new URLSearchParams(window.location.search).get('reader') === 'missing';
+    const timer = window.setTimeout(() => {
+      setInNativeApp(native);
+      if (readerMissing) {
+        setToast('找不到 App 內建的讀卡機，請安裝最新版一飛通 eSIM App');
+        window.setTimeout(() => setToast(''), 5000);
+      }
+    }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
