@@ -188,6 +188,9 @@ export async function POST(request: Request) {
       if (checkoutError?.message.includes('INSUFFICIENT_BALANCE')) {
         return NextResponse.json({ error: '儲值金餘額不足，請重新整理後再試' }, { status: 400 });
       }
+      if (checkoutError?.code === '23505' && checkoutError.message.includes('promo_redemptions')) {
+        return NextResponse.json({ error: '您已使用過此優惠碼，請移除優惠碼後再結帳' }, { status: 400 });
+      }
       if (checkoutError?.message.includes('PROMO_')) {
         return NextResponse.json({ error: '優惠碼狀態已變更，請重新套用後再結帳' }, { status: 400 });
       }
