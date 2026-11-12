@@ -10,6 +10,7 @@ import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { MIN_REFERRAL_CODE_LENGTH, normalizeReferralCode, referralCodeLength } from '@/lib/referral-code';
 import { buildReferralShareUrl, readRememberedReferralCode, validReferralCode } from '@/lib/referral-link';
 import { hasEsimUsage, LINE_SUPPORT_URL } from '@/lib/review-eligibility';
+import { requiresDataRoaming } from '@/lib/roaming-notice';
 import PhysicalOrdersPanel from './physical-orders-panel';
 import BarcodeOrdersPanel from './barcode-orders-panel';
 
@@ -66,7 +67,7 @@ export default function MemberCenter() {
   const [usageByItemId, setUsageByItemId] = useState<Record<string, any>>({});
   const [usageLoadingId, setUsageLoadingId] = useState<string | null>(null);
   const [purchaseReminderOpen, setPurchaseReminderOpen] = useState(false);
-  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'android' | 'qr'; lpa: string; installUrl?: string | null; orderItemId?: string } | null>(null);
+  const [installConfirmation, setInstallConfirmation] = useState<{ type: 'ios' | 'android' | 'qr'; lpa: string; installUrl?: string | null; orderItemId?: string; needsRoaming?: boolean } | null>(null);
   const [detectedPlatform, setDetectedPlatform] = useState<'ios' | 'android' | 'other'>('other');
   const [installPlatformOverride, setInstallPlatformOverride] = useState<'ios' | 'android' | null>(null);
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
@@ -944,6 +945,11 @@ export default function MemberCenter() {
                       <p className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-white/60">
                         <Wifi className="mt-0.5 shrink-0" size={14} /> 安裝前請確認手機已連接穩定的 Wi-Fi 或行動網路，安裝過程請勿中斷連線。
                       </p>
+                      {requiresDataRoaming(item.products?.name, item.products?.data_amount) && (
+                        <p className="mt-2 rounded-md border border-orange-300/40 bg-orange-300/10 px-2.5 py-2 text-xs font-bold leading-5 text-orange-200">
+                          此方案需開啟「數據漫遊」才可使用：抵達後到手機「設定 → 行動網路」，選擇這張 eSIM 並開啟數據漫遊。
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-3 mb-3">
                        {(() => {
@@ -956,7 +962,7 @@ export default function MemberCenter() {
                          return (
                        <button
                          type="button"
-                         onClick={() => setInstallConfirmation({ type: isAndroid ? 'android' : 'ios', lpa, installUrl, orderItemId: item.id })}
+                         onClick={() => setInstallConfirmation({ type: isAndroid ? 'android' : 'ios', lpa, installUrl, orderItemId: item.id, needsRoaming: requiresDataRoaming(item.products?.name, item.products?.data_amount) })}
                          className="flex-1 bg-[#1a2c3a] border border-cyan/20 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-cyan/20 text-cyan"
                        >
                          <Smartphone size={16} /> {isAndroid
@@ -967,7 +973,7 @@ export default function MemberCenter() {
                        })()}
                        <button 
                          className="flex-1 bg-white/5 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-white/10"
-                         onClick={() => setInstallConfirmation({ type: 'qr', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`, orderItemId: item.id })}
+                         onClick={() => setInstallConfirmation({ type: 'qr', lpa: `LPA:1$${item.e_sim_inventory.smdp_address}$${item.e_sim_inventory.activation_code}`, orderItemId: item.id, needsRoaming: requiresDataRoaming(item.products?.name, item.products?.data_amount) })}
                        >
                          <QrCode size={16} /> 顯示 QRCODE
                        </button>
@@ -1110,6 +1116,9 @@ export default function MemberCenter() {
               <p>請於啟用日前或旅程出發前完成安裝。</p>
               <p>請先連接穩定的 Wi-Fi 或行動網路，安裝期間不要中斷連線。</p>
               <p>安裝完成後請勿刪除 eSIM，部分方案刪除後無法再次安裝。</p>
+              {installConfirmation.needsRoaming && (
+                <p className="rounded-md border border-orange-300/40 bg-orange-300/10 px-3 py-2 font-bold text-orange-200">此方案需開啟「數據漫遊」才可使用，抵達後請在手機設定中為這張 eSIM 開啟數據漫遊。</p>
+              )}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button type="button" onClick={() => setInstallConfirmation(null)} className="h-12 rounded-md border border-white/15 text-sm font-bold text-white/65 hover:bg-white/5">稍後安裝</button>
