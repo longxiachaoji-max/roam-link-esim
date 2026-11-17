@@ -642,12 +642,13 @@ export default function EsimAppPage() {
           <nav aria-label="分類" className="mx-auto mt-2 flex max-w-7xl items-end gap-1 overflow-x-auto border-b border-white/10 [scrollbar-width:none]">
             {([{ key: 'all', label: '全部', count: cards.length }, ...categories.map(c => ({ key: c.id, label: c.name, count: tabCounts.get(c.id) || 0 })), { key: 'none', label: '未分類', count: tabCounts.get('none') || 0 }] as { key: TabKey; label: string; count: number }[]).map(tab => {
               const active = activeTab === tab.key;
-              const droppable = tab.key !== 'all';
+              const droppable = isOwner && tab.key !== 'all';
+              const editable = isOwner && active && tab.key !== 'all' && tab.key !== 'none';
               return (
                 <button
                   key={tab.key}
                   type="button"
-                  onClick={() => (active && tab.key !== 'all' && tab.key !== 'none' ? setCategoryEdit({ id: tab.key, name: tab.label }) : setActiveTab(tab.key))}
+                  onClick={() => (editable ? setCategoryEdit({ id: tab.key, name: tab.label }) : setActiveTab(tab.key))}
                   onDragOver={droppable ? e => { e.preventDefault(); setDragOverTab(tab.key); } : undefined}
                   onDragLeave={droppable ? () => setDragOverTab(null) : undefined}
                   onDrop={droppable ? e => {
@@ -656,18 +657,20 @@ export default function EsimAppPage() {
                     const ids = (e.dataTransfer.getData('text/plain') || '').split(',').filter(Boolean);
                     void moveCards(ids, tab.key === 'none' ? null : tab.key);
                   } : undefined}
-                  title={active && tab.key !== 'all' && tab.key !== 'none' ? '再點一次可改名或刪除' : tab.label}
+                  title={editable ? '再點一次可改名或刪除' : tab.label}
                   className={`flex shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-bold transition-colors ${active ? 'border-white/15 bg-[#1A1A2E] text-white' : 'border-transparent text-white/50 hover:text-white/80'} ${dragOverTab === tab.key ? 'bg-cyan-400/20 text-cyan-100' : ''}`}
                 >
                   <span className="max-w-[9rem] truncate">{tab.label}</span>
                   <span className="text-[10px] font-normal text-white/40">{tab.count}</span>
-                  {active && tab.key !== 'all' && tab.key !== 'none' && <Pencil size={11} className="text-white/45" />}
+                  {editable && <Pencil size={11} className="text-white/45" />}
                 </button>
               );
             })}
-            <button type="button" onClick={() => setCategoryEdit({ id: null, name: '' })} aria-label="新增分類" title="新增分類" className="mb-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white">
-              <Plus size={15} />
-            </button>
+            {isOwner && (
+              <button type="button" onClick={() => setCategoryEdit({ id: null, name: '' })} aria-label="新增分類" title="新增分類" className="mb-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white">
+                <Plus size={15} />
+              </button>
+            )}
           </nav>
         )}
 
@@ -676,7 +679,7 @@ export default function EsimAppPage() {
             <Search size={15} className="text-white/35" />
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜尋備註、ICCID、方案" className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/30" />
           </label>
-          {sharingReady && (
+          {sharingReady && isOwner && (
             <button type="button" onClick={() => { setSelecting(on => !on); setSelectedIds(new Set()); }} className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-xs font-bold ${selecting ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100' : 'border-white/10 bg-white/5 text-white/70'}`}>
               <CheckSquare size={14} />{selecting ? '取消' : '選取'}
             </button>
@@ -702,7 +705,7 @@ export default function EsimAppPage() {
             key={card.id}
             role="button"
             tabIndex={0}
-            draggable={sharingReady}
+            draggable={sharingReady && isOwner}
             onDragStart={e => {
               const ids = selecting && selectedIds.has(card.id) ? [...selectedIds] : [card.id];
               e.dataTransfer.setData('text/plain', ids.join(','));
@@ -786,7 +789,7 @@ export default function EsimAppPage() {
               電信商還沒回報這張卡「已啟用」。實際上可能已經在用，用量通常要等電信商回報啟用後才會一次補上，可能延遲數小時。
             </p>
           )}
-          {sharingReady && (
+          {sharingReady && isOwner && (
             <label className="mt-3 flex items-center gap-2 text-sm">
               <span className="shrink-0 text-white/40">分類</span>
               <select
@@ -838,16 +841,21 @@ export default function EsimAppPage() {
             </div>
           )}
 
+          {isOwner ? (
           <label className="mt-4 block text-sm text-white/60">備註（例如使用人）
             <div className="mt-1 flex gap-2">
               <input value={noteDraft} onChange={e => setNoteDraft(e.target.value)} maxLength={50} placeholder="王小明" className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
               <button type="button" onClick={saveNote} className="rounded-xl bg-white/10 px-4 text-sm font-bold hover:bg-white/15">儲存</button>
             </div>
           </label>
+          ) : selected.note ? (
+            <p className="mt-4 text-sm text-white/60">備註：<span className="text-white">{selected.note}</span></p>
+          ) : null}
 
-          {!isOwner ? (
-            <p className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-white/55">你是共享群組成員，可以查看用量、改備註和整理分類；安裝資訊與刪除只有擁有者能操作。</p>
-          ) : lpa ? (
+          {!isOwner && (
+            <p className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-white/55">你是共享群組成員，可以查看用量和掃描 QR Code 安裝；修改備註、分類與刪除只有擁有者能操作。</p>
+          )}
+          {lpa ? (
             <div className="mt-5">
               <h3 className="mb-2 text-sm font-black">安裝這張 eSIM</h3>
               <div className="grid gap-2">
@@ -939,7 +947,7 @@ export default function EsimAppPage() {
 
       {shareOpen && (
         <Sheet title="共享群組" onClose={() => setShareOpen(false)}>
-          <p className="text-sm leading-6 text-white/60">加入對方的 Email，對方用這個 Email 註冊／登入一飛通後，打開 <span className="font-mono text-white/80">firstesim.space/app</span> 就能一起查看這個頁面的所有 eSIM 用量、改備註、整理分類。購買、刪除和安裝資訊只有你能操作。</p>
+          <p className="text-sm leading-6 text-white/60">加入對方的 Email，對方用這個 Email 註冊／登入一飛通後，打開 <span className="font-mono text-white/80">firstesim.space/app</span> 就能查看這個頁面所有 eSIM 的用量，也能掃描 QR Code 安裝。購買、刪除、改備註和分類只有你能操作。</p>
           <form onSubmit={addMember} className="mt-4 flex gap-2">
             <input type="email" required value={memberDraft} onChange={e => setMemberDraft(e.target.value)} placeholder="name@company.com" className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
             <button type="submit" className="shrink-0 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317]">加入</button>

@@ -28,10 +28,10 @@ export async function PUT(request: Request) {
       .eq('id', order_item_id)
       .single();
 
-    // 本人可以刪除與改備註；共享群組成員只能改備註
+    // 只有本人可以刪除與改備註；共享群組成員只能查看
     const ownerCustomerId = (item as any)?.orders?.customer_id as string | undefined;
     const role = ownerCustomerId ? await canAccessCustomerEsims(supabase, email, ownerCustomerId) : null;
-    if (!item || !role || (action !== 'update_note' && role !== 'owner')) {
+    if (!item || role !== 'owner') {
       return NextResponse.json({ error: '無權限操作此項目' }, { status: 403 });
     }
 

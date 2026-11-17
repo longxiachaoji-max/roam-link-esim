@@ -115,7 +115,8 @@ export async function GET(request: Request) {
       assignments.set(row.order_item_id, row.category_id);
     }
 
-    const showInstall = role === 'owner';
+    // 共享成員可以看安裝資訊（掃 QR Code 安裝），但不能修改或刪除
+    const showInstall = true;
     const cards = ((ordersResult.data || []) as unknown as OrderRow[]).flatMap(order => (order.order_items || [])
       .filter(item => !item.user_deleted_at)
       .map(item => {
@@ -185,6 +186,8 @@ export async function POST(request: Request) {
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
+
+    if (role !== 'owner') return NextResponse.json({ error: '共享成員只能查看，不能修改' }, { status: 403 });
 
     if (action === 'create_category' || action === 'rename_category') {
       const name = String(body.name || '').trim().slice(0, MAX_CATEGORY_NAME);
