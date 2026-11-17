@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getMicroesimInstallationDeadline } from '@/lib/microesim';
 import { queryAndStoreUsage } from '@/lib/esim-usage-snapshots';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
+import { canAccessCustomerEsims } from '@/lib/esim-dashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,16 +38,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
     }
 
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('email', email)
-      .single();
-
-    if (!customer) {
-      return NextResponse.json({ error: '用戶不存在' }, { status: 404 });
-    }
-
     const { data: item, error: itemError } = await supabase
       .from('order_items')
       .select(`
@@ -74,7 +65,8 @@ export async function POST(request: Request) {
     const inventoryRecord = relations?.e_sim_inventory;
     const inventory = Array.isArray(inventoryRecord) ? inventoryRecord[0] : inventoryRecord;
 
-    if (itemError || !item || order?.customer_id !== customer.id || order?.payment_status !== 'PAID') {
+    const role = order?.customer_id ? await canAccessCustomerEsims(supabase, email, order.customer_id) : null;
+    if (itemError || !item || !role || order?.payment_status !== 'PAID') {
       return NextResponse.json({ error: '無權限查詢此 eSIM' }, { status: 403 });
     }
 
@@ -122,13 +114,6 @@ export async function GET(request: Request) {
     const orderItemId = new URL(request.url).searchParams.get('order_item_id') || '';
     if (!orderItemId) return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
 
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('email', user.email.toLowerCase())
-      .single();
-    if (!customer) return NextResponse.json({ error: '用戶不存在' }, { status: 404 });
-
     const { data: item } = await supabase
       .from('order_items')
       .select('id, inventory_id, orders!inner(customer_id)')
@@ -136,7 +121,8 @@ export async function GET(request: Request) {
       .single();
     const orderRecord = (item as { orders?: { customer_id: string } | { customer_id: string }[] } | null)?.orders;
     const order = Array.isArray(orderRecord) ? orderRecord[0] : orderRecord;
-    if (!item || order?.customer_id !== customer.id) {
+    const role = order?.customer_id ? await canAccessCustomerEsims(supabase, user.email.toLowerCase(), order.customer_id) : null;
+    if (!item || !role) {
       return NextResponse.json({ error: '無權限查詢此 eSIM' }, { status: 403 });
     }
     if (!item.inventory_id) return NextResponse.json({ snapshots: [] });

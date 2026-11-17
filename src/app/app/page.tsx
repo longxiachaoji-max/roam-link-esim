@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, ChevronDown, ChevronLeft, Copy, Plus, RefreshCw, Search, Trash2, Usb, X } from 'lucide-react';
+import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
@@ -43,7 +43,13 @@ interface EsimCard {
   usage: Usage | null;
   usageCheckedAt: string | null;
   pending: boolean;
+  categoryId: string | null;
 }
+
+interface Category { id: string; name: string; sort_order: number }
+interface DashboardSummary { ownerId: string; ownerEmail: string; role: 'owner' | 'member' }
+type TabKey = 'all' | 'none' | string;
+const OWNER_STORAGE_KEY = 'firstroamlink-app-owner';
 
 interface PlanOption { id: string; days: number; price: number }
 interface Plan { data: string; options: PlanOption[] }
@@ -66,39 +72,6 @@ const statusClass = (status?: string) => {
   if (status === '已到期' || status === '已停用' || status === '已刪除') return 'bg-white/5 text-white/45 border-white/10';
   return 'bg-amber-500/10 text-amber-200 border-amber-500/25';
 };
-
-function first<T>(value: T | T[] | null | undefined): T | null {
-  return Array.isArray(value) ? value[0] ?? null : value ?? null;
-}
-
-// 把會員訂單整理成一張張 eSIM 卡片
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toCards(orders: any[]): EsimCard[] {
-  return orders.flatMap(order => (order.order_items || [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((item: any) => !item.user_deleted_at)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((item: any) => {
-      const inventory = first(item.e_sim_inventory) as Record<string, unknown> | null;
-      const product = first(item.products) as Record<string, unknown> | null;
-      return {
-        id: item.id,
-        orderNumber: order.order_number || '',
-        note: item.note || '',
-        planName: String(product?.name || 'eSIM 方案'),
-        country: String(product?.country || ''),
-        iccid: (inventory?.iccid as string) || null,
-        smdpAddress: (inventory?.smdp_address as string) || null,
-        activationCode: (inventory?.activation_code as string) || null,
-        iosInstallUrl: (inventory?.ios_install_url as string) || null,
-        androidInstallUrl: (inventory?.android_install_url as string) || null,
-        canQueryUsage: Boolean(inventory?.microesim_topup_id && inventory?.iccid),
-        usage: (inventory?.microesim_usage_cache as Usage) || null,
-        usageCheckedAt: (inventory?.microesim_usage_checked_at as string) || null,
-        pending: !inventory
-      } satisfies EsimCard;
-    }));
-}
 
 function Sheet({ children, onClose, title, onBack }: { children: React.ReactNode; onClose: () => void; title: string; onBack?: () => void }) {
   if (typeof document === 'undefined') return null;
@@ -143,6 +116,23 @@ export default function EsimAppPage() {
   const [buying, setBuying] = useState<{ done: number; total: number } | null>(null);
   const [buyError, setBuyError] = useState('');
   const [inNativeApp, setInNativeApp] = useState(false);
+  const [registerMode, setRegisterMode] = useState(false);
+  const [authNotice, setAuthNotice] = useState('');
+  const [dashboards, setDashboards] = useState<DashboardSummary[]>([]);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [role, setRole] = useState<'owner' | 'member'>('owner');
+  const [sharingReady, setSharingReady] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [members, setMembers] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [memberDraft, setMemberDraft] = useState('');
+  const [categoryEdit, setCategoryEdit] = useState<{ id: string | null; name: string } | null>(null);
+  const [dragOverTab, setDragOverTab] = useState<TabKey | null>(null);
+  const ownerIdRef = useRef<string | null>(null);
 
   // 在一飛通 Android App 裡開啟時，eSIM 卡安裝交給 App 內建的讀卡機功能
   useEffect(() => {
@@ -175,29 +165,161 @@ export default function EsimAppPage() {
     window.setTimeout(() => setToast(''), 2600);
   };
 
-  const loadCards = useCallback(async () => {
+  const loadCards = useCallback(async (requestedOwner?: string | null) => {
     setLoadingCards(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const userEmail = session?.user.email?.toLowerCase() || '';
-      const [ordersRes, profile] = await Promise.all([
-        authenticatedFetch('/api/member/orders'),
-        supabase.from('customers').select('token_balance').eq('email', userEmail).maybeSingle()
-      ]);
-      if (ordersRes.status === 401) {
+      let owner = requestedOwner ?? ownerIdRef.current;
+      if (owner === null || owner === undefined) {
+        try { owner = window.localStorage.getItem(OWNER_STORAGE_KEY); } catch { owner = null; }
+      }
+      const fetchDashboard = (target: string | null) =>
+        authenticatedFetch(`/api/member/esim-dashboard${target ? `?owner=${encodeURIComponent(target)}` : ''}`);
+      let res = await fetchDashboard(owner);
+      if (res.status === 403 && owner) {
+        // 已被移出共享群組：回到自己的管理頁
+        try { window.localStorage.removeItem(OWNER_STORAGE_KEY); } catch { /* 無法使用 localStorage */ }
+        ownerIdRef.current = null;
+        res = await fetchDashboard(null);
+      }
+      if (res.status === 401) {
         setAuthState('out');
         return;
       }
-      const json = await ordersRes.json();
-      setCards(toCards(json.orders || []));
-      const tokenBalance = Number(profile.data?.token_balance);
-      setBalance(profile.data && Number.isFinite(tokenBalance) ? tokenBalance : null);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '讀取失敗');
+      if (json.ownerId && json.ownerId !== ownerIdRef.current) {
+        setActiveTab('all');
+        setSelecting(false);
+        setSelectedIds(new Set());
+      }
+      ownerIdRef.current = json.ownerId || null;
+      try { if (json.ownerId) window.localStorage.setItem(OWNER_STORAGE_KEY, json.ownerId); } catch { /* 無法使用 localStorage */ }
+      setDashboards(json.dashboards || []);
+      setOwnerId(json.ownerId || null);
+      setRole(json.role === 'member' ? 'member' : 'owner');
+      setSharingReady(json.sharingReady !== false);
+      setCards(json.cards || []);
+      setCategories(json.categories || []);
+      setMembers(json.members || []);
+      const tokenBalance = Number(json.balance);
+      setBalance(json.balance !== null && Number.isFinite(tokenBalance) ? tokenBalance : null);
     } catch {
       showToast('讀取 eSIM 失敗，請稍後再試');
     } finally {
       setLoadingCards(false);
     }
   }, []);
+
+  const dashboardAction = async (payload: Record<string, unknown>) => {
+    const res = await authenticatedFetch('/api/member/esim-dashboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner: ownerIdRef.current, ...payload })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || '操作失敗');
+    return json;
+  };
+
+  const moveCards = async (ids: string[], categoryId: string | null) => {
+    if (!ids.length) return;
+    const previous = cards;
+    setCards(current => current.map(card => (ids.includes(card.id) ? { ...card, categoryId } : card)));
+    setSelected(current => (current && ids.includes(current.id) ? { ...current, categoryId } : current));
+    try {
+      await dashboardAction({ action: 'move_cards', order_item_ids: ids, category_id: categoryId });
+      const target = categoryId ? categories.find(c => c.id === categoryId)?.name : '未分類';
+      showToast(`已移動 ${ids.length} 張到「${target || '分類'}」`);
+      setSelecting(false);
+      setSelectedIds(new Set());
+      setMoveOpen(false);
+    } catch (err) {
+      setCards(previous);
+      showToast(err instanceof Error ? err.message : '移動失敗');
+    }
+  };
+
+  const saveCategory = async () => {
+    if (!categoryEdit) return;
+    const name = categoryEdit.name.trim();
+    if (!name) { showToast('請輸入分類名稱'); return; }
+    try {
+      if (categoryEdit.id) {
+        await dashboardAction({ action: 'rename_category', id: categoryEdit.id, name });
+        setCategories(current => current.map(c => (c.id === categoryEdit.id ? { ...c, name } : c)));
+      } else {
+        const json = await dashboardAction({ action: 'create_category', name });
+        if (json.category) {
+          setCategories(current => [...current, json.category]);
+          setActiveTab(json.category.id);
+        }
+      }
+      setCategoryEdit(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '儲存分類失敗');
+    }
+  };
+
+  const deleteCategory = async (category: Category) => {
+    if (!window.confirm(`刪除分類「${category.name}」？\n裡面的 eSIM 不會被刪除，會回到「未分類」。`)) return;
+    try {
+      await dashboardAction({ action: 'delete_category', id: category.id });
+      setCategories(current => current.filter(c => c.id !== category.id));
+      setCards(current => current.map(card => (card.categoryId === category.id ? { ...card, categoryId: null } : card)));
+      setActiveTab('all');
+      setCategoryEdit(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '刪除分類失敗');
+    }
+  };
+
+  const shiftCategory = async (category: Category, direction: -1 | 1) => {
+    const index = categories.findIndex(c => c.id === category.id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= categories.length) return;
+    const next = [...categories];
+    [next[index], next[target]] = [next[target], next[index]];
+    setCategories(next);
+    try { await dashboardAction({ action: 'reorder_categories', ids: next.map(c => c.id) }); } catch { showToast('排序儲存失敗'); }
+  };
+
+  const addMember = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = memberDraft.trim().toLowerCase();
+    if (!value) return;
+    try {
+      await dashboardAction({ action: 'add_member', email: value });
+      setMembers(current => (current.includes(value) ? current : [...current, value]));
+      setMemberDraft('');
+      showToast('已加入共享群組');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '加入失敗');
+    }
+  };
+
+  const removeMember = async (memberEmail: string) => {
+    if (!window.confirm(`把 ${memberEmail} 移出共享群組？`)) return;
+    try {
+      await dashboardAction({ action: 'remove_member', email: memberEmail });
+      setMembers(current => current.filter(m => m !== memberEmail));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '移除失敗');
+    }
+  };
+
+  const switchDashboard = (nextOwner: string) => {
+    if (nextOwner === ownerIdRef.current) return;
+    setCards([]);
+    void loadCards(nextOwner);
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -230,6 +352,22 @@ export default function EsimAppPage() {
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
     setAuthError('');
+    setAuthNotice('');
+    if (registerMode) {
+      if (password.length < 6) { setAuthError('密碼至少 6 個字元'); return; }
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) { setAuthError(`註冊失敗：${error.message}`); return; }
+      if (data.user && data.user.identities?.length === 0) {
+        setRegisterMode(false);
+        setAuthError('這個 Email 已經註冊過，請直接登入');
+        return;
+      }
+      if (!data.session) {
+        setRegisterMode(false);
+        setAuthNotice('註冊成功！請到信箱點擊驗證連結，再回來登入。');
+      }
+      return;
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setAuthError(/invalid login credentials/i.test(error.message) ? 'Email 或密碼錯誤' : error.message);
   };
@@ -283,7 +421,6 @@ export default function EsimAppPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refreshAll = () => refreshMany(cards.filter(card => card.canQueryUsage));
 
   useEffect(() => {
     cardsRef.current = cards;
@@ -407,15 +544,29 @@ export default function EsimAppPage() {
     }
   };
 
+  const categoryIds = useMemo(() => new Set(categories.map(c => c.id)), [categories]);
+  const cardTabs = useMemo(() => new Map<string, TabKey>(cards.map(card => [
+    card.id,
+    card.categoryId && categoryIds.has(card.categoryId) ? card.categoryId : 'none'
+  ])), [cards, categoryIds]);
+  const tabCounts = useMemo(() => {
+    const counts = new Map<TabKey, number>();
+    for (const tab of cardTabs.values()) counts.set(tab, (counts.get(tab) || 0) + 1);
+    return counts;
+  }, [cardTabs]);
+  const tabCards = useMemo(() => (activeTab === 'all' ? cards : cards.filter(card => cardTabs.get(card.id) === activeTab)), [cards, activeTab, cardTabs]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return cards;
-    return cards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber]
+    if (!q) return tabCards;
+    return tabCards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber]
       .some(value => String(value || '').toLowerCase().includes(q)));
-  }, [cards, query]);
+  }, [tabCards, query]);
+  const isOwner = role === 'owner';
+  const refreshAll = () => refreshMany(tabCards.filter(card => card.canQueryUsage));
+  const currentDashboard = dashboards.find(d => d.ownerId === ownerId);
 
-  const activeCount = cards.filter(card => card.usage?.status === '已啟用').length;
-  const notInstalledCount = cards.filter(card => !card.pending && (!card.usage || card.usage.status === '尚未安裝')).length;
+  const activeCount = tabCards.filter(card => card.usage?.status === '已啟用').length;
+  const notInstalledCount = tabCards.filter(card => !card.pending && (!card.usage || card.usage.status === '尚未安裝')).length;
 
   if (authState === 'loading') return <main className="grid min-h-[100svh] place-items-center bg-[#12121f] text-white/50">載入中...</main>;
 
@@ -425,7 +576,7 @@ export default function EsimAppPage() {
         <form onSubmit={login} className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1A1A2E] p-6">
           <p className="text-xs font-bold text-[#ff6b73]">一飛通全球漫遊</p>
           <h1 className="mt-1 text-2xl font-black">eSIM 管理</h1>
-          <p className="mt-1 text-sm text-white/50">使用一飛通會員帳號登入</p>
+          <p className="mt-1 text-sm text-white/50">{registerMode ? '建立一飛通會員帳號' : '使用一飛通會員帳號登入'}</p>
           <label className="mt-5 block text-sm text-white/70">Email
             <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none focus:border-cyan-400" />
           </label>
@@ -433,7 +584,11 @@ export default function EsimAppPage() {
             <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none focus:border-cyan-400" />
           </label>
           {authError && <p role="alert" className="mt-3 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{authError}</p>}
-          <button type="submit" className="mt-5 h-12 w-full rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] font-black text-[#17131a]">登入</button>
+          {authNotice && <p role="status" className="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{authNotice}</p>}
+          <button type="submit" className="mt-5 h-12 w-full rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] font-black text-[#17131a]">{registerMode ? '註冊' : '登入'}</button>
+          <button type="button" onClick={() => { setRegisterMode(mode => !mode); setAuthError(''); setAuthNotice(''); }} className="mt-3 w-full text-center text-xs text-white/50 underline underline-offset-4">
+            {registerMode ? '已經有帳號？登入' : '被邀請一起監控？用受邀 Email 註冊帳號'}
+          </button>
         </form>
       </main>
     );
@@ -445,36 +600,101 @@ export default function EsimAppPage() {
   return (
     <main className="min-h-[100svh] bg-[#12121f] pb-10 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#12121f]/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-2">
-          <h1 className="min-w-0 flex-1 truncate text-sm font-bold">我的 eSIM <span className="text-white/40">({cards.length})</span></h1>
-          {balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-yellow-200/80">NT${balance.toLocaleString()}</span>}
-          {inNativeApp && (
+        <div className="mx-auto flex max-w-7xl items-center gap-2">
+          {dashboards.length > 1 ? (
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">切換管理頁</span>
+              <select value={ownerId || ''} onChange={e => switchDashboard(e.target.value)} className="w-full max-w-full appearance-none truncate rounded-lg bg-transparent py-1 pr-6 text-sm font-bold outline-none">
+                {dashboards.map(d => (
+                  <option key={d.ownerId} value={d.ownerId} className="bg-[#1A1A2E]">{d.role === 'owner' ? '我的 eSIM' : `${d.ownerEmail} 的 eSIM`}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-white/50" />
+            </label>
+          ) : (
+            <h1 className="min-w-0 flex-1 truncate text-sm font-bold">{isOwner ? '我的 eSIM' : `${currentDashboard?.ownerEmail || ''} 的 eSIM`}</h1>
+          )}
+          <span className="shrink-0 text-[11px] text-white/40">{cards.length} 張</span>
+          {isOwner && balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-yellow-200/80">NT${balance.toLocaleString()}</span>}
+          {inNativeApp && isOwner && (
             <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" title="讀卡機" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
               <Usb size={17} />
             </a>
           )}
-          <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} aria-label="全部更新用量" title="全部更新用量" className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-70">
+          {isOwner && sharingReady && (
+            <button type="button" onClick={() => setShareOpen(true)} aria-label="共享群組" title="共享群組" className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
+              <Users size={17} />
+              {members.length > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-cyan-400 px-1 text-[9px] font-black text-[#071317]">{members.length}</span>}
+            </button>
+          )}
+          <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} aria-label="更新這個分頁的用量" title="更新這個分頁的用量" className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-70">
             <RefreshCw size={17} className={refreshProgress ? 'animate-spin' : ''} />
             {refreshProgress && `${refreshProgress.done}/${refreshProgress.total}`}
           </button>
-          <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
-            <Plus size={20} strokeWidth={3} />
-          </button>
+          {isOwner && (
+            <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
+              <Plus size={20} strokeWidth={3} />
+            </button>
+          )}
         </div>
-        <div className="mx-auto mt-2 flex max-w-5xl items-center gap-2">
+
+        {sharingReady && (
+          <nav aria-label="分類" className="mx-auto mt-2 flex max-w-7xl items-end gap-1 overflow-x-auto border-b border-white/10 [scrollbar-width:none]">
+            {([{ key: 'all', label: '全部', count: cards.length }, ...categories.map(c => ({ key: c.id, label: c.name, count: tabCounts.get(c.id) || 0 })), { key: 'none', label: '未分類', count: tabCounts.get('none') || 0 }] as { key: TabKey; label: string; count: number }[]).map(tab => {
+              const active = activeTab === tab.key;
+              const droppable = tab.key !== 'all';
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => (active && tab.key !== 'all' && tab.key !== 'none' ? setCategoryEdit({ id: tab.key, name: tab.label }) : setActiveTab(tab.key))}
+                  onDragOver={droppable ? e => { e.preventDefault(); setDragOverTab(tab.key); } : undefined}
+                  onDragLeave={droppable ? () => setDragOverTab(null) : undefined}
+                  onDrop={droppable ? e => {
+                    e.preventDefault();
+                    setDragOverTab(null);
+                    const ids = (e.dataTransfer.getData('text/plain') || '').split(',').filter(Boolean);
+                    void moveCards(ids, tab.key === 'none' ? null : tab.key);
+                  } : undefined}
+                  title={active && tab.key !== 'all' && tab.key !== 'none' ? '再點一次可改名或刪除' : tab.label}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-bold transition-colors ${active ? 'border-white/15 bg-[#1A1A2E] text-white' : 'border-transparent text-white/50 hover:text-white/80'} ${dragOverTab === tab.key ? 'bg-cyan-400/20 text-cyan-100' : ''}`}
+                >
+                  <span className="max-w-[9rem] truncate">{tab.label}</span>
+                  <span className="text-[10px] font-normal text-white/40">{tab.count}</span>
+                  {active && tab.key !== 'all' && tab.key !== 'none' && <Pencil size={11} className="text-white/45" />}
+                </button>
+              );
+            })}
+            <button type="button" onClick={() => setCategoryEdit({ id: null, name: '' })} aria-label="新增分類" title="新增分類" className="mb-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white">
+              <Plus size={15} />
+            </button>
+          </nav>
+        )}
+
+        <div className="mx-auto mt-2 flex max-w-7xl items-center gap-2">
           <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3">
             <Search size={15} className="text-white/35" />
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜尋備註、ICCID、方案" className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/30" />
           </label>
-          <span className="shrink-0 whitespace-nowrap text-[11px] text-white/45" title="每 30 分鐘自動更新用量">啟用 {activeCount}・未裝 {notInstalledCount}</span>
+          {sharingReady && (
+            <button type="button" onClick={() => { setSelecting(on => !on); setSelectedIds(new Set()); }} className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-xs font-bold ${selecting ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100' : 'border-white/10 bg-white/5 text-white/70'}`}>
+              <CheckSquare size={14} />{selecting ? '取消' : '選取'}
+            </button>
+          )}
+          <span className="hidden shrink-0 whitespace-nowrap text-[11px] text-white/45 sm:inline" title="每 30 分鐘自動更新用量">啟用 {activeCount}・未裝 {notInstalledCount}</span>
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-5xl grid-cols-2 gap-2 px-3 pt-3 sm:gap-3 lg:grid-cols-3">
-        {loadingCards && !cards.length && <p className="py-16 text-center text-white/40 col-span-2 lg:col-span-3">載入中...</p>}
+      <section className="mx-auto grid max-w-7xl grid-cols-2 gap-2 px-3 pt-3 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {loadingCards && !cards.length && <p className="col-span-full py-16 text-center text-white/40">載入中...</p>}
         {!loadingCards && !cards.length && (
-          <div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/50 col-span-2 lg:col-span-3">
-            還沒有 eSIM，按右上角「＋」選國家和方案購買
+          <div className="col-span-full rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/50">
+            {isOwner ? '還沒有 eSIM，按右上角「＋」選國家和方案購買' : '這個管理頁目前沒有 eSIM'}
+          </div>
+        )}
+        {!loadingCards && cards.length > 0 && !filtered.length && (
+          <div className="col-span-full rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-white/45">
+            {query.trim() ? '找不到符合的 eSIM' : '這個分類還沒有 eSIM。按「選取」勾選卡片後「移到」這裡，電腦也可以直接把卡片拖到分頁上。'}
           </div>
         )}
         {filtered.map(card => (
@@ -482,12 +702,19 @@ export default function EsimAppPage() {
             key={card.id}
             role="button"
             tabIndex={0}
-            onClick={() => { setSelected(card); setNoteDraft(card.note); }}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(card); setNoteDraft(card.note); } }}
-            className="min-w-0 cursor-pointer rounded-2xl border border-white/10 bg-[#1A1A2E] p-2.5 sm:p-3 text-left transition-colors hover:border-white/25"
+            draggable={sharingReady}
+            onDragStart={e => {
+              const ids = selecting && selectedIds.has(card.id) ? [...selectedIds] : [card.id];
+              e.dataTransfer.setData('text/plain', ids.join(','));
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onClick={() => { if (selecting) { toggleSelected(card.id); return; } setSelected(card); setNoteDraft(card.note); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (selecting) { toggleSelected(card.id); return; } setSelected(card); setNoteDraft(card.note); } }}
+            className={`min-w-0 cursor-pointer rounded-2xl border bg-[#1A1A2E] p-2.5 sm:p-3 text-left transition-colors ${selecting && selectedIds.has(card.id) ? 'border-cyan-400/70 ring-1 ring-cyan-400/40' : 'border-white/10 hover:border-white/25'}`}
           >
             <div className="flex items-start justify-between gap-1">
-              <p className="min-w-0 truncate text-sm font-black">{card.note || '（未命名）'}</p>
+              {selecting && (selectedIds.has(card.id) ? <CheckSquare size={16} className="shrink-0 text-cyan-300" /> : <Square size={16} className="shrink-0 text-white/35" />)}
+              <p className="min-w-0 flex-1 truncate text-sm font-black">{card.note || '（未命名）'}</p>
               <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${card.pending ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200' : statusClass(card.usage?.status)}`}>
                 {card.pending ? '配發中' : card.usage?.status || '未查詢'}
               </span>
@@ -524,9 +751,26 @@ export default function EsimAppPage() {
               )}
             </div>
             <p className="mt-0.5 text-[10px] text-white/40">更新 {formatTime(card.usageCheckedAt)}</p>
+            {activeTab === 'all' && card.categoryId && categoryIds.has(card.categoryId) && (
+              <p className="mt-1 truncate text-[10px] text-cyan-200/60">📁 {categories.find(c => c.id === card.categoryId)?.name}</p>
+            )}
           </div>
         ))}
       </section>
+
+      {selecting && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#1A1A2E]/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center gap-2">
+            <span className="min-w-0 flex-1 text-sm font-bold">已選 {selectedIds.size} 張</span>
+            <button type="button" onClick={() => setSelectedIds(current => (current.size === filtered.length ? new Set() : new Set(filtered.map(card => card.id))))} className="h-10 rounded-xl border border-white/15 px-3 text-xs font-bold text-white/80">
+              {selectedIds.size === filtered.length && filtered.length > 0 ? '全不選' : '全選'}
+            </button>
+            <button type="button" disabled={!selectedIds.size} onClick={() => setMoveOpen(true)} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317] disabled:opacity-40">
+              <FolderInput size={16} />移到
+            </button>
+          </div>
+        </div>
+      )}
 
       {selected && (
         <Sheet title={selected.note || selected.planName} onClose={() => setSelected(null)}>
@@ -537,6 +781,24 @@ export default function EsimAppPage() {
             <dt className="text-white/40">用量</dt><dd className="font-bold">{selected.usage?.usedData ?? '-'}</dd>
             <dt className="text-white/40">更新時間</dt><dd className="text-white/70">{formatTime(selected.usageCheckedAt)}</dd>
           </dl>
+          {(selected.usage?.status === '已下載' || selected.usage?.status === '已安裝') && (
+            <p className="mt-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100/85">
+              電信商還沒回報這張卡「已啟用」。實際上可能已經在用，用量通常要等電信商回報啟用後才會一次補上，可能延遲數小時。
+            </p>
+          )}
+          {sharingReady && (
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <span className="shrink-0 text-white/40">分類</span>
+              <select
+                value={selected.categoryId && categoryIds.has(selected.categoryId) ? selected.categoryId : ''}
+                onChange={e => void moveCards([selected.id], e.target.value || null)}
+                className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400"
+              >
+                <option value="" className="bg-[#1A1A2E]">未分類</option>
+                {categories.map(c => <option key={c.id} value={c.id} className="bg-[#1A1A2E]">{c.name}</option>)}
+              </select>
+            </label>
+          )}
           {selected.canQueryUsage && (
             <button type="button" disabled={refreshingIds.has(selected.id)} onClick={async () => {
               try { await refreshOne(selected); } catch (err) { showToast(err instanceof Error ? err.message : '查詢失敗'); }
@@ -583,7 +845,9 @@ export default function EsimAppPage() {
             </div>
           </label>
 
-          {lpa ? (
+          {!isOwner ? (
+            <p className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-white/55">你是共享群組成員，可以查看用量、改備註和整理分類；安裝資訊與刪除只有擁有者能操作。</p>
+          ) : lpa ? (
             <div className="mt-5">
               <h3 className="mb-2 text-sm font-black">安裝這張 eSIM</h3>
               <div className="grid gap-2">
@@ -624,8 +888,73 @@ export default function EsimAppPage() {
             <p className="mt-5 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-100/80">eSIM 配發中，完成後這裡會出現安裝方式。</p>
           )}
           <a href={LINE_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="mt-4 flex h-10 items-center justify-center rounded-xl border border-[#06c755]/30 bg-[#06c755]/10 text-xs font-bold text-[#7ee2a0]">使用上遇到問題？聯繫 LINE 客服</a>
-          <button type="button" onClick={deleteCard} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-bold text-red-200">
-            <Trash2 size={14} />刪除這張 eSIM
+          {isOwner && (
+            <button type="button" onClick={deleteCard} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-bold text-red-200">
+              <Trash2 size={14} />刪除這張 eSIM
+            </button>
+          )}
+        </Sheet>
+      )}
+
+      {moveOpen && (
+        <Sheet title={`移動 ${selectedIds.size} 張 eSIM 到…`} onClose={() => setMoveOpen(false)}>
+          <div className="grid gap-2">
+            {categories.map(c => (
+              <button key={c.id} type="button" onClick={() => void moveCards([...selectedIds], c.id)} className="flex h-12 items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 text-left text-sm font-bold hover:bg-white/10">
+                <span className="truncate">📁 {c.name}</span><span className="text-xs font-normal text-white/40">{tabCounts.get(c.id) || 0} 張</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => void moveCards([...selectedIds], null)} className="flex h-12 items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 text-left text-sm font-bold hover:bg-white/10">
+              <span>未分類</span><span className="text-xs font-normal text-white/40">{tabCounts.get('none') || 0} 張</span>
+            </button>
+            <button type="button" onClick={() => { setMoveOpen(false); setCategoryEdit({ id: null, name: '' }); }} className="flex h-12 items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 text-sm font-bold text-white/60 hover:bg-white/5">
+              <Plus size={15} />新增分類
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {categoryEdit && (
+        <Sheet title={categoryEdit.id ? '分類設定' : '新增分類'} onClose={() => setCategoryEdit(null)}>
+          <form onSubmit={e => { e.preventDefault(); void saveCategory(); }}>
+            <label className="block text-sm text-white/60">分類名稱
+              <input autoFocus value={categoryEdit.name} maxLength={30} onChange={e => setCategoryEdit({ ...categoryEdit, name: e.target.value })} placeholder="例如：日本團、業務部" className="mt-1 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
+            </label>
+            <button type="submit" className="mt-3 h-11 w-full rounded-xl bg-cyan-400 text-sm font-black text-[#071317]">{categoryEdit.id ? '儲存名稱' : '建立分類'}</button>
+          </form>
+          {categoryEdit.id && (() => {
+            const category = categories.find(c => c.id === categoryEdit.id);
+            if (!category) return null;
+            const index = categories.indexOf(category);
+            return (
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <button type="button" disabled={index === 0} onClick={() => void shiftCategory(category, -1)} className="h-10 rounded-xl border border-white/10 text-xs font-bold text-white/70 disabled:opacity-30">← 往前</button>
+                <button type="button" disabled={index === categories.length - 1} onClick={() => void shiftCategory(category, 1)} className="h-10 rounded-xl border border-white/10 text-xs font-bold text-white/70 disabled:opacity-30">往後 →</button>
+                <button type="button" onClick={() => void deleteCategory(category)} className="h-10 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-bold text-red-200">刪除分類</button>
+              </div>
+            );
+          })()}
+        </Sheet>
+      )}
+
+      {shareOpen && (
+        <Sheet title="共享群組" onClose={() => setShareOpen(false)}>
+          <p className="text-sm leading-6 text-white/60">加入對方的 Email，對方用這個 Email 註冊／登入一飛通後，打開 <span className="font-mono text-white/80">firstesim.space/app</span> 就能一起查看這個頁面的所有 eSIM 用量、改備註、整理分類。購買、刪除和安裝資訊只有你能操作。</p>
+          <form onSubmit={addMember} className="mt-4 flex gap-2">
+            <input type="email" required value={memberDraft} onChange={e => setMemberDraft(e.target.value)} placeholder="name@company.com" className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
+            <button type="submit" className="shrink-0 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317]">加入</button>
+          </form>
+          <div className="mt-4 space-y-2">
+            {members.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/40">還沒有成員</p>}
+            {members.map(memberEmail => (
+              <div key={memberEmail} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                <span className="min-w-0 flex-1 truncate text-sm">{memberEmail}</span>
+                <button type="button" onClick={() => void removeMember(memberEmail)} aria-label={`移除 ${memberEmail}`} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/50 hover:bg-white/10 hover:text-red-200"><X size={15} /></button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => copy('share-link', 'https://firstesim.space/app')} className="mt-4 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 text-xs font-bold text-white/70">
+            {copied === 'share-link' ? <Check size={14} /> : <Copy size={14} />}複製管理頁網址
           </button>
         </Sheet>
       )}

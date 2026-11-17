@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
+import { canAccessCustomerEsims } from '@/lib/esim-dashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,17 +21,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
     }
 
-    // 驗證此 order_item 屬於該用戶
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('email', email)
-      .single();
-
-    if (!customer) {
-      return NextResponse.json({ error: '用戶不存在' }, { status: 404 });
-    }
-
     // 確認 order_item 屬於該客戶的訂單
     const { data: item } = await supabase
       .from('order_items')
@@ -38,7 +28,10 @@ export async function PUT(request: Request) {
       .eq('id', order_item_id)
       .single();
 
-    if (!item || (item as any).orders?.customer_id !== customer.id) {
+    // 本人可以刪除與改備註；共享群組成員只能改備註
+    const ownerCustomerId = (item as any)?.orders?.customer_id as string | undefined;
+    const role = ownerCustomerId ? await canAccessCustomerEsims(supabase, email, ownerCustomerId) : null;
+    if (!item || !role || (action !== 'update_note' && role !== 'owner')) {
       return NextResponse.json({ error: '無權限操作此項目' }, { status: 403 });
     }
 
