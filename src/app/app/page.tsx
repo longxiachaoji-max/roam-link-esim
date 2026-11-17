@@ -44,12 +44,12 @@ interface EsimCard {
   usageCheckedAt: string | null;
   pending: boolean;
   categoryId: string | null;
+  sharedBy: string | null;
+  sharedWith: string[];
 }
 
 interface Category { id: string; name: string; sort_order: number }
-interface DashboardSummary { ownerId: string; ownerEmail: string; role: 'owner' | 'member' }
-type TabKey = 'all' | 'none' | string;
-const OWNER_STORAGE_KEY = 'firstroamlink-app-owner';
+type TabKey = 'all' | 'none' | 'shared' | string;
 
 interface PlanOption { id: string; days: number; price: number }
 interface Plan { data: string; options: PlanOption[] }
@@ -118,21 +118,17 @@ export default function EsimAppPage() {
   const [inNativeApp, setInNativeApp] = useState(false);
   const [registerMode, setRegisterMode] = useState(false);
   const [authNotice, setAuthNotice] = useState('');
-  const [dashboards, setDashboards] = useState<DashboardSummary[]>([]);
-  const [ownerId, setOwnerId] = useState<string | null>(null);
-  const [role, setRole] = useState<'owner' | 'member'>('owner');
   const [sharingReady, setSharingReady] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [members, setMembers] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveOpen, setMoveOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<string[] | null>(null);
   const [memberDraft, setMemberDraft] = useState('');
   const [categoryEdit, setCategoryEdit] = useState<{ id: string | null; name: string } | null>(null);
   const [dragOverTab, setDragOverTab] = useState<TabKey | null>(null);
-  const ownerIdRef = useRef<string | null>(null);
 
   // 在一飛通 Android App 裡開啟時，eSIM 卡安裝交給 App 內建的讀卡機功能
   useEffect(() => {
@@ -165,42 +161,19 @@ export default function EsimAppPage() {
     window.setTimeout(() => setToast(''), 2600);
   };
 
-  const loadCards = useCallback(async (requestedOwner?: string | null) => {
+  const loadCards = useCallback(async () => {
     setLoadingCards(true);
     try {
-      let owner = requestedOwner ?? ownerIdRef.current;
-      if (owner === null || owner === undefined) {
-        try { owner = window.localStorage.getItem(OWNER_STORAGE_KEY); } catch { owner = null; }
-      }
-      const fetchDashboard = (target: string | null) =>
-        authenticatedFetch(`/api/member/esim-dashboard${target ? `?owner=${encodeURIComponent(target)}` : ''}`);
-      let res = await fetchDashboard(owner);
-      if (res.status === 403 && owner) {
-        // 已被移出共享群組：回到自己的管理頁
-        try { window.localStorage.removeItem(OWNER_STORAGE_KEY); } catch { /* 無法使用 localStorage */ }
-        ownerIdRef.current = null;
-        res = await fetchDashboard(null);
-      }
+      const res = await authenticatedFetch('/api/member/esim-dashboard');
       if (res.status === 401) {
         setAuthState('out');
         return;
       }
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || '讀取失敗');
-      if (json.ownerId && json.ownerId !== ownerIdRef.current) {
-        setActiveTab('all');
-        setSelecting(false);
-        setSelectedIds(new Set());
-      }
-      ownerIdRef.current = json.ownerId || null;
-      try { if (json.ownerId) window.localStorage.setItem(OWNER_STORAGE_KEY, json.ownerId); } catch { /* 無法使用 localStorage */ }
-      setDashboards(json.dashboards || []);
-      setOwnerId(json.ownerId || null);
-      setRole(json.role === 'member' ? 'member' : 'owner');
       setSharingReady(json.sharingReady !== false);
       setCards(json.cards || []);
       setCategories(json.categories || []);
-      setMembers(json.members || []);
       const tokenBalance = Number(json.balance);
       setBalance(json.balance !== null && Number.isFinite(tokenBalance) ? tokenBalance : null);
     } catch {
@@ -214,7 +187,7 @@ export default function EsimAppPage() {
     const res = await authenticatedFetch('/api/member/esim-dashboard', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: ownerIdRef.current, ...payload })
+      body: JSON.stringify(payload)
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || '操作失敗');
@@ -283,34 +256,35 @@ export default function EsimAppPage() {
     try { await dashboardAction({ action: 'reorder_categories', ids: next.map(c => c.id) }); } catch { showToast('排序儲存失敗'); }
   };
 
-  const addMember = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const value = memberDraft.trim().toLowerCase();
-    if (!value) return;
+  // 共享：把自己買的卡共享給某個 Email（對方只能查看與掃 QR Code）
+  const shareCards = async (ids: string[], memberEmail: string) => {
+    const value = memberEmail.trim().toLowerCase();
+    const ownIds = ids.filter(id => cards.find(card => card.id === id && !card.sharedBy));
+    if (!value || !ownIds.length) { showToast('請選擇自己購買的 eSIM'); return; }
     try {
-      await dashboardAction({ action: 'add_member', email: value });
-      setMembers(current => (current.includes(value) ? current : [...current, value]));
+      await dashboardAction({ action: 'share_cards', order_item_ids: ownIds, email: value });
+      setCards(current => current.map(card => (ownIds.includes(card.id) && !card.sharedWith.includes(value) ? { ...card, sharedWith: [...card.sharedWith, value] } : card)));
+      setSelected(current => (current && ownIds.includes(current.id) && !current.sharedWith.includes(value) ? { ...current, sharedWith: [...current.sharedWith, value] } : current));
       setMemberDraft('');
-      showToast('已加入共享群組');
+      setShareTarget(null);
+      setSelecting(false);
+      setSelectedIds(new Set());
+      showToast(`已共享 ${ownIds.length} 張給 ${value}`);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '加入失敗');
+      showToast(err instanceof Error ? err.message : '共享失敗');
     }
   };
 
-  const removeMember = async (memberEmail: string) => {
-    if (!window.confirm(`把 ${memberEmail} 移出共享群組？`)) return;
+  const unshareCards = async (ids: string[], memberEmail: string, ask = true) => {
+    if (ask && !window.confirm(`停止把 ${ids.length} 張 eSIM 共享給 ${memberEmail}？`)) return;
     try {
-      await dashboardAction({ action: 'remove_member', email: memberEmail });
-      setMembers(current => current.filter(m => m !== memberEmail));
+      await dashboardAction({ action: 'unshare_cards', order_item_ids: ids, email: memberEmail });
+      const drop = (card: EsimCard) => (ids.includes(card.id) ? { ...card, sharedWith: card.sharedWith.filter(e => e !== memberEmail) } : card);
+      setCards(current => current.map(drop));
+      setSelected(current => (current ? drop(current) : current));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '移除失敗');
+      showToast(err instanceof Error ? err.message : '取消共享失敗');
     }
-  };
-
-  const switchDashboard = (nextOwner: string) => {
-    if (nextOwner === ownerIdRef.current) return;
-    setCards([]);
-    void loadCards(nextOwner);
   };
 
   const toggleSelected = (id: string) => {
@@ -554,16 +528,27 @@ export default function EsimAppPage() {
     for (const tab of cardTabs.values()) counts.set(tab, (counts.get(tab) || 0) + 1);
     return counts;
   }, [cardTabs]);
-  const tabCards = useMemo(() => (activeTab === 'all' ? cards : cards.filter(card => cardTabs.get(card.id) === activeTab)), [cards, activeTab, cardTabs]);
+  const tabCards = useMemo(() => {
+    if (activeTab === 'all') return cards;
+    if (activeTab === 'shared') return cards.filter(card => card.sharedBy);
+    return cards.filter(card => cardTabs.get(card.id) === activeTab);
+  }, [cards, activeTab, cardTabs]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return tabCards;
     return tabCards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber]
       .some(value => String(value || '').toLowerCase().includes(q)));
   }, [tabCards, query]);
-  const isOwner = role === 'owner';
+  const sharedCount = cards.filter(card => card.sharedBy).length;
+  const ownCards = cards.filter(card => !card.sharedBy);
+  const shareSummary = (() => {
+    const map = new Map<string, string[]>();
+    for (const card of ownCards) for (const e of card.sharedWith) map.set(e, [...(map.get(e) || []), card.id]);
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  })();
+  const selectedOwnIds = [...selectedIds].filter(id => ownCards.some(card => card.id === id));
+  const isOwnCard = (card: EsimCard | null) => Boolean(card && !card.sharedBy);
   const refreshAll = () => refreshMany(tabCards.filter(card => card.canQueryUsage));
-  const currentDashboard = dashboards.find(d => d.ownerId === ownerId);
 
   const activeCount = tabCards.filter(card => card.usage?.status === '已啟用').length;
   const notInstalledCount = tabCards.filter(card => !card.pending && (!card.usage || card.usage.status === '尚未安裝')).length;
@@ -601,37 +586,25 @@ export default function EsimAppPage() {
     <main className="min-h-[100svh] bg-[#12121f] pb-10 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#12121f]/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2">
-          {dashboards.length > 1 ? (
-            <label className="relative min-w-0 flex-1">
-              <span className="sr-only">切換管理頁</span>
-              <select value={ownerId || ''} onChange={e => switchDashboard(e.target.value)} className="w-full max-w-full appearance-none truncate rounded-lg bg-transparent py-1 pr-6 text-sm font-bold outline-none">
-                {dashboards.map(d => (
-                  <option key={d.ownerId} value={d.ownerId} className="bg-[#1A1A2E]">{d.role === 'owner' ? '我的 eSIM' : `${d.ownerEmail} 的 eSIM`}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-white/50" />
-            </label>
-          ) : (
-            <h1 className="min-w-0 flex-1 truncate text-sm font-bold">{isOwner ? '我的 eSIM' : `${currentDashboard?.ownerEmail || ''} 的 eSIM`}</h1>
-          )}
+          <h1 className="min-w-0 flex-1 truncate text-sm font-bold">我的 eSIM</h1>
           <span className="shrink-0 text-[11px] text-white/40">{cards.length} 張</span>
-          {isOwner && balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-yellow-200/80">NT${balance.toLocaleString()}</span>}
-          {inNativeApp && isOwner && (
+          {balance !== null && <span className="shrink-0 whitespace-nowrap rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-yellow-200/80">NT${balance.toLocaleString()}</span>}
+          {inNativeApp && (
             <a href={FIRSTROAMLINK_READER_URL} aria-label="讀卡機管理" title="讀卡機" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
               <Usb size={17} />
             </a>
           )}
-          {isOwner && sharingReady && (
-            <button type="button" onClick={() => setShareOpen(true)} aria-label="共享群組" title="共享群組" className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
+          {sharingReady && ownCards.length > 0 && (
+            <button type="button" onClick={() => setShareOpen(true)} aria-label="共享管理" title="共享管理" className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/85">
               <Users size={17} />
-              {members.length > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-cyan-400 px-1 text-[9px] font-black text-[#071317]">{members.length}</span>}
+              {shareSummary.length > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-cyan-400 px-1 text-[9px] font-black text-[#071317]">{shareSummary.length}</span>}
             </button>
           )}
           <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} aria-label="更新這個分頁的用量" title="更新這個分頁的用量" className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-70">
             <RefreshCw size={17} className={refreshProgress ? 'animate-spin' : ''} />
             {refreshProgress && `${refreshProgress.done}/${refreshProgress.total}`}
           </button>
-          {isOwner && (
+          {(
             <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
               <Plus size={20} strokeWidth={3} />
             </button>
@@ -640,10 +613,10 @@ export default function EsimAppPage() {
 
         {sharingReady && (
           <nav aria-label="分類" className="mx-auto mt-2 flex max-w-7xl items-end gap-1 overflow-x-auto border-b border-white/10 [scrollbar-width:none]">
-            {([{ key: 'all', label: '全部', count: cards.length }, ...categories.map(c => ({ key: c.id, label: c.name, count: tabCounts.get(c.id) || 0 })), { key: 'none', label: '未分類', count: tabCounts.get('none') || 0 }] as { key: TabKey; label: string; count: number }[]).map(tab => {
+            {([{ key: 'all', label: '全部', count: cards.length }, ...(sharedCount ? [{ key: 'shared', label: '共享給我', count: sharedCount }] : []), ...categories.map(c => ({ key: c.id, label: c.name, count: tabCounts.get(c.id) || 0 })), { key: 'none', label: '未分類', count: tabCounts.get('none') || 0 }] as { key: TabKey; label: string; count: number }[]).map(tab => {
               const active = activeTab === tab.key;
-              const droppable = isOwner && tab.key !== 'all';
-              const editable = isOwner && active && tab.key !== 'all' && tab.key !== 'none';
+              const droppable = tab.key !== 'all' && tab.key !== 'shared';
+              const editable = active && tab.key !== 'all' && tab.key !== 'none' && tab.key !== 'shared';
               return (
                 <button
                   key={tab.key}
@@ -666,7 +639,7 @@ export default function EsimAppPage() {
                 </button>
               );
             })}
-            {isOwner && (
+            {(
               <button type="button" onClick={() => setCategoryEdit({ id: null, name: '' })} aria-label="新增分類" title="新增分類" className="mb-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white">
                 <Plus size={15} />
               </button>
@@ -679,7 +652,7 @@ export default function EsimAppPage() {
             <Search size={15} className="text-white/35" />
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜尋備註、ICCID、方案" className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/30" />
           </label>
-          {sharingReady && isOwner && (
+          {sharingReady && (
             <button type="button" onClick={() => { setSelecting(on => !on); setSelectedIds(new Set()); }} className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-xs font-bold ${selecting ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100' : 'border-white/10 bg-white/5 text-white/70'}`}>
               <CheckSquare size={14} />{selecting ? '取消' : '選取'}
             </button>
@@ -692,7 +665,7 @@ export default function EsimAppPage() {
         {loadingCards && !cards.length && <p className="col-span-full py-16 text-center text-white/40">載入中...</p>}
         {!loadingCards && !cards.length && (
           <div className="col-span-full rounded-2xl border border-dashed border-white/15 p-8 text-center text-white/50">
-            {isOwner ? '還沒有 eSIM，按右上角「＋」選國家和方案購買' : '這個管理頁目前沒有 eSIM'}
+            還沒有 eSIM，按右上角「＋」選國家和方案購買
           </div>
         )}
         {!loadingCards && cards.length > 0 && !filtered.length && (
@@ -705,7 +678,7 @@ export default function EsimAppPage() {
             key={card.id}
             role="button"
             tabIndex={0}
-            draggable={sharingReady && isOwner}
+            draggable={sharingReady}
             onDragStart={e => {
               const ids = selecting && selectedIds.has(card.id) ? [...selectedIds] : [card.id];
               e.dataTransfer.setData('text/plain', ids.join(','));
@@ -754,6 +727,8 @@ export default function EsimAppPage() {
               )}
             </div>
             <p className="mt-0.5 text-[10px] text-white/40">更新 {formatTime(card.usageCheckedAt)}</p>
+            {card.sharedBy && <p className="mt-1 truncate text-[10px] text-amber-200/70">🔗 由 {card.sharedBy} 共享</p>}
+            {!card.sharedBy && card.sharedWith.length > 0 && <p className="mt-1 truncate text-[10px] text-cyan-200/60">👥 已共享 {card.sharedWith.length} 人</p>}
             {activeTab === 'all' && card.categoryId && categoryIds.has(card.categoryId) && (
               <p className="mt-1 truncate text-[10px] text-cyan-200/60">📁 {categories.find(c => c.id === card.categoryId)?.name}</p>
             )}
@@ -767,6 +742,9 @@ export default function EsimAppPage() {
             <span className="min-w-0 flex-1 text-sm font-bold">已選 {selectedIds.size} 張</span>
             <button type="button" onClick={() => setSelectedIds(current => (current.size === filtered.length ? new Set() : new Set(filtered.map(card => card.id))))} className="h-10 rounded-xl border border-white/15 px-3 text-xs font-bold text-white/80">
               {selectedIds.size === filtered.length && filtered.length > 0 ? '全不選' : '全選'}
+            </button>
+            <button type="button" disabled={!selectedOwnIds.length} onClick={() => setShareTarget(selectedOwnIds)} title="共享選取的卡（只限自己購買的卡）" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 text-sm font-bold text-cyan-100 disabled:opacity-40">
+              <Users size={16} />共享
             </button>
             <button type="button" disabled={!selectedIds.size} onClick={() => setMoveOpen(true)} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317] disabled:opacity-40">
               <FolderInput size={16} />移到
@@ -789,7 +767,7 @@ export default function EsimAppPage() {
               電信商還沒回報這張卡「已啟用」。實際上可能已經在用，用量通常要等電信商回報啟用後才會一次補上，可能延遲數小時。
             </p>
           )}
-          {sharingReady && isOwner && (
+          {sharingReady && (
             <label className="mt-3 flex items-center gap-2 text-sm">
               <span className="shrink-0 text-white/40">分類</span>
               <select
@@ -841,7 +819,27 @@ export default function EsimAppPage() {
             </div>
           )}
 
-          {isOwner ? (
+          {sharingReady && isOwnCard(selected) && (
+            <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-bold">共享給</p>
+                <button type="button" onClick={() => setShareTarget([selected.id])} className="inline-flex h-8 items-center gap-1 rounded-lg bg-cyan-400/15 px-2.5 text-xs font-bold text-cyan-100"><Plus size={13} />新增</button>
+              </div>
+              {selected.sharedWith.length === 0 ? (
+                <p className="mt-1 text-xs text-white/40">還沒有共享。共享後對方只能查看用量和掃 QR Code 安裝。</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selected.sharedWith.map(e => (
+                    <span key={e} className="inline-flex items-center gap-1 rounded-full bg-black/30 py-1 pl-2.5 pr-1 text-xs">
+                      {e}
+                      <button type="button" onClick={() => void unshareCards([selected.id], e)} aria-label={`取消共享給 ${e}`} className="grid h-5 w-5 place-items-center rounded-full hover:bg-white/10"><X size={11} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {isOwnCard(selected) ? (
           <label className="mt-4 block text-sm text-white/60">備註（例如使用人）
             <div className="mt-1 flex gap-2">
               <input value={noteDraft} onChange={e => setNoteDraft(e.target.value)} maxLength={50} placeholder="王小明" className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
@@ -852,8 +850,8 @@ export default function EsimAppPage() {
             <p className="mt-4 text-sm text-white/60">備註：<span className="text-white">{selected.note}</span></p>
           ) : null}
 
-          {!isOwner && (
-            <p className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-white/55">你是共享群組成員，可以查看用量和掃描 QR Code 安裝；修改備註、分類與刪除只有擁有者能操作。</p>
+          {selected.sharedBy && (
+            <p className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3 text-xs leading-5 text-white/60">這張卡由 {selected.sharedBy} 共享給你，可以查看用量和掃描 QR Code 安裝；備註與刪除只有購買者能修改。你可以把它放進自己的分類。</p>
           )}
           {lpa ? (
             <div className="mt-5">
@@ -896,7 +894,7 @@ export default function EsimAppPage() {
             <p className="mt-5 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-yellow-100/80">eSIM 配發中，完成後這裡會出現安裝方式。</p>
           )}
           <a href={LINE_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className="mt-4 flex h-10 items-center justify-center rounded-xl border border-[#06c755]/30 bg-[#06c755]/10 text-xs font-bold text-[#7ee2a0]">使用上遇到問題？聯繫 LINE 客服</a>
-          {isOwner && (
+          {isOwnCard(selected) && (
             <button type="button" onClick={deleteCard} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-bold text-red-200">
               <Trash2 size={14} />刪除這張 eSIM
             </button>
@@ -945,19 +943,38 @@ export default function EsimAppPage() {
         </Sheet>
       )}
 
-      {shareOpen && (
-        <Sheet title="共享群組" onClose={() => setShareOpen(false)}>
-          <p className="text-sm leading-6 text-white/60">加入對方的 Email，對方用這個 Email 註冊／登入一飛通後，打開 <span className="font-mono text-white/80">firstesim.space/app</span> 就能查看這個頁面所有 eSIM 的用量，也能掃描 QR Code 安裝。購買、刪除、改備註和分類只有你能操作。</p>
-          <form onSubmit={addMember} className="mt-4 flex gap-2">
-            <input type="email" required value={memberDraft} onChange={e => setMemberDraft(e.target.value)} placeholder="name@company.com" className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
-            <button type="submit" className="shrink-0 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317]">加入</button>
+      {shareTarget && (
+        <Sheet title={`共享 ${shareTarget.length} 張 eSIM`} onClose={() => setShareTarget(null)}>
+          <p className="text-sm leading-6 text-white/60">輸入對方 Email。對方用這個 Email 註冊／登入 <span className="font-mono text-white/80">firstesim.space/app</span> 後，會在自己的頁面看到這些卡，可以查看用量、掃 QR Code 安裝，也能放進自己的分類；不能刪除或修改。</p>
+          <form onSubmit={e => { e.preventDefault(); void shareCards(shareTarget, memberDraft); }} className="mt-4 flex gap-2">
+            <input type="email" required autoFocus value={memberDraft} onChange={e => setMemberDraft(e.target.value)} placeholder="name@company.com" className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
+            <button type="submit" className="shrink-0 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317]">共享</button>
           </form>
+          {shareSummary.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs text-white/40">之前共享過的 Email</p>
+              <div className="flex flex-wrap gap-1.5">
+                {shareSummary.map(([e]) => (
+                  <button key={e} type="button" onClick={() => void shareCards(shareTarget, e)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10">{e}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </Sheet>
+      )}
+
+      {shareOpen && (
+        <Sheet title="共享管理" onClose={() => setShareOpen(false)}>
+          <p className="text-sm leading-6 text-white/60">要共享卡片：按「選取」勾選卡片 →「共享」，或點開單張卡 →「共享給」→「新增」。對方只能查看用量和掃 QR Code 安裝，分類由對方自己整理。</p>
           <div className="mt-4 space-y-2">
-            {members.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/40">還沒有成員</p>}
-            {members.map(memberEmail => (
-              <div key={memberEmail} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                <span className="min-w-0 flex-1 truncate text-sm">{memberEmail}</span>
-                <button type="button" onClick={() => void removeMember(memberEmail)} aria-label={`移除 ${memberEmail}`} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/50 hover:bg-white/10 hover:text-red-200"><X size={15} /></button>
+            {shareSummary.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/40">目前沒有共享任何卡</p>}
+            {shareSummary.map(([e, ids]) => (
+              <div key={e} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{e}</p>
+                  <p className="text-[11px] text-white/40">共享 {ids.length} 張</p>
+                </div>
+                <button type="button" onClick={() => void unshareCards(ids, e)} className="h-8 shrink-0 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 text-xs font-bold text-red-200">全部取消</button>
               </div>
             ))}
           </div>

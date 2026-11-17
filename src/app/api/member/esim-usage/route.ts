@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getMicroesimInstallationDeadline } from '@/lib/microesim';
 import { queryAndStoreUsage } from '@/lib/esim-usage-snapshots';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
-import { canAccessCustomerEsims } from '@/lib/esim-dashboard';
+import { canAccessEsimItem } from '@/lib/esim-dashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     const inventoryRecord = relations?.e_sim_inventory;
     const inventory = Array.isArray(inventoryRecord) ? inventoryRecord[0] : inventoryRecord;
 
-    const role = order?.customer_id ? await canAccessCustomerEsims(supabase, email, order.customer_id) : null;
+    const role = order?.customer_id ? await canAccessEsimItem(supabase, email, order_item_id, order.customer_id) : null;
     if (itemError || !item || !role || order?.payment_status !== 'PAID') {
       return NextResponse.json({ error: '無權限查詢此 eSIM' }, { status: 403 });
     }
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
       .single();
     const orderRecord = (item as { orders?: { customer_id: string } | { customer_id: string }[] } | null)?.orders;
     const order = Array.isArray(orderRecord) ? orderRecord[0] : orderRecord;
-    const role = order?.customer_id ? await canAccessCustomerEsims(supabase, user.email.toLowerCase(), order.customer_id) : null;
+    const role = order?.customer_id ? await canAccessEsimItem(supabase, user.email.toLowerCase(), orderItemId, order.customer_id) : null;
     if (!item || !role) {
       return NextResponse.json({ error: '無權限查詢此 eSIM' }, { status: 403 });
     }

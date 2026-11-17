@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
-import { canAccessCustomerEsims } from '@/lib/esim-dashboard';
+import { canAccessEsimItem } from '@/lib/esim-dashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +30,7 @@ export async function PUT(request: Request) {
 
     // 只有本人可以刪除與改備註；共享群組成員只能查看
     const ownerCustomerId = (item as any)?.orders?.customer_id as string | undefined;
-    const role = ownerCustomerId ? await canAccessCustomerEsims(supabase, email, ownerCustomerId) : null;
+    const role = ownerCustomerId ? await canAccessEsimItem(supabase, email, order_item_id, ownerCustomerId) : null;
     if (!item || role !== 'owner') {
       return NextResponse.json({ error: '無權限操作此項目' }, { status: 403 });
     }
