@@ -5,11 +5,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X, LogOut } from 'lucide-react';
+import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X, LogOut, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
 import { LINE_SUPPORT_URL } from '@/lib/review-eligibility';
+import { parseUsageMb } from '@/lib/usage-mb';
 
 interface Usage {
   status?: string;
@@ -66,6 +67,36 @@ const formatTime = (value: string | null) => {
   return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
 };
 
+type SortKey = 'default' | 'plan' | 'usage' | 'note' | 'notInstalled';
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'default', label: '購買順序' },
+  { key: 'plan', label: '方案名稱' },
+  { key: 'usage', label: '用量' },
+  { key: 'note', label: '備註名稱' },
+  { key: 'notInstalled', label: '未安裝優先' },
+];
+const SORT_STORAGE_KEY = 'firstroamlink-app-sort';
+function readSortPreference(): { key: SortKey; desc: boolean } {
+  try {
+    if (typeof window === 'undefined') return { key: 'default', desc: false };
+    const saved = JSON.parse(window.localStorage.getItem(SORT_STORAGE_KEY) || '{}');
+    const key = SORT_OPTIONS.some(option => option.key === saved.key) ? saved.key as SortKey : 'default';
+    return { key, desc: saved.desc === true };
+  } catch {
+    return { key: 'default', desc: false };
+  }
+}
+const collator = new Intl.Collator('zh-Hant', { numeric: true, sensitivity: 'base' });
+// 安裝進度：未安裝 → 已下載/已安裝 → 已啟用 → 已到期等
+const installRank = (card: { pending: boolean; usage: Usage | null }) => {
+  if (card.pending) return 1;
+  const status = card.usage?.status;
+  if (!status || status === '尚未安裝') return 0;
+  if (status === '已下載' || status === '已安裝') return 2;
+  if (status === '已啟用') return 3;
+  return 4;
+};
+
 const statusClass = (status?: string) => {
   if (status === '已啟用') return 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30';
   if (status === '已安裝' || status === '已下載') return 'bg-cyan-500/15 text-cyan-200 border-cyan-500/30';
@@ -99,6 +130,14 @@ export default function EsimAppPage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [loadingCards, setLoadingCards] = useState(false);
   const [query, setQuery] = useState('');
+  // 排序偏好存在這台裝置；初始畫面是「載入中」，不會有 hydration 不一致
+  const [sortKey, setSortKey] = useState<SortKey>(() => readSortPreference().key);
+  const [sortDesc, setSortDesc] = useState(() => readSortPreference().desc);
+  const changeSort = (key: SortKey, desc: boolean) => {
+    setSortKey(key);
+    setSortDesc(desc);
+    try { window.localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ key, desc })); } catch { /* 私密模式等 */ }
+  };
   const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const cardsRef = useRef<EsimCard[]>([]);
@@ -542,10 +581,27 @@ export default function EsimAppPage() {
   }, [cards, activeTab, cardTabs]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return tabCards;
-    return tabCards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber]
+    const matched = !q ? tabCards : tabCards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber]
       .some(value => String(value || '').toLowerCase().includes(q)));
-  }, [tabCards, query]);
+    if (sortKey === 'default') return sortDesc ? [...matched].reverse() : matched;
+    const dir = sortDesc ? -1 : 1;
+    const text = (value: string) => value.trim();
+    return [...matched].sort((a, b) => {
+      let result = 0;
+      if (sortKey === 'plan') result = collator.compare(text(a.planName), text(b.planName));
+      else if (sortKey === 'note') {
+        // 沒備註的永遠排最後
+        const an = text(a.note), bn = text(b.note);
+        if (!an || !bn) return an ? -1 : bn ? 1 : 0;
+        result = collator.compare(an, bn);
+      } else if (sortKey === 'usage') {
+        const au = parseUsageMb(a.usage?.usedData), bu = parseUsageMb(b.usage?.usedData);
+        if (au === null || bu === null) return au !== null ? -1 : bu !== null ? 1 : 0;
+        result = au - bu;
+      } else if (sortKey === 'notInstalled') result = installRank(a) - installRank(b);
+      return result * dir || collator.compare(text(a.note), text(b.note));
+    });
+  }, [tabCards, query, sortKey, sortDesc]);
   const sharedCount = cards.filter(card => card.sharedBy).length;
   const ownCards = cards.filter(card => !card.sharedBy);
   const shareSummary = (() => {
@@ -662,6 +718,15 @@ export default function EsimAppPage() {
             <Search size={15} className="text-white/35" />
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜尋備註、ICCID、方案" className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/30" />
           </label>
+          <label className="relative inline-flex h-9 shrink-0 items-center rounded-xl border border-white/10 bg-white/5 text-xs font-bold text-white/75" title="排序方式">
+            <select value={sortKey} onChange={e => changeSort(e.target.value as SortKey, sortDesc)} aria-label="排序方式" className="h-9 appearance-none bg-transparent pl-2.5 pr-6 outline-none [&>option]:bg-[#1A1A2E]">
+              {SORT_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+            </select>
+            <ChevronDown size={13} className="pointer-events-none absolute right-1.5 text-white/40" />
+          </label>
+          <button type="button" onClick={() => changeSort(sortKey, !sortDesc)} aria-label={sortDesc ? '目前遞減，點一下改遞增' : '目前遞增，點一下改遞減'} title={sortDesc ? '遞減（大→小）' : '遞增（小→大）'} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/75">
+            {sortDesc ? <ArrowDownWideNarrow size={16} /> : <ArrowUpNarrowWide size={16} />}
+          </button>
           {sharingReady && (
             <button type="button" onClick={() => { setSelecting(on => !on); setSelectedIds(new Set()); }} className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-xs font-bold ${selecting ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100' : 'border-white/10 bg-white/5 text-white/70'}`}>
               <CheckSquare size={14} />{selecting ? '取消' : '選取'}
