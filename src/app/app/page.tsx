@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X } from 'lucide-react';
+import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
@@ -293,6 +293,13 @@ export default function EsimAppPage() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  };
+
+  const handleLogout = async () => {
+    if (!window.confirm('確定要登出嗎？')) return;
+    await supabase.auth.signOut();
+    setCards([]);
+    setSelected(null);
   };
 
   useEffect(() => {
@@ -603,6 +610,9 @@ export default function EsimAppPage() {
           <button type="button" onClick={refreshAll} disabled={Boolean(refreshProgress)} aria-label="更新這個分頁的用量" title="更新這個分頁的用量" className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-2 text-[11px] font-bold text-cyan-100 disabled:opacity-70">
             <RefreshCw size={17} className={refreshProgress ? 'animate-spin' : ''} />
             {refreshProgress && `${refreshProgress.done}/${refreshProgress.total}`}
+          </button>
+          <button type="button" onClick={handleLogout} aria-label="登出" title="登出" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white/70">
+            <LogOut size={17} />
           </button>
           {(
             <button type="button" onClick={openBuy} aria-label="新增 eSIM" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-[#ff6b73] to-[#f5bd61] text-[#17131a]">
