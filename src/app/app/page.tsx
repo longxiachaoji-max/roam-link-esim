@@ -5,12 +5,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X, LogOut, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
+import { Check, CheckSquare, ChevronDown, ChevronLeft, Copy, FolderInput, Pencil, Plus, RefreshCw, Search, Square, Trash2, Usb, Users, X, LogOut, ArrowDownWideNarrow, ArrowUpNarrowWide, Cpu } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
 import { LINE_SUPPORT_URL } from '@/lib/review-eligibility';
 import { parseUsageMb } from '@/lib/usage-mb';
+import { formatEid, isValidEid, normalizeEid, shortEid } from '@/lib/eid';
+import { EidEditor } from './eid-editor';
 
 interface Usage {
   status?: string;
@@ -33,6 +35,7 @@ interface EsimCard {
   id: string;
   orderNumber: string;
   note: string;
+  targetEid: string | null;
   planName: string;
   country: string;
   iccid: string | null;
@@ -166,6 +169,11 @@ export default function EsimAppPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<string[] | null>(null);
   const [memberDraft, setMemberDraft] = useState('');
+  const [eidEdit, setEidEdit] = useState<{ ids: string[]; initial: string | null } | null>(null);
+  const [eidSaving, setEidSaving] = useState(false);
+  // 一飛通 App 讀卡機讀到晶片後會開 /app?eid=...，只列出指定給這張晶片的卡
+  const [readerEid, setReaderEid] = useState<string | null>(null);
+  const [readerEidOnly, setReaderEidOnly] = useState(true);
   const [categoryEdit, setCategoryEdit] = useState<{ id: string | null; name: string } | null>(null);
   const [dragOverTab, setDragOverTab] = useState<TabKey | null>(null);
 
@@ -184,9 +192,12 @@ export default function EsimAppPage() {
     if (native) {
       try { window.sessionStorage.setItem('firstroamlink-native-app', '1'); } catch { /* 無法使用 sessionStorage */ }
     }
-    const readerMissing = new URLSearchParams(window.location.search).get('reader') === 'missing';
+    const params = new URLSearchParams(window.location.search);
+    const readerMissing = params.get('reader') === 'missing';
+    const eidParam = normalizeEid(params.get('eid'));
     const timer = window.setTimeout(() => {
       setInNativeApp(native);
+      if (isValidEid(eidParam)) setReaderEid(eidParam);
       if (readerMissing) {
         setToast('找不到 App 內建的讀卡機，請安裝最新版一飛通 eSIM App');
         window.setTimeout(() => setToast(''), 5000);
@@ -248,6 +259,24 @@ export default function EsimAppPage() {
     } catch (err) {
       setCards(previous);
       showToast(err instanceof Error ? err.message : '移動失敗');
+    }
+  };
+
+  const saveTargetEid = async (ids: string[], eid: string | null) => {
+    setEidSaving(true);
+    try {
+      const result = await dashboardAction({ action: 'set_target_eid', order_item_ids: ids, eid: eid || '' }) as { updated?: string[] };
+      const updated = new Set(result.updated || ids);
+      setCards(current => current.map(card => (updated.has(card.id) ? { ...card, targetEid: eid } : card)));
+      setSelected(current => (current && updated.has(current.id) ? { ...current, targetEid: eid } : current));
+      showToast(eid ? `已指定 ${updated.size} 張到晶片 EID ${shortEid(eid)}` : `已取消 ${updated.size} 張的晶片指定`);
+      setEidEdit(null);
+      setSelecting(false);
+      setSelectedIds(new Set());
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '儲存失敗');
+    } finally {
+      setEidSaving(false);
     }
   };
 
@@ -575,13 +604,14 @@ export default function EsimAppPage() {
     return counts;
   }, [cardTabs]);
   const tabCards = useMemo(() => {
+    if (readerEid && readerEidOnly) return cards.filter(card => card.targetEid === readerEid);
     if (activeTab === 'all') return cards;
     if (activeTab === 'shared') return cards.filter(card => card.sharedBy);
     return cards.filter(card => cardTabs.get(card.id) === activeTab);
-  }, [cards, activeTab, cardTabs]);
+  }, [cards, activeTab, cardTabs, readerEid, readerEidOnly]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matched = !q ? tabCards : tabCards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber]
+    const matched = !q ? tabCards : tabCards.filter(card => [card.note, card.iccid, card.planName, card.country, card.orderNumber, card.targetEid]
       .some(value => String(value || '').toLowerCase().includes(q)));
     if (sortKey === 'default') return sortDesc ? [...matched].reverse() : matched;
     const dir = sortDesc ? -1 : 1;
@@ -609,6 +639,9 @@ export default function EsimAppPage() {
     for (const card of ownCards) for (const e of card.sharedWith) map.set(e, [...(map.get(e) || []), card.id]);
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   })();
+  const knownEids = [...new Set([readerEid, ...cards.map(card => card.targetEid)].filter((eid): eid is string => Boolean(eid)))];
+  const readerEidCards = readerEid ? cards.filter(card => card.targetEid === readerEid) : [];
+  const readerEidPending = readerEidCards.filter(card => installRank(card) <= 1).length;
   const selectedOwnIds = [...selectedIds].filter(id => ownCards.some(card => card.id === id));
   const isOwnCard = (card: EsimCard | null) => Boolean(card && !card.sharedBy);
   const refreshAll = () => refreshMany(tabCards.filter(card => card.canQueryUsage));
@@ -736,6 +769,24 @@ export default function EsimAppPage() {
         </div>
       </header>
 
+      {readerEid && (
+        <div className="mx-auto mt-3 flex max-w-7xl flex-wrap items-center gap-2 px-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-sm">
+            <Cpu size={17} className="shrink-0 text-cyan-200" />
+            <div className="min-w-0">
+              <p className="font-bold text-cyan-50">讀卡機晶片 EID {shortEid(readerEid)}</p>
+              <p className="text-[11px] text-cyan-100/70">
+                {readerEidCards.length ? `指定給這張晶片 ${readerEidCards.length} 張，待安裝 ${readerEidPending} 張` : '還沒有卡指定給這張晶片。切到「全部」選取卡片後按「指定晶片」'}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={() => setReaderEidOnly(on => !on)} className="h-10 shrink-0 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-bold text-white/80">
+            {readerEidOnly ? '顯示全部卡片' : '只看這張晶片'}
+          </button>
+          <button type="button" onClick={() => { setReaderEid(null); window.history.replaceState(null, '', '/app'); }} aria-label="關閉晶片篩選" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-white/60"><X size={16} /></button>
+        </div>
+      )}
+
       <section className="mx-auto grid max-w-7xl grid-cols-2 gap-2 px-3 pt-3 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {loadingCards && !cards.length && <p className="col-span-full py-16 text-center text-white/40">載入中...</p>}
         {!loadingCards && !cards.length && (
@@ -802,6 +853,7 @@ export default function EsimAppPage() {
               )}
             </div>
             <p className="mt-0.5 text-[10px] text-white/40">更新 {formatTime(card.usageCheckedAt)}</p>
+            {card.targetEid && <p className={`mt-1 truncate font-mono text-[10px] ${card.targetEid === readerEid ? 'text-cyan-200' : 'text-white/45'}`} title={formatEid(card.targetEid)}>💳 晶片 {shortEid(card.targetEid)}</p>}
             {card.sharedBy && <p className="mt-1 truncate text-[10px] text-amber-200/70">🔗 由 {card.sharedBy} 共享</p>}
             {!card.sharedBy && card.sharedWith.length > 0 && <p className="mt-1 truncate text-[10px] text-cyan-200/60">👥 已共享 {card.sharedWith.length} 人</p>}
             {activeTab === 'all' && card.categoryId && categoryIds.has(card.categoryId) && (
@@ -821,6 +873,9 @@ export default function EsimAppPage() {
             <button type="button" disabled={!selectedOwnIds.length} onClick={() => setShareTarget(selectedOwnIds)} title="共享選取的卡（只限自己購買的卡）" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 text-sm font-bold text-cyan-100 disabled:opacity-40">
               <Users size={16} />共享
             </button>
+            <button type="button" disabled={!selectedOwnIds.length} onClick={() => setEidEdit({ ids: selectedOwnIds, initial: readerEid })} title="指定要安裝到哪張晶片（只限自己購買的卡）" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-bold text-white/85 disabled:opacity-40">
+              <Cpu size={16} />指定晶片
+            </button>
             <button type="button" disabled={!selectedIds.size} onClick={() => setMoveOpen(true)} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317] disabled:opacity-40">
               <FolderInput size={16} />移到
             </button>
@@ -836,7 +891,19 @@ export default function EsimAppPage() {
             <dt className="text-white/40">狀態</dt><dd>{selected.pending ? '配發中' : selected.usage?.status || '未查詢'}</dd>
             <dt className="text-white/40">用量</dt><dd className="font-bold">{selected.usage?.usedData ?? '-'}</dd>
             <dt className="text-white/40">更新時間</dt><dd className="text-white/70">{formatTime(selected.usageCheckedAt)}</dd>
+            <dt className="text-white/40">安裝晶片</dt>
+            <dd className="flex min-w-0 items-center gap-2">
+              <span className={`min-w-0 break-all font-mono text-xs ${selected.targetEid ? 'text-white/85' : 'text-white/35'}`}>{selected.targetEid ? formatEid(selected.targetEid) : '未指定'}</span>
+              {isOwnCard(selected) && (
+                <button type="button" onClick={() => setEidEdit({ ids: [selected.id], initial: selected.targetEid })} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 text-[11px] font-bold text-white/80">
+                  <Cpu size={12} />{selected.targetEid ? '變更' : '指定'}
+                </button>
+              )}
+            </dd>
           </dl>
+          {readerEid && selected.targetEid && selected.targetEid !== readerEid && (
+            <p className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[11px] leading-5 text-red-100">⚠️ 這張卡指定的晶片（EID {shortEid(selected.targetEid)}）跟讀卡機上的晶片（EID {shortEid(readerEid)}）不同，請確認沒有插錯卡。</p>
+          )}
           {(selected.usage?.status === '已下載' || selected.usage?.status === '已安裝') && (
             <p className="mt-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100/85">
               電信商還沒回報這張卡「已啟用」。實際上可能已經在用，用量通常要等電信商回報啟用後才會一次補上，可能延遲數小時。
@@ -936,7 +1003,7 @@ export default function EsimAppPage() {
                 {selected.androidInstallUrl && (
                   <a href={selected.androidInstallUrl} className="flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-400 to-lime-300 text-sm font-black text-[#071317]">Android 一鍵安裝</a>
                 )}
-                <a href={buildEasyEuiccIntentUrl(lpa, inNativeApp ? FIRSTROAMLINK_APP_PACKAGE : undefined, selected.country, selected.iccid, selected.note, selected.planName)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
+                <a href={buildEasyEuiccIntentUrl(lpa, inNativeApp ? FIRSTROAMLINK_APP_PACKAGE : undefined, selected.country, selected.iccid, selected.note, selected.planName, selected.targetEid)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
                   {inNativeApp ? '用讀卡機安裝' : '用 EasyEUICC 安裝'}
                   <span className="text-[11px] font-normal text-white/45">{inNativeApp ? 'USB 讀卡機／實體 eSIM 卡' : 'Android ＋ 實體 eSIM 卡（可插拔 eSIM）'}</span>
                 </a>
@@ -1015,6 +1082,19 @@ export default function EsimAppPage() {
               </div>
             );
           })()}
+        </Sheet>
+      )}
+
+      {eidEdit && (
+        <Sheet title={`指定安裝晶片${eidEdit.ids.length > 1 ? `（${eidEdit.ids.length} 張）` : ''}`} onClose={() => setEidEdit(null)}>
+          <EidEditor
+            initialEid={eidEdit.initial}
+            knownEids={knownEids}
+            count={eidEdit.ids.length}
+            saving={eidSaving}
+            onSave={eid => void saveTargetEid(eidEdit.ids, eid)}
+            onCancel={() => setEidEdit(null)}
+          />
         </Sheet>
       )}
 

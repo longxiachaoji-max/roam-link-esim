@@ -1,6 +1,6 @@
 {
-  "versionCode": 823,
-  "versionName": "1.8.3",
-  "apkUrl": "https://firstesim.space/downloads/firstroamlink-esim.apk?v=823",
-  "notes": "安裝完成預設名稱改為「備註＋方案＋安裝日期」；修正桌面圖示打不開；重複安裝提醒。"
+  "versionCode": 824,
+  "versionName": "1.8.4",
+  "apkUrl": "https://firstesim.space/downloads/firstroamlink-esim.apk?v=824",
+  "notes": "讀卡機讀到晶片後可直接查看網站上指定給這張晶片的待安裝卡片；安裝時若晶片 EID 和網站指定的不同會提醒"
 }

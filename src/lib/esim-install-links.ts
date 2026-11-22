@@ -30,6 +30,7 @@ export const FIRSTROAMLINK_EXPECTED_ICCID_EXTRA = 'firstroamlink_expected_iccid'
 export const FIRSTROAMLINK_NOTE_EXTRA = 'firstroamlink_note';
 
 // 方案名稱精簡版，給 App 當預設名稱用（eSIM 名稱上限 64 bytes）：「台灣 高速上網 3天/吃到飽」→「台灣3天/吃到飽」
+export const FIRSTROAMLINK_EXPECTED_EID_EXTRA = 'firstroamlink_expected_eid';
 export const FIRSTROAMLINK_PLAN_EXTRA = 'firstroamlink_plan';
 
 export function compactPlanName(planName?: string | null) {
@@ -39,7 +40,7 @@ export function compactPlanName(planName?: string | null) {
     .slice(0, 24);
 }
 
-export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE, namePrefix?: string | null, iccid?: string | null, note?: string | null, planName?: string | null) {
+export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE, namePrefix?: string | null, iccid?: string | null, note?: string | null, planName?: string | null, expectedEid?: string | null) {
   const data = lpa.replace(/^LPA:/i, '');
   const isOurApp = targetPackage === FIRSTROAMLINK_APP_PACKAGE;
   const fallback = isOurApp ? FIRSTROAMLINK_READER_MISSING_URL : EASYEUICC_DOWNLOAD_URL;
@@ -52,7 +53,9 @@ export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EAS
   const noteExtra = noteText ? `S.${FIRSTROAMLINK_NOTE_EXTRA}=${encodeURIComponent(noteText)};` : '';
   const plan = isOurApp ? compactPlanName(planName) : '';
   const planExtra = plan ? `S.${FIRSTROAMLINK_PLAN_EXTRA}=${encodeURIComponent(plan)};` : '';
-  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};${prefixExtra}${iccidExtra}${noteExtra}${planExtra}S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+  const eidDigits = isOurApp ? String(expectedEid || '').replace(/\D/g, '') : '';
+  const eidExtra = eidDigits.length === 32 ? `S.${FIRSTROAMLINK_EXPECTED_EID_EXTRA}=${eidDigits};` : '';
+  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};${prefixExtra}${iccidExtra}${noteExtra}${planExtra}${eidExtra}S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
 // 判斷是否在一飛通 Android App（Trusted Web Activity）裡：

@@ -6,7 +6,7 @@ const contentSecurityPolicy = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self' https://payment.ecpay.com.tw",
-  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
@@ -22,7 +22,7 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' }
 ];
 
 const nextConfig: NextConfig = {

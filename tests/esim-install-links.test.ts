@@ -54,3 +54,10 @@ test('compacts the plan name for the default eSIM name', async () => {
   assert.equal(compactPlanName('日本 本地網路SoftBank 高速上網 1天/每日10GB'), '日本SoftBank1天/每日10GB');
   assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', null, null, '台灣 高速上網 3天/吃到飽').includes(`S.firstroamlink_plan=${encodeURIComponent('台灣3天/吃到飽')};`));
 });
+
+test('passes the assigned chip EID only to our app', async () => {
+  const { buildEasyEuiccIntentUrl, FIRSTROAMLINK_APP_PACKAGE } = await import('../src/lib/esim-install-links.ts');
+  const eid = '89086030202200000026000498365229';
+  assert.match(buildEasyEuiccIntentUrl('LPA:1$a$b', FIRSTROAMLINK_APP_PACKAGE, null, null, null, null, eid), /S\.firstroamlink_expected_eid=89086030202200000026000498365229;/);
+  assert.doesNotMatch(buildEasyEuiccIntentUrl('LPA:1$a$b', undefined, null, null, null, null, eid), /expected_eid/);
+});
