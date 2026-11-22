@@ -95,9 +95,11 @@ export async function sendCustomerEsimDeliveryEmail(supabase: SupabaseClient, or
       html: `
 <div style="margin:0;padding:24px 12px;background:#f3f5f8;font-family:-apple-system,BlinkMacSystemFont,'PingFang TC','Microsoft JhengHei',Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;">
-    <tr><td style="background:#1a1a2e;padding:24px 28px;">
-      <div style="font-size:13px;color:#f5bd61;font-weight:700;letter-spacing:1px;">一飛通全球漫遊 FirstRoamLink</div>
-      <div style="margin-top:8px;font-size:24px;color:#ffffff;font-weight:800;">eSIM 已配發完成 ✅</div>
+    <tr><td style="padding:24px 28px 8px;text-align:center;">
+      <img src="${siteUrl}/brand/email-logo.jpg" width="180" alt="一飛通全球漫遊 FirstRoamLink" style="display:inline-block;width:180px;max-width:60%;height:auto;border:0;">
+    </td></tr>
+    <tr><td style="padding:8px 28px 4px;text-align:center;">
+      <div style="font-size:24px;color:#1a1a2e;font-weight:800;">eSIM 已配發完成 ✅</div>
     </td></tr>
     <tr><td style="padding:24px 28px 8px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#52606d;">
