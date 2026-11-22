@@ -23,13 +23,24 @@ export const FIRSTROAMLINK_READER_MISSING_URL = 'https://firstesim.space/app?rea
 // 一飛通 App 安裝完成後會用「國家＋安裝日期」當預設名稱（例如：台灣1123），國家由這個 extra 帶入
 export const FIRSTROAMLINK_NAME_PREFIX_EXTRA = 'firstroamlink_name_prefix';
 
-export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE, namePrefix?: string | null) {
+// 一飛通 App 安裝前會比對卡片內是否已經有這張 eSIM（防止重複安裝）
+export const FIRSTROAMLINK_EXPECTED_ICCID_EXTRA = 'firstroamlink_expected_iccid';
+
+// 卡片備註：有備註時，一飛通 App 安裝完成後用備註當預設名稱
+export const FIRSTROAMLINK_NOTE_EXTRA = 'firstroamlink_note';
+
+export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE, namePrefix?: string | null, iccid?: string | null, note?: string | null) {
   const data = lpa.replace(/^LPA:/i, '');
   const isOurApp = targetPackage === FIRSTROAMLINK_APP_PACKAGE;
   const fallback = isOurApp ? FIRSTROAMLINK_READER_MISSING_URL : EASYEUICC_DOWNLOAD_URL;
   const prefix = isOurApp ? String(namePrefix || '').replace(/\s+/g, '').slice(0, 20) : '';
   const prefixExtra = prefix ? `S.${FIRSTROAMLINK_NAME_PREFIX_EXTRA}=${encodeURIComponent(prefix)};` : '';
-  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};${prefixExtra}S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+  const iccidDigits = isOurApp ? String(iccid || '').replace(/[^0-9A-Fa-f]/g, '').slice(0, 22) : '';
+  const iccidExtra = iccidDigits ? `S.${FIRSTROAMLINK_EXPECTED_ICCID_EXTRA}=${iccidDigits};` : '';
+  // eSIM 名稱上限 64 bytes（中文約 21 字），; 與 # 會破壞 intent 格式
+  const noteText = isOurApp ? String(note || '').replace(/[;#\r\n]/g, ' ').trim().slice(0, 20) : '';
+  const noteExtra = noteText ? `S.${FIRSTROAMLINK_NOTE_EXTRA}=${encodeURIComponent(noteText)};` : '';
+  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};${prefixExtra}${iccidExtra}${noteExtra}S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
 // 判斷是否在一飛通 Android App（Trusted Web Activity）裡：

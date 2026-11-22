@@ -1,6 +1,6 @@
 {
-  "versionCode": 818,
-  "versionName": "1.7.9",
-  "apkUrl": "https://firstesim.space/downloads/firstroamlink-esim.apk?v=818",
-  "notes": "安裝完成可直接命名（國家＋日期）與選擇是否啟用；新增 App 內更新通知。"
+  "versionCode": 820,
+  "versionName": "1.8.0",
+  "apkUrl": "https://firstesim.space/downloads/firstroamlink-esim.apk?v=820",
+  "notes": "安裝前會先列出卡片內現有的 eSIM，避免重複安裝；預設名稱改用網站卡片備註。"
 }

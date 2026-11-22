@@ -871,7 +871,7 @@ export default function EsimAppPage() {
                 {selected.androidInstallUrl && (
                   <a href={selected.androidInstallUrl} className="flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-400 to-lime-300 text-sm font-black text-[#071317]">Android 一鍵安裝</a>
                 )}
-                <a href={buildEasyEuiccIntentUrl(lpa, inNativeApp ? FIRSTROAMLINK_APP_PACKAGE : undefined, selected.country)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
+                <a href={buildEasyEuiccIntentUrl(lpa, inNativeApp ? FIRSTROAMLINK_APP_PACKAGE : undefined, selected.country, selected.iccid, selected.note)} className="flex h-12 flex-col items-center justify-center rounded-xl border border-white/15 bg-white/5 text-sm font-bold">
                   {inNativeApp ? '用讀卡機安裝' : '用 EasyEUICC 安裝'}
                   <span className="text-[11px] font-normal text-white/45">{inNativeApp ? 'USB 讀卡機／實體 eSIM 卡' : 'Android ＋ 實體 eSIM 卡（可插拔 eSIM）'}</span>
                 </a>

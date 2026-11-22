@@ -37,3 +37,13 @@ test('passes the country as the default name prefix only to the FirstRoamLink ap
   assert.ok(!buildEasyEuiccIntentUrl(LPA, undefined, '台灣').includes('firstroamlink_name_prefix'));
   assert.ok(!buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '').includes('firstroamlink_name_prefix'));
 });
+
+test('passes the expected ICCID only to the FirstRoamLink app', () => {
+  assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', '8986 0012').includes('S.firstroamlink_expected_iccid=89860012;'));
+  assert.ok(!buildEasyEuiccIntentUrl(LPA, undefined, '台灣', '89860012').includes('firstroamlink_expected_iccid'));
+});
+
+test('passes the card note to the FirstRoamLink app', () => {
+  assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', null, '德安;一號').includes(`S.firstroamlink_note=${encodeURIComponent('德安 一號')};`));
+  assert.ok(!buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', null, '  ').includes('firstroamlink_note'));
+});
