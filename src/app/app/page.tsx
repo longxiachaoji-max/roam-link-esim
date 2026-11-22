@@ -262,14 +262,14 @@ export default function EsimAppPage() {
     const ownIds = ids.filter(id => cards.find(card => card.id === id && !card.sharedBy));
     if (!value || !ownIds.length) { showToast('請選擇自己購買的 eSIM'); return; }
     try {
-      await dashboardAction({ action: 'share_cards', order_item_ids: ownIds, email: value });
+      const result = await dashboardAction({ action: 'share_cards', order_item_ids: ownIds, email: value });
       setCards(current => current.map(card => (ownIds.includes(card.id) && !card.sharedWith.includes(value) ? { ...card, sharedWith: [...card.sharedWith, value] } : card)));
       setSelected(current => (current && ownIds.includes(current.id) && !current.sharedWith.includes(value) ? { ...current, sharedWith: [...current.sharedWith, value] } : current));
       setMemberDraft('');
       setShareTarget(null);
       setSelecting(false);
       setSelectedIds(new Set());
-      showToast(`已共享 ${ownIds.length} 張給 ${value}`);
+      showToast(`已共享 ${ownIds.length} 張給 ${value}${result?.notified ? '，已寄信通知對方' : ''}`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : '共享失敗');
     }

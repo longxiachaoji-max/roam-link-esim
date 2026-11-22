@@ -2,6 +2,7 @@ import { after, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticationErrorResponse, getServerSupabase, requireAuthenticatedUser } from '@/lib/server-auth';
 import { reconcilePendingMicroesimItems } from '@/lib/microesim-fulfillment';
+import { sendEsimShareEmail } from '@/lib/esim-share-email';
 import { ensureCustomer, findCustomerByEmail, normalizeMemberEmail } from '@/lib/esim-dashboard';
 
 export const dynamic = 'force-dynamic';
@@ -231,12 +232,23 @@ export async function POST(request: Request) {
       if (!emails.has(memberEmail) && emails.size >= MAX_SHARE_EMAILS) {
         return NextResponse.json({ error: `最多共享給 ${MAX_SHARE_EMAILS} 個 Email` }, { status: 400 });
       }
-      const { error } = await supabase.from('esim_card_shares').upsert(
+      const { data: inserted, error } = await supabase.from('esim_card_shares').upsert(
         allowed.map(id => ({ order_item_id: id, member_email: memberEmail, owner_customer_id: customer.id })),
         { onConflict: 'order_item_id,member_email', ignoreDuplicates: true }
-      );
+      ).select('order_item_id');
       if (error) throw error;
-      return NextResponse.json({ success: true, count: allowed.length });
+      // 只通知這次新共享的卡，重複共享同一張不會再寄信
+      const newItemIds = (inserted || []).map(row => (row as { order_item_id: string }).order_item_id);
+      if (newItemIds.length) {
+        after(async () => {
+          try {
+            await sendEsimShareEmail(supabase, { ownerEmail: email, memberEmail, orderItemIds: newItemIds });
+          } catch (mailError) {
+            console.error('eSIM share email failed:', mailError);
+          }
+        });
+      }
+      return NextResponse.json({ success: true, count: allowed.length, notified: newItemIds.length > 0 });
     }
 
     // 分類：每個人管理自己的分類（共享給我的卡也可以放進我的分類）
