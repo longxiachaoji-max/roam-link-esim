@@ -31,6 +31,8 @@ import { OFFICIAL_INSTAGRAM_URL, OFFICIAL_THREADS_URL } from '@/lib/social-profi
 
 type EcpayPaymentMethod = 'Credit' | 'ApplePay' | 'BARCODE';
 const CART_STORAGE_KEY = 'roam-link-cart-v1';
+const MAX_CART_ITEMS = 100; // 與結帳 API 上限相同
+const createCartUid = () => Date.now() + Math.floor(Math.random() * 1000000);
 
 interface PublicSiteSettings {
   hero_badge: string;
@@ -56,6 +58,28 @@ interface HomeEsimDestination {
 function getCountryDestinationHref(country: string) {
   const destination = getEsimDestinationForCountry(country) || createAutomaticEsimDestination(country);
   return destination ? getEsimDestinationHref(destination) : '/esim';
+}
+
+// 數量可直接輸入；離開欄位或按 Enter 時才更新，輸入 0 會移除該商品
+function CartQuantityInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = Number(draft.replace(/\D/g, ''));
+    setDraft(null);
+    if (draft.trim() !== '' && parsed !== value) onCommit(parsed);
+  };
+  return (
+    <input
+      inputMode="numeric"
+      aria-label="數量"
+      value={draft ?? String(value)}
+      onChange={event => setDraft(event.target.value.replace(/\D/g, '').slice(0, 3))}
+      onBlur={commit}
+      onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+      className="h-10 w-16 rounded-lg border border-white/15 bg-black/30 text-center text-lg font-black outline-none focus:border-coral"
+    />
+  );
 }
 
 export default function Home() {
@@ -323,8 +347,33 @@ export default function Home() {
     ? destinations
     : destinations.filter(destination => destination.region === activeRegion);
 
-  const removeFromCart = (uid: number) => {
-    setCart(cart.filter(item => item.uid !== uid));
+  // 購物車內同一方案會存成多筆（結帳 API 以重複的商品 ID 代表數量），畫面上合併成一行顯示數量
+  const cartLines = useMemo(() => {
+    const lines = new Map<string, { item: (typeof cart)[number]; quantity: number }>();
+    for (const item of cart) {
+      const line = lines.get(item.id);
+      if (line) line.quantity += 1;
+      else lines.set(item.id, { item, quantity: 1 });
+    }
+    return [...lines.values()];
+  }, [cart]);
+
+  const setCartLineQuantity = (productId: string, quantity: number) => {
+    const otherCount = cart.filter(item => item.id !== productId).length;
+    const next = Math.max(0, Math.min(MAX_CART_ITEMS - otherCount, Math.floor(quantity) || 0));
+    const sameItems = cart.filter(item => item.id === productId);
+    if (!sameItems.length) return;
+    if (quantity > next) showToast(`⚠️ 一次最多購買 ${MAX_CART_ITEMS} 張`);
+    const template = sameItems[0];
+    const kept = sameItems.slice(0, next);
+    while (kept.length < next) kept.push({ ...template, uid: createCartUid() + kept.length });
+    const result: typeof cart = [];
+    let inserted = false;
+    for (const item of cart) {
+      if (item.id !== productId) result.push(item);
+      else if (!inserted) { result.push(...kept); inserted = true; }
+    }
+    setCart(result);
   };
 
   const showToast = (msg: string) => {
@@ -1270,19 +1319,26 @@ export default function Home() {
                   <p>購物車是空的</p>
                 </div>
               ) : (
-                cart.map(item => (
-                  <div key={item.uid} className="shrink-0 bg-card-bg p-4 rounded-xl flex items-center justify-between gap-3 border border-white/5">
-                    <div className="min-w-0 flex items-center gap-3">
-                      <span className="text-3xl">{item.flag}</span>
-                      <div className="min-w-0 break-words">
-                        <div className="font-bold">{item.country} {item.data}</div>
-                        {item.hotspot_sharing && <div className="text-sm text-cyan">{item.hotspot_sharing}</div>}
-                        <div className="text-sm text-muted">{item.days}</div>
+                cartLines.map(({ item, quantity }) => (
+                  <div key={item.id} className="shrink-0 bg-card-bg p-4 rounded-xl flex flex-col gap-3 border border-white/5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex items-center gap-3">
+                        <span className="text-3xl">{item.flag}</span>
+                        <div className="min-w-0 break-words">
+                          <div className="font-bold">{item.country} {item.data}</div>
+                          {item.hotspot_sharing && <div className="text-sm text-cyan">{item.hotspot_sharing}</div>}
+                          <div className="text-sm text-muted">{item.days}・單價 NT${item.price}</div>
+                        </div>
                       </div>
+                      <button onClick={() => setCartLineQuantity(item.id, 0)} aria-label="移除商品" className="grid h-11 w-11 shrink-0 place-items-center text-muted hover:text-white"><X size={18} /></button>
                     </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                      <div className="font-black text-coral">NT${item.price}</div>
-                      <button onClick={() => removeFromCart(item.uid)} aria-label="移除商品" className="grid h-11 w-11 place-items-center text-muted hover:text-white"><X size={18} /></button>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => setCartLineQuantity(item.id, quantity - 1)} aria-label="減少數量" className="grid h-10 w-10 place-items-center rounded-lg bg-white/10 text-xl font-bold">−</button>
+                        <CartQuantityInput value={quantity} onCommit={value => setCartLineQuantity(item.id, value)} />
+                        <button type="button" onClick={() => setCartLineQuantity(item.id, quantity + 1)} aria-label="增加數量" className="grid h-10 w-10 place-items-center rounded-lg bg-white/10 text-xl font-bold">+</button>
+                      </div>
+                      <div className="font-black text-coral">NT${(Number(item.price) * quantity).toLocaleString()}</div>
                     </div>
                   </div>
                 ))
