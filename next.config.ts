@@ -36,6 +36,16 @@ const nextConfig: NextConfig = {
     return [{
       source: '/:path*',
       headers: securityHeaders
+    }, {
+      // 一飛通 App 啟動時讀取的版本資訊，不要快取
+      source: '/app-update.json',
+      headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }]
+    }, {
+      source: '/downloads/:file*.apk',
+      headers: [
+        { key: 'Content-Type', value: 'application/vnd.android.package-archive' },
+        { key: 'Content-Disposition', value: 'attachment; filename="firstroamlink-esim.apk"' }
+      ]
     }];
   },
   images: {
