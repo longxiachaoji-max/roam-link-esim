@@ -31,3 +31,9 @@ test('targets the FirstRoamLink app package when running inside it', () => {
   assert.equal(isInFirstRoamLinkApp({ referrer: '', remembered: null, standalone: false, userAgent: androidUa }), false);
   assert.equal(isInFirstRoamLinkApp({ referrer: 'https://www.google.com/', remembered: null }), false);
 });
+
+test('passes the country as the default name prefix only to the FirstRoamLink app', () => {
+  assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台 灣').includes(`S.firstroamlink_name_prefix=${encodeURIComponent('台灣')};`));
+  assert.ok(!buildEasyEuiccIntentUrl(LPA, undefined, '台灣').includes('firstroamlink_name_prefix'));
+  assert.ok(!buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '').includes('firstroamlink_name_prefix'));
+});

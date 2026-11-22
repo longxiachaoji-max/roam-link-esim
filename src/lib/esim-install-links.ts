@@ -20,10 +20,16 @@ export function buildIosInstallUrl(lpa: string, storedUrl?: string | null) {
 // 在一飛通 App 裡找不到讀卡機畫面時，不要跳去 EasyEUICC 官網，留在管理頁並提示更新 App。
 export const FIRSTROAMLINK_READER_MISSING_URL = 'https://firstesim.space/app?reader=missing';
 
-export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE) {
+// 一飛通 App 安裝完成後會用「國家＋安裝日期」當預設名稱（例如：台灣1123），國家由這個 extra 帶入
+export const FIRSTROAMLINK_NAME_PREFIX_EXTRA = 'firstroamlink_name_prefix';
+
+export function buildEasyEuiccIntentUrl(lpa: string, targetPackage: string = EASYEUICC_PACKAGE, namePrefix?: string | null) {
   const data = lpa.replace(/^LPA:/i, '');
-  const fallback = targetPackage === FIRSTROAMLINK_APP_PACKAGE ? FIRSTROAMLINK_READER_MISSING_URL : EASYEUICC_DOWNLOAD_URL;
-  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+  const isOurApp = targetPackage === FIRSTROAMLINK_APP_PACKAGE;
+  const fallback = isOurApp ? FIRSTROAMLINK_READER_MISSING_URL : EASYEUICC_DOWNLOAD_URL;
+  const prefix = isOurApp ? String(namePrefix || '').replace(/\s+/g, '').slice(0, 20) : '';
+  const prefixExtra = prefix ? `S.${FIRSTROAMLINK_NAME_PREFIX_EXTRA}=${encodeURIComponent(prefix)};` : '';
+  return `intent:${data}#Intent;scheme=LPA;package=${targetPackage};${prefixExtra}S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
 // 判斷是否在一飛通 Android App（Trusted Web Activity）裡：
