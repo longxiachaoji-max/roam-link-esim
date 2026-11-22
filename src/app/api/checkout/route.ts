@@ -1,3 +1,4 @@
+import { summarizeProductNames } from '@/lib/product-summary';
 import { after, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { isDealerReferralDiscount, isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
@@ -314,12 +315,12 @@ export async function POST(request: Request) {
             await resend.emails.send({
               from: `一飛通全球漫遊 FirstRoamLink <${fromEmail}>`,
               to: [notifyEmail],
-              subject: `待補 eSIM 訂單：${pendingProducts.map(product => product.name).join('、')}`,
+              subject: `待補 eSIM 訂單：${summarizeProductNames(pendingProducts.map(product => product.name))}`,
               html: `
                 <h1>有一筆訂單需要補 eSIM</h1>
                 <p><strong>訂單：</strong>${order.order_number || order.id}</p>
                 <p><strong>客戶：</strong>${email}</p>
-                <p><strong>商品：</strong>${pendingProducts.map(product => product.name).join('、')}</p>
+                <p><strong>商品：</strong>${summarizeProductNames(pendingProducts.map(product => product.name))}</p>
                 <p><strong>實付：</strong>NT$${tokensUsed}</p>
                 <p>請到後台訂單管理補上 eSIM 資料。</p>
               `,
@@ -337,7 +338,7 @@ export async function POST(request: Request) {
               '<b>有一筆訂單需要補 eSIM</b>',
               `訂單：<code>${escapeTelegramHtml(order.order_number || order.id)}</code>`,
               `客戶：${escapeTelegramHtml(email)}`,
-              `商品：${escapeTelegramHtml(pendingProducts.map(product => product.name).join('、'))}`,
+              `商品：${escapeTelegramHtml(summarizeProductNames(pendingProducts.map(product => product.name)))}`,
               `實付：NT$${tokensUsed}`,
               `後台：${adminUrl}`
             ].join('\n'), notificationSettings.telegram_bot_token, notificationSettings.telegram_chat_id);

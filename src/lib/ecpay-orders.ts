@@ -1,3 +1,4 @@
+import { summarizeProductNames } from '@/lib/product-summary';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { awardReferralRewards } from '@/lib/referrals';
@@ -100,7 +101,7 @@ async function sendPaidOrderNotifications(order: PaidOrder, pendingItems: Fulfil
   if (!pendingItems.length) return;
   const supabase = getAdminClient();
   const settings = await getNotificationSettings(supabase);
-  const pendingNames = pendingItems.map(item => item.products?.name || 'eSIM 商品').join('、');
+  const pendingNames = summarizeProductNames(pendingItems.map(item => item.products?.name));
 
   if (settings.notify_email_enabled && settings.order_notify_email) {
     try {
