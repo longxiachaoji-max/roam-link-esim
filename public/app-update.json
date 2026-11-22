@@ -1,6 +1,6 @@
 {
-  "versionCode": 821,
-  "versionName": "1.8.1",
-  "apkUrl": "https://firstesim.space/downloads/firstroamlink-esim.apk?v=821",
-  "notes": "修正更新後桌面圖示打不開的問題。"
+  "versionCode": 822,
+  "versionName": "1.8.2",
+  "apkUrl": "https://firstesim.space/downloads/firstroamlink-esim.apk?v=822",
+  "notes": "修正桌面圖示打不開；同一組啟用碼重複安裝時會提醒。"
 }
