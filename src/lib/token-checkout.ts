@@ -1,5 +1,8 @@
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// 一筆訂單最多幾張 eSIM（資料庫結帳函式也有相同上限）
+export const MAX_CHECKOUT_ITEMS = 100;
+
 export class TokenCheckoutRequestError extends Error {
   constructor(message: string) {
     super(message);
@@ -23,7 +26,7 @@ export function parseTokenCheckoutRequest(value: unknown) {
   const productIds = requestedIds
     .map(productId => typeof productId === 'string' ? productId.trim() : '')
     .filter(Boolean);
-  if (!productIds.length || productIds.length > 20 || productIds.some(productId => !UUID_PATTERN.test(productId))) {
+  if (!productIds.length || productIds.length > MAX_CHECKOUT_ITEMS || productIds.some(productId => !UUID_PATTERN.test(productId))) {
     throw new TokenCheckoutRequestError('商品資料不正確');
   }
 

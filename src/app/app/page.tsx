@@ -57,7 +57,7 @@ interface Destination { country: string; flag?: string; region?: string; plans: 
 
 type BuyStep = { step: 'country' } | { step: 'plan'; destination: Destination } | { step: 'confirm'; destination: Destination; plan: Plan; option: PlanOption };
 
-const CHECKOUT_BATCH = 20; // 結帳 API 一次最多 20 張
+const CHECKOUT_BATCH = 100; // 結帳 API 一次最多 100 張
 const USAGE_CONCURRENCY = 4;
 const AUTO_REFRESH_MS = 30 * 60_000; // 每 30 分鐘自動更新用量
 

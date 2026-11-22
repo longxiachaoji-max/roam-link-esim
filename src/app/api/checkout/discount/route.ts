@@ -1,3 +1,4 @@
+import { MAX_CHECKOUT_ITEMS } from '@/lib/token-checkout';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { resolveCheckoutDiscount } from '@/lib/checkout-discounts';
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
       ? body.productIds.map((id: unknown) => String(id || '')).filter(Boolean)
       : [];
     const code = String(body.code || '');
-    if (!productIds.length || productIds.length > 20) {
+    if (!productIds.length || productIds.length > MAX_CHECKOUT_ITEMS) {
       return NextResponse.json({ error: '購物車內容不正確' }, { status: 400 });
     }
 
