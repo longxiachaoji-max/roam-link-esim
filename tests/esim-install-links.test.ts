@@ -47,3 +47,10 @@ test('passes the card note to the FirstRoamLink app', () => {
   assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', null, '德安;一號').includes(`S.firstroamlink_note=${encodeURIComponent('德安 一號')};`));
   assert.ok(!buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', null, '  ').includes('firstroamlink_note'));
 });
+
+test('compacts the plan name for the default eSIM name', async () => {
+  const { compactPlanName } = await import('../src/lib/esim-install-links.ts');
+  assert.equal(compactPlanName('台灣 高速上網 3天/吃到飽'), '台灣3天/吃到飽');
+  assert.equal(compactPlanName('日本 本地網路SoftBank 高速上網 1天/每日10GB'), '日本SoftBank1天/每日10GB');
+  assert.ok(buildEasyEuiccIntentUrl(LPA, 'space.firstesim.app', '台灣', null, null, '台灣 高速上網 3天/吃到飽').includes(`S.firstroamlink_plan=${encodeURIComponent('台灣3天/吃到飽')};`));
+});
