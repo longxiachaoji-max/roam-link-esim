@@ -3,8 +3,9 @@
 import { adminFetch } from '@/lib/admin-fetch';
 import { parseManualEsimInput } from '@/lib/manual-esim';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
+import { summarizeProductNames } from '@/lib/product-summary';
 
-import { Fragment, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Activity, ChevronDown, PenLine, RefreshCw, Search, X } from 'lucide-react';
 
@@ -323,13 +324,6 @@ export default function OrdersPage() {
     ].filter(Boolean).join(' ').toLowerCase();
     return searchable.includes(normalizedSearch);
   });
-
-  // Flatten filtered orders to rows for the desktop table.
-  const flatRows = filteredOrders.flatMap(order =>
-    order.order_items.length > 0
-      ? order.order_items.map((item, idx) => ({ order, item: item as OrderItem | null, isFirst: idx === 0, itemCount: order.order_items.length }))
-      : [{ order, item: null as OrderItem | null, isFirst: true, itemCount: 0 }]
-  );
 
   const toggleExpand = (orderId: string) => {
     setExpandedOrderId(prev => (prev === orderId ? null : orderId));
@@ -872,18 +866,20 @@ export default function OrdersPage() {
 
       <p className="mb-3 text-xs text-white/35">顯示 {filteredOrders.length} 筆訂單</p>
 
-      {/* Mobile order cards */}
-      <div className="space-y-3 md:hidden">
+      {/* Order cards（手機一欄、平板兩欄、電腦三欄；展開的訂單佔滿整列） */}
+      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
         {loading ? (
-          <div className="border-y border-white/10 py-12 text-center text-sm text-white/45">訂單載入中...</div>
+          <div className="col-span-full border-y border-white/10 py-12 text-center text-sm text-white/45">訂單載入中...</div>
         ) : filteredOrders.length === 0 ? (
-          <div className="border-y border-white/10 py-12 text-center text-sm text-white/45">沒有符合條件的訂單</div>
+          <div className="col-span-full border-y border-white/10 py-12 text-center text-sm text-white/45">沒有符合條件的訂單</div>
         ) : filteredOrders.map(order => {
           const expanded = expandedOrderId === order.id;
-          const productNames = order.order_items.map(item => item.products?.name || '未知商品');
+          const productSummary = summarizeProductNames(order.order_items.map(item => item.products?.name), '未知商品');
+          const pendingCount = order.order_items.filter(item => !item.inventory_id).length;
+          const deletedCount = order.order_items.filter(item => item.user_deleted_at).length;
 
           return (
-            <article key={order.id} className="overflow-hidden rounded-md border border-white/10 bg-white/[0.04]">
+            <article key={order.id} className={`overflow-hidden rounded-md border bg-white/[0.04] ${expanded ? 'border-cyan-400/40 md:col-span-full' : 'border-white/10'}`}>
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -909,7 +905,12 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
-                <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/55">{productNames.join('、') || '沒有商品明細'}</p>
+                <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/55">{productSummary || '沒有商品明細'}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/55">{getPaymentMethodLabel(order.payment_method)}</span>
+                  {pendingCount > 0 && <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 font-bold text-yellow-200">待補 eSIM {pendingCount}</span>}
+                  {deletedCount > 0 && <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-red-200">客戶已刪除 {deletedCount}</span>}
+                </div>
               </div>
 
               <button
@@ -929,9 +930,9 @@ export default function OrdersPage() {
                     <div><dt className="text-white/35">付款狀態</dt><dd className="mt-1 text-white/70">{getPaymentStatusLabel(order.payment_status)}</dd></div>
                   </dl>
 
-                  <div className="border-t border-white/8">
-                    {order.order_items.map((item, index) => (
-                      <section key={item.id} className={`py-4 ${index > 0 ? 'border-t border-white/8' : ''} ${item.user_deleted_at ? 'opacity-55' : ''}`}>
+                  <div className="grid gap-2 border-t border-white/8 pt-4 md:grid-cols-2 xl:grid-cols-3">
+                    {order.order_items.map(item => (
+                      <section key={item.id} className={`min-w-0 rounded-md border border-white/10 bg-white/[0.03] p-3 ${item.user_deleted_at ? 'opacity-55' : ''}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="break-words text-sm font-bold text-white/85">{item.products?.name || '未知商品'}</p>
@@ -955,6 +956,8 @@ export default function OrdersPage() {
                             {renderAssignControls(item)}
                           </div>
                         )}
+
+                        {item.note && <p className="mt-2 break-words text-xs text-white/45"><span className="text-white/30">備註：</span>{item.note}</p>}
 
                         {item.user_deleted_at && (
                           <button
@@ -983,215 +986,6 @@ export default function OrdersPage() {
             </article>
           );
         })}
-      </div>
-
-      {/* Orders Table */}
-      <div className="hidden overflow-hidden rounded-md border border-white/10 bg-white/5 md:block">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-white/10">
-            <thead className="bg-white/5">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider w-8"></th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">訂購日期</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">客戶帳號</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">商品名稱</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">ICCID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">啟用碼</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">金額</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">狀態</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">處理</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-white/50">載入中...</td>
-                </tr>
-              ) : flatRows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-white/50">尚無任何訂單</td>
-                </tr>
-              ) : (
-                flatRows.map(({ order, item, isFirst, itemCount }, idx) => (
-                  <Fragment key={`wrap-${order.id}-${item?.id ?? 'empty'}-${idx}`}>
-                    <tr key={`row-${order.id}-${item?.id ?? 'empty'}-${idx}`} className="hover:bg-white/5 transition-colors">
-                      {/* Expand button - only on first row of each order */}
-                      <td className="px-4 py-4 whitespace-nowrap text-sm">
-                        {isFirst && itemCount > 0 ? (
-                          <button
-                            onClick={() => toggleExpand(order.id)}
-                            className="text-white/40 hover:text-white/80 transition-colors"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className={`h-4 w-4 transform transition-transform ${expandedOrderId === order.id ? 'rotate-90' : ''}`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/90">
-                        {isFirst ? new Date(order.created_at).toLocaleString('zh-TW') : ''}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/90">
-                        {isFirst ? (order.customers?.email || '-') : ''}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/90">
-                        <div>{item?.products?.name || '-'}</div>
-                        {item && !item.inventory_id && (
-                          <div className="mt-1 text-xs text-yellow-300/80">待補 eSIM</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/60 font-mono text-xs">
-                        {item?.e_sim_inventory?.iccid || '-'}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/60 font-mono text-xs" title={item?.e_sim_inventory?.activation_code || ''}>
-                        {truncate(item?.e_sim_inventory?.activation_code, 20)}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-white/90 font-medium">
-                        {isFirst ? `NT$${Number(order.total_amount || 0) + Number(order.tokens_used || 0)}` : ''}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm">
-                        {isFirst ? (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(order.order_status)}`}>
-                            {getStatusLabel(order.order_status)}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-4 text-sm min-w-[280px]">
-                        <div className="flex flex-col gap-2">
-                          {item ? renderAssignControls(item, true) : '-'}
-                          {item?.user_deleted_at && (
-                            <button
-                              onClick={() => handleRestoreDeletedItem(item)}
-                              disabled={restoringItemId === item.id}
-                              className="self-start rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
-                            >
-                              {restoringItemId === item.id ? '恢復中...' : '恢復顯示'}
-                            </button>
-                          )}
-                          {isFirst && order.order_status !== 'CANCELLED' && (
-                            <button
-                              onClick={() => handleDeleteOrder(order)}
-                              disabled={deletingOrderId === order.id}
-                              className="self-start rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
-                            >
-                              {deletingOrderId === order.id ? '取消中...' : '取消訂單'}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {/* Expanded detail row */}
-                    {isFirst && expandedOrderId === order.id && (
-                      <tr key={`detail-${order.id}`}>
-                        <td colSpan={9} className="px-6 py-4 bg-white/[0.02]">
-                          <div className="space-y-3">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                              <div>
-                                <span className="text-white/40">訂單編號</span>
-                                <p className="text-white/80 font-mono text-xs mt-1">{order.order_number || order.id}</p>
-                                <p className="text-white/30 font-mono text-[10px] mt-1" title="系統內部識別碼">{order.id}</p>
-                              </div>
-                              <div>
-                                <span className="text-white/40">客戶名稱</span>
-                                <p className="text-white/80 mt-1">{order.customers?.name || '-'}</p>
-                              </div>
-                              <div>
-                                <span className="text-white/40">付款方式</span>
-                                <p className="text-white/80 mt-1">{order.payment_method || '-'}</p>
-                              </div>
-                              <div>
-                                <span className="text-white/40">付款狀態</span>
-                                <p className="text-white/80 mt-1">{order.payment_status || '-'}</p>
-                              </div>
-                              {order.tokens_used != null && order.tokens_used > 0 && (
-                                <div>
-                                  <span className="text-white/40">使用代幣</span>
-                                  <p className="text-white/80 mt-1">{order.tokens_used}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex justify-end">
-                              <button
-                                onClick={() => handleDeleteOrder(order)}
-                                disabled={deletingOrderId === order.id}
-                                className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
-                              >
-                                {deletingOrderId === order.id ? '刪除中...' : '刪除這筆訂單'}
-                              </button>
-                            </div>
-
-                            {/* Order Items Detail */}
-                            <div className="mt-4">
-                              <h4 className="text-sm font-medium text-white/50 mb-2">訂單明細 ({order.order_items.length} 項)</h4>
-                              <div className="space-y-2">
-                                {order.order_items.map((oi) => (
-                                  <div
-                                    key={oi.id}
-                                    className={`bg-white/5 border border-white/10 rounded-lg p-3 text-sm ${oi.user_deleted_at ? 'opacity-50' : ''}`}
-                                  >
-                                    <div className="flex justify-between items-start">
-                                      <div className="space-y-1">
-                                        <p className="text-white/90 font-medium">
-                                          {oi.products?.name || '未知商品'}
-                                          {oi.user_deleted_at && <span className="text-red-400 text-xs ml-2">(已刪除)</span>}
-                                        </p>
-                                        {oi.user_deleted_at && (
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <p className="text-red-300/70 text-xs">
-                                              客戶於 {new Date(oi.user_deleted_at).toLocaleString('zh-TW')} 刪除，24 小時內會員中心會反灰保留。
-                                            </p>
-                                            <button
-                                              onClick={() => handleRestoreDeletedItem(oi)}
-                                              disabled={restoringItemId === oi.id}
-                                              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/20 disabled:border-white/10 disabled:bg-white/5 disabled:text-white/30"
-                                            >
-                                              {restoringItemId === oi.id ? '恢復中...' : '恢復顯示'}
-                                            </button>
-                                          </div>
-                                        )}
-                                        <p className="text-white/50 text-xs">
-                                          {oi.products?.country || '-'} · {oi.products?.data_amount || '-'} · {oi.products?.validity_days || '-'}天
-                                        </p>
-                                        {oi.e_sim_inventory && (
-                                          <div className="text-xs text-white/40 font-mono space-y-0.5 mt-1">
-                                            <p>ICCID: {oi.e_sim_inventory?.iccid || '-'}</p>
-                                            <p>SMDP: {oi.e_sim_inventory?.smdp_address || '-'}</p>
-                                            <p>啟用碼: {oi.e_sim_inventory?.activation_code || '-'}</p>
-                                            <p>eSIM 狀態: {oi.e_sim_inventory?.status || '-'}</p>
-                                          </div>
-                                        )}
-                                        {renderEsimUsage(oi)}
-                                        {!oi.e_sim_inventory && (
-                                          <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
-                                            <p className="text-yellow-100/80 text-xs mb-2">尚未配發 eSIM，客戶會員頁會顯示處理中</p>
-                                            {renderAssignControls(oi)}
-                                          </div>
-                                        )}
-                                        {oi.note && <p className="text-white/40 text-xs mt-1">備註: {oi.note}</p>}
-                                      </div>
-                                      <p className="text-white/80 font-medium">NT${oi.price}</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {manualEsimItem && typeof document !== 'undefined' && createPortal((() => {
