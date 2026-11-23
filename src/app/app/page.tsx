@@ -14,6 +14,7 @@ import { parseUsageMb } from '@/lib/usage-mb';
 import { getAttributionPayload } from '@/lib/attribution-client';
 import { formatEid, isValidEid, normalizeEid, shortEid } from '@/lib/eid';
 import { EidEditor } from './eid-editor';
+import { UsageChart, type UsagePoint } from './usage-chart';
 
 interface Usage {
   status?: string;
@@ -100,6 +101,10 @@ const installRank = (card: { pending: boolean; usage: Usage | null }) => {
   if (status === '已啟用') return 3;
   return 4;
 };
+
+// 已到期／已停用／已刪除的卡用量不會再變，不自動更新
+const FINAL_USAGE_STATUSES = new Set(['已到期', '已刪除', '已停用']);
+const isLiveCard = (card: { canQueryUsage: boolean; usage: Usage | null }) => card.canQueryUsage && !FINAL_USAGE_STATUSES.has(card.usage?.status || '');
 
 const statusClass = (status?: string) => {
   if (status === '已啟用') return 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30';
@@ -481,14 +486,14 @@ export default function EsimAppPage() {
   useEffect(() => {
     if (authState !== 'in' || !cardsLoaded) return;
     const isStale = (card: EsimCard) => !card.usageCheckedAt || Date.now() - new Date(card.usageCheckedAt).getTime() > AUTO_REFRESH_MS;
-    void refreshMany(cardsRef.current.filter(card => card.canQueryUsage && isStale(card)), true);
+    void refreshMany(cardsRef.current.filter(card => isLiveCard(card) && isStale(card)), true);
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
-      void refreshMany(cardsRef.current.filter(card => card.canQueryUsage), true);
+      void refreshMany(cardsRef.current.filter(isLiveCard), true);
     }, AUTO_REFRESH_MS);
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        void refreshMany(cardsRef.current.filter(card => card.canQueryUsage && isStale(card)), true);
+        void refreshMany(cardsRef.current.filter(card => isLiveCard(card) && isStale(card)), true);
       }
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -645,7 +650,7 @@ export default function EsimAppPage() {
   const readerEidPending = readerEidCards.filter(card => installRank(card) <= 1).length;
   const selectedOwnIds = [...selectedIds].filter(id => ownCards.some(card => card.id === id));
   const isOwnCard = (card: EsimCard | null) => Boolean(card && !card.sharedBy);
-  const refreshAll = () => refreshMany(tabCards.filter(card => card.canQueryUsage));
+  const refreshAll = () => refreshMany(tabCards.filter(isLiveCard));
 
   const activeCount = tabCards.filter(card => card.usage?.status === '已啟用').length;
   const notInstalledCount = tabCards.filter(card => !card.pending && (!card.usage || card.usage.status === '尚未安裝')).length;
@@ -932,35 +937,57 @@ export default function EsimAppPage() {
           )}
 
           <button type="button" onClick={loadHistory} disabled={historyLoading} className="mt-3 flex h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold disabled:opacity-60">
-            <span>{historyLoading ? '載入中...' : '用量紀錄（每 30 分鐘）'}</span>
+            <span>{historyLoading ? '載入中...' : '用量曲線'}</span>
             <ChevronDown size={16} className={history?.forId === selected.id ? 'rotate-180' : ''} />
           </button>
-          {history?.forId === selected.id && (
-            <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/20">
-              {history.rows.length === 0 ? (
-                <p className="p-4 text-center text-xs text-white/45">{history.unavailable ? '用量紀錄功能尚未啟用' : '還沒有紀錄，之後每 30 分鐘會自動記錄一次'}</p>
-              ) : (
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-[#1A1A2E] text-white/40">
-                    <tr><th className="px-3 py-2 text-left font-normal">時間</th><th className="px-3 py-2 text-right font-normal">累計用量</th><th className="px-3 py-2 text-right font-normal">這段增加</th></tr>
-                  </thead>
-                  <tbody>
-                    {history.rows.map((row, index) => {
-                      const older = history.rows[index + 1];
-                      const delta = row.used_mb != null && older?.used_mb != null ? row.used_mb - older.used_mb : null;
-                      return (
-                        <tr key={`${row.checked_at}-${index}`} className="border-t border-white/5">
-                          <td className="px-3 py-1.5 text-white/60">{formatTime(row.checked_at)}</td>
-                          <td className="px-3 py-1.5 text-right font-mono">{row.used_data ?? '-'}</td>
-                          <td className={`px-3 py-1.5 text-right font-mono ${delta && delta > 0 ? 'text-cyan-200' : 'text-white/30'}`}>{delta == null ? '' : delta > 0 ? `+${formatMb(delta)}` : '0'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
+          {history?.forId === selected.id && (() => {
+            // 由舊到新；最後補上「最近一次查詢」的點，讓線延伸到現在
+            const points: UsagePoint[] = [...history.rows].reverse()
+              .filter(row => row.used_mb != null)
+              .map(row => ({ t: Date.parse(row.checked_at), mb: Number(row.used_mb), status: row.status }));
+            const currentMb = parseUsageMb(selected.usage?.usedData);
+            const currentAt = selected.usageCheckedAt ? Date.parse(selected.usageCheckedAt) : NaN;
+            if (currentMb != null && Number.isFinite(currentAt) && (!points.length || currentAt > points[points.length - 1].t)) {
+              points.push({ t: currentAt, mb: currentMb, status: selected.usage?.status || null });
+            }
+            const changes = history.rows.filter(row => row.used_mb != null);
+            return (
+              <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2">
+                {points.length === 0 ? (
+                  <p className="p-4 text-center text-xs text-white/45">{history.unavailable ? '用量紀錄功能尚未啟用' : '還沒有紀錄，用量有變化時會自動記錄'}</p>
+                ) : (
+                  <>
+                    <div className="flex items-baseline justify-between px-1 pb-1">
+                      <p className="text-xs text-white/45">累計用量</p>
+                      <p className="font-mono text-sm font-bold text-white">{formatMb(points[points.length - 1].mb)}</p>
+                    </div>
+                    <UsageChart points={points} />
+                    <details className="mt-1 px-1 text-xs">
+                      <summary className="cursor-pointer py-1 text-white/45">紀錄明細（{changes.length} 筆，用量有變化才記錄）</summary>
+                      <table className="mt-1 w-full">
+                        <thead className="text-white/40">
+                          <tr><th className="py-1 text-left font-normal">時間</th><th className="py-1 text-right font-normal">累計用量</th><th className="py-1 text-right font-normal">增加</th></tr>
+                        </thead>
+                        <tbody>
+                          {changes.map((row, index) => {
+                            const older = changes[index + 1];
+                            const delta = row.used_mb != null && older?.used_mb != null ? row.used_mb - older.used_mb : null;
+                            return (
+                              <tr key={`${row.checked_at}-${index}`} className="border-t border-white/5">
+                                <td className="py-1 text-white/60">{formatTime(row.checked_at)}</td>
+                                <td className="py-1 text-right font-mono">{row.used_data ?? '-'}</td>
+                                <td className={`py-1 text-right font-mono ${delta && delta > 0 ? 'text-cyan-200' : 'text-white/30'}`}>{delta == null ? '' : delta > 0 ? `+${formatMb(delta)}` : '0'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </details>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {sharingReady && isOwnCard(selected) && (
             <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">

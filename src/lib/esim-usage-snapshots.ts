@@ -21,12 +21,23 @@ export async function recordUsageSnapshot(
   source: UsageSnapshotSource,
   checkedAt: string
 ) {
+  // 跟上一筆一樣（狀態、用量都沒變）就不再新增，避免同樣的資料一直重複記錄
+  const usedMb = parseUsageMb(usage.usedData);
+  const { data: latest } = await supabase
+    .from('esim_usage_snapshots')
+    .select('status, used_mb')
+    .eq('inventory_id', inventory.id)
+    .order('checked_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latest && latest.status === (usage.status ?? null) && Number(latest.used_mb ?? -1) === Number(usedMb ?? -1)) return;
+
   const { error } = await supabase.from('esim_usage_snapshots').insert({
     inventory_id: inventory.id,
     iccid: inventory.iccid,
     status: usage.status,
     used_data: usage.usedData,
-    used_mb: parseUsageMb(usage.usedData),
+    used_mb: usedMb,
     source,
     checked_at: checkedAt
   });
@@ -62,7 +73,7 @@ export async function queryAndStoreUsage(
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const FINAL_STATUSES = new Set(['已到期', '已刪除', '已停用']);
+export const FINAL_STATUSES = new Set(['已到期', '已刪除', '已停用']);
 
 /** 排程用：更新所有還在使用期的 MicroEsim eSIM */
 export async function refreshAllActiveUsage(supabase: SupabaseClient, options: { limit?: number; gapMs?: number; minAgeMinutes?: number } = {}) {

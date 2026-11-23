@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getMicroesimInstallationDeadline } from '@/lib/microesim';
-import { queryAndStoreUsage } from '@/lib/esim-usage-snapshots';
+import { FINAL_STATUSES, queryAndStoreUsage } from '@/lib/esim-usage-snapshots';
 import { authenticationErrorResponse, requireAuthenticatedUser } from '@/lib/server-auth';
 import { canAccessEsimItem } from '@/lib/esim-dashboard';
 
@@ -74,6 +74,17 @@ export async function POST(request: Request) {
       return NextResponse.json({
         error: '這張 eSIM 沒有完整的 MicroEsim 查詢資料，可能是手動庫存或舊訂單'
       }, { status: 400 });
+    }
+
+    // 已到期／已停用／已刪除：不會再變，直接回傳最後一次的資料，不再查廠商、不再記錄
+    const cachedStatus = (inventory.microesim_usage_cache as { status?: string } | null)?.status || '';
+    if (FINAL_STATUSES.has(cachedStatus)) {
+      return NextResponse.json({
+        success: true,
+        final: true,
+        usage: inventory.microesim_usage_cache,
+        checkedAt: inventory.microesim_usage_checked_at
+      });
     }
 
     try {
