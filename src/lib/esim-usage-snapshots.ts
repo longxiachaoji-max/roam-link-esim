@@ -59,7 +59,12 @@ async function pruneIdleSnapshots(supabase: SupabaseClient, inventoryId: string,
     const sameStatus = status === null ? 'status.not.is.null' : `status.is.null,status.neq.${JSON.stringify(status)}`;
     const sameMb = usedMb === null ? 'used_mb.not.is.null' : `used_mb.is.null,used_mb.neq.${usedMb}`;
     changed = changed.or(`${sameStatus},${sameMb}`);
-    const { data: lastDifferent } = await changed.maybeSingle();
+    const { data: lastDifferent, error: differentError } = await changed.maybeSingle();
+    // 查詢失敗就不要刪，避免誤刪整段紀錄
+    if (differentError) {
+      console.warn('Prune idle usage snapshots skipped:', differentError.message);
+      return;
+    }
 
     let runStartQuery = supabase
       .from('esim_usage_snapshots')
@@ -68,8 +73,8 @@ async function pruneIdleSnapshots(supabase: SupabaseClient, inventoryId: string,
       .order('checked_at', { ascending: true })
       .limit(1);
     if (lastDifferent?.checked_at) runStartQuery = runStartQuery.gt('checked_at', lastDifferent.checked_at);
-    const { data: runStart } = await runStartQuery.maybeSingle();
-    if (!runStart?.checked_at) return;
+    const { data: runStart, error: runStartError } = await runStartQuery.maybeSingle();
+    if (runStartError || !runStart?.checked_at) return;
 
     const keepAfterStop = new Date(Date.parse(runStart.checked_at) + IDLE_KEEP_MS).toISOString();
     const keepBeforeNow = new Date(Date.parse(checkedAt) - IDLE_KEEP_MS).toISOString();
