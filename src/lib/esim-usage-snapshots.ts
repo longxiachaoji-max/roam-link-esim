@@ -21,17 +21,7 @@ export async function recordUsageSnapshot(
   source: UsageSnapshotSource,
   checkedAt: string
 ) {
-  // 跟上一筆一樣（狀態、用量都沒變）就不再新增，避免同樣的資料一直重複記錄
   const usedMb = parseUsageMb(usage.usedData);
-  const { data: latest } = await supabase
-    .from('esim_usage_snapshots')
-    .select('status, used_mb')
-    .eq('inventory_id', inventory.id)
-    .order('checked_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (latest && latest.status === (usage.status ?? null) && Number(latest.used_mb ?? -1) === Number(usedMb ?? -1)) return;
-
   const { error } = await supabase.from('esim_usage_snapshots').insert({
     inventory_id: inventory.id,
     iccid: inventory.iccid,
@@ -42,7 +32,58 @@ export async function recordUsageSnapshot(
     checked_at: checkedAt
   });
   // 資料表還沒建立時不要讓用量查詢失敗
-  if (error) console.warn('esim_usage_snapshots insert failed (migration not applied?):', error.message);
+  if (error) {
+    console.warn('esim_usage_snapshots insert failed (migration not applied?):', error.message);
+    return;
+  }
+  await pruneIdleSnapshots(supabase, inventory.id, usage.status ?? null, usedMb, checkedAt);
+}
+
+const IDLE_KEEP_MS = 60 * 60 * 1000;
+
+/**
+ * 沒有用量變化的時段只留頭尾各 1 小時：
+ * 用量停止後保留 1 小時的紀錄，之後只保留「最近 1 小時」，
+ * 等用量又開始增加時，剛好留下開始前 1 小時的紀錄。
+ */
+async function pruneIdleSnapshots(supabase: SupabaseClient, inventoryId: string, status: string | null, usedMb: number | null, checkedAt: string) {
+  try {
+    // 最近一筆「和現在不一樣」的紀錄 → 它之後的第一筆就是這段沒變化的開始
+    let changed = supabase
+      .from('esim_usage_snapshots')
+      .select('checked_at')
+      .eq('inventory_id', inventoryId)
+      .lt('checked_at', checkedAt)
+      .order('checked_at', { ascending: false })
+      .limit(1);
+    const sameStatus = status === null ? 'status.not.is.null' : `status.is.null,status.neq.${JSON.stringify(status)}`;
+    const sameMb = usedMb === null ? 'used_mb.not.is.null' : `used_mb.is.null,used_mb.neq.${usedMb}`;
+    changed = changed.or(`${sameStatus},${sameMb}`);
+    const { data: lastDifferent } = await changed.maybeSingle();
+
+    let runStartQuery = supabase
+      .from('esim_usage_snapshots')
+      .select('checked_at')
+      .eq('inventory_id', inventoryId)
+      .order('checked_at', { ascending: true })
+      .limit(1);
+    if (lastDifferent?.checked_at) runStartQuery = runStartQuery.gt('checked_at', lastDifferent.checked_at);
+    const { data: runStart } = await runStartQuery.maybeSingle();
+    if (!runStart?.checked_at) return;
+
+    const keepAfterStop = new Date(Date.parse(runStart.checked_at) + IDLE_KEEP_MS).toISOString();
+    const keepBeforeNow = new Date(Date.parse(checkedAt) - IDLE_KEEP_MS).toISOString();
+    if (keepAfterStop >= keepBeforeNow) return;
+    const { error } = await supabase
+      .from('esim_usage_snapshots')
+      .delete()
+      .eq('inventory_id', inventoryId)
+      .gt('checked_at', keepAfterStop)
+      .lt('checked_at', keepBeforeNow);
+    if (error) console.warn('Prune idle usage snapshots failed:', error.message);
+  } catch (error) {
+    console.warn('Prune idle usage snapshots failed:', error);
+  }
 }
 
 export async function queryAndStoreUsage(

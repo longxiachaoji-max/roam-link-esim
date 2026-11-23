@@ -954,7 +954,7 @@ export default function EsimAppPage() {
             return (
               <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2">
                 {points.length === 0 ? (
-                  <p className="p-4 text-center text-xs text-white/45">{history.unavailable ? '用量紀錄功能尚未啟用' : '還沒有紀錄，用量有變化時會自動記錄'}</p>
+                  <p className="p-4 text-center text-xs text-white/45">{history.unavailable ? '用量紀錄功能尚未啟用' : '還沒有紀錄，之後每 30 分鐘會自動記錄'}</p>
                 ) : (
                   <>
                     <div className="flex items-baseline justify-between px-1 pb-1">
@@ -963,7 +963,7 @@ export default function EsimAppPage() {
                     </div>
                     <UsageChart points={points} />
                     <details className="mt-1 px-1 text-xs">
-                      <summary className="cursor-pointer py-1 text-white/45">紀錄明細（{changes.length} 筆，用量有變化才記錄）</summary>
+                      <summary className="cursor-pointer py-1 text-white/45">紀錄明細（{changes.length} 筆，沒用量的時段只留前後 1 小時）</summary>
                       <table className="mt-1 w-full">
                         <thead className="text-white/40">
                           <tr><th className="py-1 text-left font-normal">時間</th><th className="py-1 text-right font-normal">累計用量</th><th className="py-1 text-right font-normal">增加</th></tr>
