@@ -14,6 +14,7 @@ import { recordDealerReferralCommission, type DealerReferralQuote } from '@/lib/
 import { parsePaymentLimits } from '@/lib/payment-limits';
 import { sendBarcodePaymentCreatedAlert } from '@/lib/barcode-payment-alerts';
 import { createEcpayBackgroundBarcode } from '@/lib/ecpay-background-barcode';
+import { saveOrderAttribution } from '@/lib/order-attribution';
 
 export const dynamic = 'force-dynamic';
 
@@ -251,6 +252,7 @@ export async function POST(request: Request) {
       createdNewOrder = true;
     }
     orderId = order.id;
+    await saveOrderAttribution(supabase, order.id, body.attribution);
 
     if (createdNewOrder) {
       const { error: itemsError } = await supabase.from('order_items').insert(products.map(product => ({

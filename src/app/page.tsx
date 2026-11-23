@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getAnalyticsVisitorId, trackPageView } from "@/lib/analytics";
 import { normalizeReferralCode } from '@/lib/referral-code';
+import { getAttributionPayload } from '@/lib/attribution-client';
 import { readRememberedReferralCode, rememberReferralCode, validReferralCode } from '@/lib/referral-link';
 import {
   createAutomaticEsimDestination,
@@ -580,7 +581,8 @@ export default function Home() {
           productIds: cart.map(item => item.id),
           useTokens: true,
           paymentMethod: 'TOKENS',
-          discountCode: appliedDiscount?.code || undefined
+          discountCode: appliedDiscount?.code || undefined,
+          attribution: getAttributionPayload()
         })
       });
       const data = await res.json();
@@ -720,7 +722,8 @@ export default function Home() {
         body: JSON.stringify({
           productIds: cart.map(item => item.id),
           paymentMethod,
-          discountCode: appliedDiscount?.code || undefined
+          discountCode: appliedDiscount?.code || undefined,
+          attribution: getAttributionPayload()
         })
       });
       const result = await response.json();

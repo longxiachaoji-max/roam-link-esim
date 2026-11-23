@@ -116,6 +116,8 @@ export async function GET(request: Request) {
         payment_method,
         payment_status,
         order_status,
+        source_channel,
+        attribution,
         customers (
           email,
           name
@@ -165,9 +167,14 @@ export async function GET(request: Request) {
 
     const visibleOrders = hideSupersededPaymentAttempts((data || []) as unknown as AdminOrderListItem[]);
     const itemIds = visibleOrders.flatMap(order => (order.order_items as unknown as Array<{ id: string }>).map(item => item.id));
-    const reviewUnlocks = await fetchReviewUnlocks(supabase, itemIds);
+    const [reviewUnlocks, adminEmails] = await Promise.all([
+      fetchReviewUnlocks(supabase, itemIds),
+      supabase.from('admin_users').select('email').then(({ data: rows }) => new Set((rows || []).map(row => String((row as { email: string | null }).email || '').toLowerCase())))
+    ]);
     const ordersWithUnlocks = visibleOrders.map(order => ({
       ...order,
+      // 管理員自己的帳號下的單，來源統計時排除
+      is_admin_customer: adminEmails.has(String((order as unknown as { customers?: { email?: string | null } | null }).customers?.email || '').toLowerCase()),
       order_items: (order.order_items as unknown as Array<{ id: string }>).map(item => ({
         ...item,
         review_unlocked_at: reviewUnlocks.get(item.id) || null

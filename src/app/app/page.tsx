@@ -11,6 +11,7 @@ import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { buildEasyEuiccIntentUrl, buildIosInstallUrl, buildLpaString, EASYEUICC_DOWNLOAD_URL, FIRSTROAMLINK_APP_PACKAGE, FIRSTROAMLINK_READER_URL, isInFirstRoamLinkApp } from '@/lib/esim-install-links';
 import { LINE_SUPPORT_URL } from '@/lib/review-eligibility';
 import { parseUsageMb } from '@/lib/usage-mb';
+import { getAttributionPayload } from '@/lib/attribution-client';
 import { formatEid, isValidEid, normalizeEid, shortEid } from '@/lib/eid';
 import { EidEditor } from './eid-editor';
 
@@ -576,7 +577,7 @@ export default function EsimAppPage() {
         const res = await authenticatedFetch('/api/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productIds: Array(count).fill(option.id), useTokens: true, paymentMethod: 'TOKENS' })
+          body: JSON.stringify({ productIds: Array(count).fill(option.id), useTokens: true, paymentMethod: 'TOKENS', attribution: getAttributionPayload() })
         });
         const json = await res.json();
         if (!res.ok || json.error) throw new Error(json.error || '購買失敗');

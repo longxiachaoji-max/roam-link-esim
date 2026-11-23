@@ -3,6 +3,7 @@ import { after, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { isDealerReferralDiscount, isPromoDiscount, resolveCheckoutDiscount, type CheckoutDiscountQuote } from '@/lib/checkout-discounts';
 import { recordDealerReferralCommission } from '@/lib/dealer-referrals';
+import { saveOrderAttribution } from '@/lib/order-attribution';
 import { fulfillMicroesimOrderItem } from '@/lib/microesim-fulfillment';
 import { sendMicroesimFulfillmentFailureAlert } from '@/lib/order-alerts';
 import { sendCustomerEsimDeliveryEmail } from '@/lib/customer-esim-delivery-email';
@@ -207,6 +208,7 @@ export async function POST(request: Request) {
       order_status: 'PENDING'
     };
     customer.token_balance = checkout.new_balance;
+    await saveOrderAttribution(supabase, order.id, body.attribution);
 
     if (isDealerReferralDiscount(discountQuote)) {
       await recordDealerReferralCommission(supabase, order.id, discountQuote, products.length, true);

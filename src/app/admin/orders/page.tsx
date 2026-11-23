@@ -4,6 +4,24 @@ import { adminFetch } from '@/lib/admin-fetch';
 import { parseManualEsimInput } from '@/lib/manual-esim';
 import { sanitizeMicroesimUsageForDisplay } from '@/lib/microesim-usage-status';
 import { summarizeProductNames } from '@/lib/product-summary';
+import type { AttributionTouch, OrderAttribution } from '@/lib/order-attribution';
+
+// 進站資訊轉成一行說明
+const describeTouch = (touch?: AttributionTouch | null) => {
+  if (!touch) return '';
+  return [
+    touch.referrer && `來自 ${touch.referrer}`,
+    touch.source && `utm ${[touch.source, touch.medium].filter(Boolean).join('/')}`,
+    touch.campaign && `活動 ${touch.campaign}`,
+    touch.term && `關鍵字 ${touch.term}`,
+    touch.ref && `推薦碼 ${touch.ref}`,
+    touch.gclid && 'Google 廣告點擊',
+    touch.fbclid && 'FB/IG 連結',
+    touch.inApp && `${touch.inApp} 內建瀏覽器`,
+    touch.landing && `進站頁 ${touch.landing}`,
+    touch.at && new Date(touch.at).toLocaleDateString('zh-TW'),
+  ].filter(Boolean).join('・') || '直接造訪';
+};
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -76,6 +94,9 @@ interface Order {
   payment_method: string | null;
   payment_status: string | null;
   order_status: string;
+  source_channel?: string | null;
+  is_admin_customer?: boolean;
+  attribution?: OrderAttribution | null;
   customers: Customer | null;
   order_items: OrderItem[];
 }
@@ -212,6 +233,7 @@ export default function OrdersPage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [sourceFilter, setSourceFilter] = useState('');
 
   const fetchOrders = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -308,8 +330,22 @@ export default function OrdersPage() {
   const yearlyProfit = calcProfit(d => d.getFullYear() === currentYear);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  // 各來源的已付款訂單（不含管理員自己的帳號）
+  const sourceSummary = (() => {
+    const map = new Map<string, { channel: string; orders: number; revenue: number }>();
+    for (const order of orders) {
+      if (order.payment_status !== 'PAID' || order.is_admin_customer || !order.source_channel) continue;
+      const row = map.get(order.source_channel) || { channel: order.source_channel, orders: 0, revenue: 0 };
+      row.orders += 1;
+      row.revenue += Number(order.total_amount || 0) + Number(order.tokens_used || 0);
+      map.set(order.source_channel, row);
+    }
+    return [...map.values()].sort((a, b) => b.orders - a.orders);
+  })();
+
   const filteredOrders = orders.filter(order => {
     if (statusFilter !== 'ALL' && order.order_status !== statusFilter) return false;
+    if (sourceFilter && (order.source_channel || '未記錄') !== sourceFilter) return false;
     if (!normalizedSearch) return true;
     const searchable = [
       order.order_number,
@@ -864,7 +900,26 @@ export default function OrdersPage() {
         </label>
       </div>
 
-      <p className="mb-3 text-xs text-white/35">顯示 {filteredOrders.length} 筆訂單</p>
+      {sourceSummary.length > 0 && (
+        <div className="mb-3 rounded-md border border-white/10 bg-white/[0.03] p-3">
+          <p className="text-xs text-white/45">訂單來源（已付款，不含管理員自己的帳號；點一下篩選）</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {sourceSummary.map(row => (
+              <button
+                key={row.channel}
+                type="button"
+                onClick={() => setSourceFilter(current => (current === row.channel ? '' : row.channel))}
+                className={`rounded-full border px-2.5 py-1 text-xs ${sourceFilter === row.channel ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-100' : 'border-white/10 bg-white/5 text-white/70'}`}
+              >
+                {row.channel}<span className="ml-1.5 text-white/40">{row.orders} 筆・NT${row.revenue.toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-5 text-white/30">2026/11/23 之後的新訂單才有來源。Google 自然搜尋不會提供關鍵字，要看搜尋字詞請到 Google Search Console；廣告連結加上 utm_term 就會記錄關鍵字。</p>
+        </div>
+      )}
+
+      <p className="mb-3 text-xs text-white/35">顯示 {filteredOrders.length} 筆訂單{sourceFilter && `（來源：${sourceFilter}）`}</p>
 
       {/* Order cards（手機一欄、平板兩欄、電腦三欄；展開的訂單佔滿整列） */}
       <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -908,6 +963,7 @@ export default function OrdersPage() {
                 <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/55">{productSummary || '沒有商品明細'}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
                   <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/55">{getPaymentMethodLabel(order.payment_method)}</span>
+                  {order.source_channel && <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-cyan-100" title={describeTouch(order.attribution?.last || order.attribution?.first)}>來源 {order.source_channel}</span>}
                   {pendingCount > 0 && <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 font-bold text-yellow-200">待補 eSIM {pendingCount}</span>}
                   {deletedCount > 0 && <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-red-200">客戶已刪除 {deletedCount}</span>}
                 </div>
@@ -928,6 +984,15 @@ export default function OrdersPage() {
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-3 py-4 text-xs">
                     <div><dt className="text-white/35">付款方式</dt><dd className="mt-1 text-white/70">{getPaymentMethodLabel(order.payment_method)}</dd></div>
                     <div><dt className="text-white/35">付款狀態</dt><dd className="mt-1 text-white/70">{getPaymentStatusLabel(order.payment_status)}</dd></div>
+                    {order.attribution && (
+                      <div className="col-span-2 md:col-span-1">
+                        <dt className="text-white/35">來源（{order.source_channel || '未分類'}）</dt>
+                        <dd className="mt-1 break-words text-white/70">最近：{describeTouch(order.attribution.last)}</dd>
+                        {order.attribution.first && JSON.stringify(order.attribution.first) !== JSON.stringify(order.attribution.last) && (
+                          <dd className="mt-0.5 break-words text-white/45">第一次：{describeTouch(order.attribution.first)}</dd>
+                        )}
+                      </div>
+                    )}
                   </dl>
 
                   <div className="grid gap-2 border-t border-white/8 pt-4 md:grid-cols-2 xl:grid-cols-3">
