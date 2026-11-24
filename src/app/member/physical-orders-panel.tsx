@@ -106,6 +106,10 @@ function formatDeleteHideAt(value: string) {
   });
 }
 
+function isFinishedOrder(order: { order_status: string; user_deleted_at?: string | null }) {
+  return order.order_status === 'COMPLETED' || order.order_status === 'CANCELLED' || Boolean(order.user_deleted_at);
+}
+
 export default function PhysicalOrdersPanel() {
   const [orders, setOrders] = useState<PhysicalOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,6 +201,13 @@ export default function PhysicalOrdersPanel() {
     }
   };
 
+  // 進行中的訂單排前面（依建立時間新到舊），已完成／取消／刪除中的排後面
+  const sortedOrders = [...orders].sort((a, b) => {
+    const finishedDiff = Number(isFinishedOrder(a)) - Number(isFinishedOrder(b));
+    if (finishedDiff) return finishedDiff;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
   return <section>
     <div className="mb-5 flex items-center justify-between gap-3">
       <div><h2 className="text-xl font-bold">實體商品訂單</h2><p className="mt-1 text-xs text-white/40">共 {orders.length} 筆</p></div>
@@ -205,11 +216,12 @@ export default function PhysicalOrdersPanel() {
 
     {message && <div className="mb-4 rounded-md border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{message}</div>}
     {loading && orders.length === 0 ? <div className="py-14 text-center text-white/40">訂單載入中...</div> : orders.length === 0 ? <div className="rounded-md border border-white/8 bg-white/[0.03] py-14 text-center"><Store className="mx-auto mb-3 text-white/20" size={36} /><p className="font-semibold text-white/60">目前沒有實體商品訂單</p><Link href="/shop" className="mt-4 inline-flex h-10 items-center rounded-md bg-[#F05A28] px-4 text-sm font-bold text-white">前往一飛通商城</Link></div> : <div className="space-y-4">
-      {orders.map(order => {
+      {sortedOrders.map(order => {
         const cancelled = order.order_status === 'CANCELLED';
+        const finished = isFinishedOrder(order);
         const deleted = Boolean(order.user_deleted_at);
         const currentProgress = progressIndex(order.order_status);
-        return <article key={order.id} className={`overflow-hidden rounded-md border bg-[#17171f] shadow-lg transition-opacity ${deleted ? 'border-red-400/20 opacity-55 grayscale' : 'border-white/8'}`}>
+        return <article key={order.id} className={`overflow-hidden rounded-md border bg-[#17171f] shadow-lg transition-opacity ${deleted ? 'border-red-400/20 opacity-55 grayscale' : finished ? 'border-white/5 opacity-60 grayscale hover:opacity-90 hover:grayscale-0' : 'border-white/8'}`}>
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 px-4 py-4">
             <div><p className="font-mono text-xs text-white/40">訂單 #{order.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p></div>
             <div className="flex items-start gap-2">
