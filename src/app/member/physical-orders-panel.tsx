@@ -116,6 +116,7 @@ export default function PhysicalOrdersPanel() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState('');
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -166,15 +167,17 @@ export default function PhysicalOrdersPanel() {
     setReviewTarget({ item });
     setReviewRating(item.review?.rating || 0);
     setReviewComment(item.review?.comment || '');
+    setReviewError('');
   };
 
   const submitReview = async () => {
     if (!reviewTarget || reviewSaving) return;
     if (!reviewRating || reviewComment.trim().length < 2) {
-      setMessage('請完成星級並留下至少 2 個字的使用心得');
+      setReviewError('請完成星級並留下至少 2 個字的使用心得');
       return;
     }
     setReviewSaving(true);
+    setReviewError('');
     setMessage('');
     try {
       const response = await authenticatedFetch('/api/member/physical-reviews', {
@@ -188,7 +191,7 @@ export default function PhysicalOrdersPanel() {
       setMessage('謝謝您留下真實的商品使用體驗');
       await loadOrders();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '評價送出失敗');
+      setReviewError(error instanceof Error ? error.message : '評價送出失敗');
     } finally {
       setReviewSaving(false);
     }
@@ -238,6 +241,7 @@ export default function PhysicalOrdersPanel() {
         <RatingStars value={reviewRating} onChange={setReviewRating} />
         <label className="mt-5 block text-sm font-bold">商品與使用心得<textarea value={reviewComment} onChange={event => setReviewComment(event.target.value.slice(0, 1000))} rows={5} placeholder="例如：商品狀況良好、包裝完整，租借與歸還流程很順利。" className="mt-2 w-full resize-none rounded-md border border-white/10 bg-[#0d0d1a] p-3 text-sm font-normal leading-6 text-white outline-none placeholder:text-white/25 focus:border-cyan/40" /></label>
         <div className="mt-1 text-right text-xs text-white/30">{reviewComment.length} / 1000</div>
+        {reviewError && <p role="alert" className="mt-3 rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">{reviewError}</p>}
         <p className="mt-3 text-xs leading-5 text-white/35">送出後可能以「已購買會員」名義顯示於商品頁，不會公開您的 Email。</p>
         <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setReviewTarget(null)} className="h-11 rounded-md border border-white/10 text-sm font-bold text-white/60 hover:bg-white/5">取消</button><button type="button" onClick={() => void submitReview()} disabled={reviewSaving} className="h-11 rounded-md bg-[#F05A28] text-sm font-bold text-white hover:bg-[#d94f22] disabled:opacity-45">{reviewSaving ? '送出中...' : reviewTarget.item.review ? '儲存修改' : '送出評價'}</button></div>
       </div>

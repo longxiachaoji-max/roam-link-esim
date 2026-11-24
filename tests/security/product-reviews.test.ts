@@ -23,6 +23,8 @@ test('only accepts a paid, completed purchase owned by the member', () => {
   assert.equal(isVerifiedReviewPurchase(valid), true);
   assert.equal(isVerifiedReviewPurchase({ ...valid, orderCustomerId: 'customer-b' }), false);
   assert.equal(isVerifiedReviewPurchase({ ...valid, paymentStatus: 'PENDING' }), false);
+  assert.equal(isVerifiedReviewPurchase({ ...valid, paymentStatus: 'PENDING', paymentMethod: 'CASH_PICKUP' }), true);
+  assert.equal(isVerifiedReviewPurchase({ ...valid, paymentStatus: 'PENDING', paymentMethod: 'CASH_PICKUP', orderStatus: 'PROCESSING' }), false);
   assert.equal(isVerifiedReviewPurchase({ ...valid, orderStatus: 'PENDING' }), false);
   assert.equal(isVerifiedReviewPurchase({ ...valid, productId: null }), false);
 });

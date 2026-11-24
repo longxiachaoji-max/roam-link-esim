@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     const { data: item, error: itemError } = await supabase
       .from('physical_order_items')
-      .select('id, order_id, product_id, physical_orders!inner(id, customer_id, payment_status, order_status)')
+      .select('id, order_id, product_id, physical_orders!inner(id, customer_id, payment_status, payment_method, order_status)')
       .eq('id', orderItemId)
       .maybeSingle();
     if (itemError) throw itemError;
@@ -31,10 +31,11 @@ export async function POST(request: Request) {
       orderCustomerId: String(order.customer_id || ''),
       paymentStatus: String(order.payment_status || ''),
       orderStatus: String(order.order_status || ''),
+      paymentMethod: String(order.payment_method || ''),
       productId: item.product_id
     });
     if (!verified || !item || !order) {
-      return NextResponse.json({ error: '只有已付款且完成的本人訂單可以留下評價' }, { status: 403 });
+      return NextResponse.json({ error: '只有已完成的本人訂單可以留下評價' }, { status: 403 });
     }
 
     const { data: review, error: reviewError } = await supabase

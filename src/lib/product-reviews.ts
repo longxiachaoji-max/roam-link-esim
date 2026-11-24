@@ -10,6 +10,7 @@ export interface ProductReviewEligibility {
   paymentStatus: string;
   orderStatus: string;
   productId: string | null;
+  paymentMethod?: string;
 }
 
 export interface PhysicalProductReviewInput {
@@ -36,8 +37,9 @@ export function isVerifiedReviewPurchase(value: ProductReviewEligibility) {
   return Boolean(
     value.productId
     && value.customerId === value.orderCustomerId
-    && value.paymentStatus === 'PAID'
     && value.orderStatus === 'COMPLETED'
+    // 面交現場付款：訂單完成代表已當面交付並收款，即使後台漏按「確認現場已收款」
+    && (value.paymentStatus === 'PAID' || value.paymentMethod === 'CASH_PICKUP')
   );
 }
 
