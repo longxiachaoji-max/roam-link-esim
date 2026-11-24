@@ -85,7 +85,7 @@ export async function PUT(request: Request) {
     if (orderError) throw orderError;
     if (!order) return NextResponse.json({ error: '找不到此訂單' }, { status: 404 });
     if (!canMemberDeletePhysicalOrder(order.order_status, order.user_deleted_at) && !order.user_deleted_at) {
-      return NextResponse.json({ error: '訂單完成後才可刪除紀錄' }, { status: 409 });
+      return NextResponse.json({ error: '訂單完成或取消後才可刪除紀錄' }, { status: 409 });
     }
 
     if (order.user_deleted_at) {

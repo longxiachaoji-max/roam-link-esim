@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, MessageSquareText, PackageCheck, RefreshCw, Star, Store, Trash2, Truck, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, MessageSquareText, PackageCheck, RefreshCw, Star, Store, Trash2, Truck, X } from 'lucide-react';
 import Link from 'next/link';
 import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { canMemberDeletePhysicalOrder, getPhysicalOrderDeleteHidesAt } from '@/lib/physical-order-visibility';
@@ -121,6 +121,12 @@ export default function PhysicalOrdersPanel() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
+  const toggleExpanded = (orderId: string) => setExpandedOrderIds(current => {
+    const next = new Set(current);
+    if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
+    return next;
+  });
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -219,11 +225,18 @@ export default function PhysicalOrdersPanel() {
       {sortedOrders.map(order => {
         const cancelled = order.order_status === 'CANCELLED';
         const finished = isFinishedOrder(order);
+        const collapsed = finished && !expandedOrderIds.has(order.id);
+        const itemSummary = order.physical_order_items.map(item => `${item.product_name.replace(/🎉/g, '').trim()} × ${item.quantity}`).join('、');
         const deleted = Boolean(order.user_deleted_at);
         const currentProgress = progressIndex(order.order_status);
-        return <article key={order.id} className={`overflow-hidden rounded-md border bg-[#17171f] shadow-lg transition-opacity ${deleted ? 'border-red-400/20 opacity-55 grayscale' : finished ? 'border-white/5 opacity-60 grayscale hover:opacity-90 hover:grayscale-0' : 'border-white/8'}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 px-4 py-4">
-            <div><p className="font-mono text-xs text-white/40">訂單 #{order.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p></div>
+        return <article key={order.id} className={`overflow-hidden rounded-md border bg-[#17171f] shadow-lg transition-opacity ${deleted ? 'border-red-400/20 opacity-55 grayscale' : collapsed ? 'border-white/5 opacity-60 grayscale hover:opacity-90 hover:grayscale-0' : 'border-white/8'}`}>
+          <div className={`flex flex-wrap items-start justify-between gap-3 px-4 py-4 ${collapsed ? '' : 'border-b border-white/8'}`}>
+            <button type="button" disabled={!finished} onClick={() => toggleExpanded(order.id)} aria-expanded={finished ? !collapsed : undefined} className="min-w-0 flex-1 text-left disabled:cursor-default">
+              <p className="flex items-center gap-1.5 font-mono text-xs text-white/40">訂單 #{order.id.slice(0, 8).toUpperCase()}{finished && <ChevronDown size={14} className={`transition-transform ${collapsed ? '' : 'rotate-180'}`} />}</p>
+              <p className="mt-1 text-xs text-white/35">{new Date(order.created_at).toLocaleString('zh-TW')}</p>
+              {collapsed && <p className="mt-2 truncate text-sm text-white/60">{itemSummary}</p>}
+              {collapsed && <p className="mt-1 text-xs text-white/35">點擊展開明細</p>}
+            </button>
             <div className="flex items-start gap-2">
               <div className="text-right">
                 <span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${deleted ? 'bg-red-400/10 text-red-300' : cancelled ? 'bg-red-400/10 text-red-300' : order.order_status === 'COMPLETED' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-200'}`}>{deleted ? '刪除倒數中' : STATUS_LABELS[order.order_status] || order.order_status}</span>
@@ -233,6 +246,7 @@ export default function PhysicalOrdersPanel() {
             </div>
           </div>
 
+          {!collapsed && <>
           {deleted && <div className="border-b border-red-400/15 bg-red-400/8 px-4 py-3 text-xs leading-5 text-red-200">此紀錄已標記刪除，將於 {formatDeleteHideAt(order.user_deleted_at!)} 後從會員中心隱藏。如需恢復請聯絡客服。</div>}
 
           {!cancelled && order.order_status !== 'PENDING_CONFIRMATION' && <div className="px-4 py-5"><div className="relative grid grid-cols-4"><div className="absolute left-[12.5%] right-[12.5%] top-4 h-px bg-white/10" /><div className="absolute left-[12.5%] top-4 h-px bg-[#F05A28] transition-all" style={{ width: `${(currentProgress / 3) * 75}%` }} />{PROGRESS_STEPS.map((step, index) => { const Icon = step.icon; const reached = index <= currentProgress; return <div key={step.label} className="relative z-10 flex flex-col items-center"><span className={`grid h-8 w-8 place-items-center rounded-full border ${reached ? 'border-[#F05A28] bg-[#F05A28] text-white' : 'border-white/10 bg-[#17171f] text-white/25'}`}><Icon size={14} /></span><span className={`mt-2 text-[11px] font-semibold ${reached ? 'text-white/75' : 'text-white/25'}`}>{step.label}</span></div>; })}</div></div>}
@@ -240,6 +254,7 @@ export default function PhysicalOrdersPanel() {
           <div className="space-y-4 border-t border-white/8 px-4 py-4">{order.physical_order_items.map(item => <div key={item.id} className="border-b border-white/6 pb-4 last:border-b-0 last:pb-0"><div className="flex justify-between gap-4"><div className="min-w-0"><p className="font-semibold text-white/90">{item.product_name} × {item.quantity}</p>{item.rental_start_date && item.rental_end_date && <p className="mt-1 flex items-center gap-1.5 text-xs text-cyan-200"><CalendarDays size={13} />{formatDate(item.rental_start_date)} 至 {formatDate(item.rental_end_date)} · {item.rental_days} 天</p>}</div><p className="shrink-0 font-mono text-sm text-white/55">NT${(Number(item.unit_price) * item.quantity).toLocaleString()}</p></div>{order.order_status === 'COMPLETED' && !deleted && item.product_id && <button type="button" onClick={() => openReview(item)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border border-amber-300/20 bg-amber-300/8 px-3 text-xs font-bold text-amber-100 hover:bg-amber-300/15">{item.review ? <Star size={14} fill="currentColor" /> : <MessageSquareText size={14} />}{item.review ? `已評價 ${item.review.rating} 星 · 修改` : '留下商品評價'}</button>}</div>)}</div>
 
           <div className="border-t border-white/8 bg-black/10 px-4 py-4 text-xs leading-5 text-white/45"><p className="font-semibold text-white/65">{STATUS_DESCRIPTIONS[order.order_status] || '訂單處理中。'}</p><div className="mt-3 grid gap-1 sm:grid-cols-2"><p>付款方式：{paymentLabel(order.payment_method)}</p><p>付款狀態：{order.payment_status === 'PAID' ? '已付款' : order.payment_status === 'REFUNDED' ? '已退款' : '等待付款'}</p><p>配送方式：{order.delivery_method === 'pickup' ? '預約面交' : '宅配'}</p><p>運費：{Number(order.shipping_fee) === 0 ? '免運' : `NT$${Number(order.shipping_fee).toLocaleString()}`}</p><p className="sm:col-span-2">{order.delivery_method === 'pickup' ? '取件資訊' : '收件資訊'}：{order.recipient_name} · {order.recipient_phone}</p><p className="sm:col-span-2">{order.postal_code || ''} {order.shipping_address}</p>{order.shipping_note && <p className="sm:col-span-2 text-cyan-200/70">備註：{order.shipping_note}</p>}</div></div>
+          </>}
         </article>;
       })}
     </div>}

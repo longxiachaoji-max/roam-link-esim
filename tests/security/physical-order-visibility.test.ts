@@ -46,6 +46,6 @@ test('only allows completed, non-deleted orders to be deleted by a member', () =
   assert.equal(canMemberDeletePhysicalOrder('COMPLETED', null), true);
   assert.equal(canMemberDeletePhysicalOrder('PROCESSING', null), false);
   assert.equal(canMemberDeletePhysicalOrder('SHIPPED', null), false);
-  assert.equal(canMemberDeletePhysicalOrder('CANCELLED', null), false);
+  assert.equal(canMemberDeletePhysicalOrder('CANCELLED', null), true);
   assert.equal(canMemberDeletePhysicalOrder('COMPLETED', '2026-07-30T04:00:00.000Z'), false);
 });

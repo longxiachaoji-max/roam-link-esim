@@ -69,5 +69,5 @@ export function isPhysicalOrderVisibleToMember(order: PhysicalOrderVisibilityInp
 }
 
 export function canMemberDeletePhysicalOrder(orderStatus: string, userDeletedAt?: string | null) {
-  return orderStatus === 'COMPLETED' && !userDeletedAt;
+  return (orderStatus === 'COMPLETED' || orderStatus === 'CANCELLED') && !userDeletedAt;
 }
