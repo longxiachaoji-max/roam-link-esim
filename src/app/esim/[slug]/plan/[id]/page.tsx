@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import {
   createAutomaticEsimDestination,
   getEsimDestination,
+  getEsimDestinationForCountry,
   getEsimDestinationHref
 } from '@/lib/esim-destinations';
 import { buildEsimPlanSeo } from '@/lib/esim-plan-seo';
@@ -21,9 +22,20 @@ interface PlanPageProps {
   params: Promise<{ slug: string; id: string }>;
 }
 
+// 中文國家（例如「新加坡」）的網址會以 %E6%96... 編碼傳進來，要先解碼才找得到目的地
+function decodeSegment(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 async function loadPlan(params: PlanPageProps['params']) {
-  const { slug, id } = await params;
-  const destination = getEsimDestination(slug) || createAutomaticEsimDestination(slug);
+  const { slug: rawSlug, id: rawId } = await params;
+  const slug = decodeSegment(rawSlug);
+  const id = decodeSegment(rawId);
+  const destination = getEsimDestination(slug) || getEsimDestinationForCountry(slug) || createAutomaticEsimDestination(slug);
   if (!destination) return null;
   const plan = await getEsimPlanDetail(id, destination);
   if (!plan) return null;
