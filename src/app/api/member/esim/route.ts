@@ -28,10 +28,10 @@ export async function PUT(request: Request) {
       .eq('id', order_item_id)
       .single();
 
-    // 只有本人可以刪除與改備註；共享群組成員只能查看
+    // 刪除只有本人可以；備註本人和被共享的人都可以改
     const ownerCustomerId = (item as any)?.orders?.customer_id as string | undefined;
     const role = ownerCustomerId ? await canAccessEsimItem(supabase, email, order_item_id, ownerCustomerId) : null;
-    if (!item || role !== 'owner') {
+    if (!item || !role || (action === 'soft_delete' && role !== 'owner')) {
       return NextResponse.json({ error: '無權限操作此項目' }, { status: 403 });
     }
 

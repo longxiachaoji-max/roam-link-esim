@@ -330,7 +330,7 @@ export default function EsimAppPage() {
     try { await dashboardAction({ action: 'reorder_categories', ids: next.map(c => c.id) }); } catch { showToast('排序儲存失敗'); }
   };
 
-  // 共享：把自己買的卡共享給某個 Email（對方只能查看與掃 QR Code）
+  // 共享：把自己買的卡共享給某個 Email（對方可看用量、掃 QR Code、改備註、指定晶片；不能刪除或再共享）
   const shareCards = async (ids: string[], memberEmail: string) => {
     const value = memberEmail.trim().toLowerCase();
     const ownIds = ids.filter(id => cards.find(card => card.id === id && !card.sharedBy));
@@ -879,7 +879,7 @@ export default function EsimAppPage() {
             <button type="button" disabled={!selectedOwnIds.length} onClick={() => setShareTarget(selectedOwnIds)} title="共享選取的卡（只限自己購買的卡）" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 text-sm font-bold text-cyan-100 disabled:opacity-40">
               <Users size={16} />共享
             </button>
-            <button type="button" disabled={!selectedOwnIds.length} onClick={() => setEidEdit({ ids: selectedOwnIds, initial: readerEid })} title="指定要安裝到哪張晶片（只限自己購買的卡）" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-bold text-white/85 disabled:opacity-40">
+            <button type="button" disabled={!selectedIds.size} onClick={() => setEidEdit({ ids: [...selectedIds], initial: readerEid })} title="指定要安裝到哪張晶片" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-bold text-white/85 disabled:opacity-40">
               <Cpu size={16} />指定晶片
             </button>
             <button type="button" disabled={!selectedIds.size} onClick={() => setMoveOpen(true)} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-cyan-400 px-4 text-sm font-black text-[#071317] disabled:opacity-40">
@@ -900,11 +900,9 @@ export default function EsimAppPage() {
             <dt className="text-white/40">安裝晶片</dt>
             <dd className="flex min-w-0 items-center gap-2">
               <span className={`min-w-0 break-all font-mono text-xs ${selected.targetEid ? 'text-white/85' : 'text-white/35'}`}>{selected.targetEid ? formatEid(selected.targetEid) : '未指定'}</span>
-              {isOwnCard(selected) && (
-                <button type="button" onClick={() => setEidEdit({ ids: [selected.id], initial: selected.targetEid })} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 text-[11px] font-bold text-white/80">
-                  <Cpu size={12} />{selected.targetEid ? '變更' : '指定'}
-                </button>
-              )}
+              <button type="button" onClick={() => setEidEdit({ ids: [selected.id], initial: selected.targetEid })} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 text-[11px] font-bold text-white/80">
+                <Cpu size={12} />{selected.targetEid ? '變更' : '指定'}
+              </button>
             </dd>
           </dl>
           {readerEid && selected.targetEid && selected.targetEid !== readerEid && (
@@ -996,7 +994,7 @@ export default function EsimAppPage() {
                 <button type="button" onClick={() => setShareTarget([selected.id])} className="inline-flex h-8 items-center gap-1 rounded-lg bg-cyan-400/15 px-2.5 text-xs font-bold text-cyan-100"><Plus size={13} />新增</button>
               </div>
               {selected.sharedWith.length === 0 ? (
-                <p className="mt-1 text-xs text-white/40">還沒有共享。共享後對方只能查看用量和掃 QR Code 安裝。</p>
+                <p className="mt-1 text-xs text-white/40">還沒有共享。共享後對方可以查看用量、掃 QR Code 安裝、修改備註和指定晶片，但不能刪除或再共享。</p>
               ) : (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {selected.sharedWith.map(e => (
@@ -1009,19 +1007,15 @@ export default function EsimAppPage() {
               )}
             </div>
           )}
-          {isOwnCard(selected) ? (
           <label className="mt-4 block text-sm text-white/60">備註（例如使用人）
             <div className="mt-1 flex gap-2">
               <input value={noteDraft} onChange={e => setNoteDraft(e.target.value)} maxLength={50} placeholder="王小明" className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-white outline-none focus:border-cyan-400" />
               <button type="button" onClick={saveNote} className="rounded-xl bg-white/10 px-4 text-sm font-bold hover:bg-white/15">儲存</button>
             </div>
           </label>
-          ) : selected.note ? (
-            <p className="mt-4 text-sm text-white/60">備註：<span className="text-white">{selected.note}</span></p>
-          ) : null}
 
           {selected.sharedBy && (
-            <p className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3 text-xs leading-5 text-white/60">這張卡由 {selected.sharedBy} 共享給你，可以查看用量和掃描 QR Code 安裝；備註與刪除只有購買者能修改。你可以把它放進自己的分類。</p>
+            <p className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3 text-xs leading-5 text-white/60">這張卡由 {selected.sharedBy} 共享給你，可以查看用量、掃描 QR Code 安裝、修改備註和指定晶片（備註會同步給購買者）；刪除與再共享只有購買者能操作。你可以把它放進自己的分類。</p>
           )}
           {lpa ? (
             <div className="mt-5">
@@ -1148,7 +1142,7 @@ export default function EsimAppPage() {
 
       {shareOpen && (
         <Sheet title="共享管理" onClose={() => setShareOpen(false)}>
-          <p className="text-sm leading-6 text-white/60">要共享卡片：按「選取」勾選卡片 →「共享」，或點開單張卡 →「共享給」→「新增」。對方只能查看用量和掃 QR Code 安裝，分類由對方自己整理。</p>
+          <p className="text-sm leading-6 text-white/60">要共享卡片：按「選取」勾選卡片 →「共享」，或點開單張卡 →「共享給」→「新增」。對方可以查看用量、掃 QR Code 安裝、修改備註和指定晶片，分類由對方自己整理。</p>
           <div className="mt-4 space-y-2">
             {shareSummary.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/40">目前沒有共享任何卡</p>}
             {shareSummary.map(([e, ids]) => (

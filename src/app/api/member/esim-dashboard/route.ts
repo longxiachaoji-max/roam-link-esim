@@ -215,14 +215,13 @@ export async function POST(request: Request) {
     const action = String(body.action || '');
     const itemIds: string[] = Array.isArray(body.order_item_ids) ? body.order_item_ids.map(String).slice(0, MAX_ITEMS_PER_ACTION) : [];
 
-    // 指定安裝到哪張 eSIM 晶片（EID）：只有購買者本人可以設定；eid 空白 = 清除
+    // 指定安裝到哪張 eSIM 晶片（EID）：購買者和被共享的人都可以設定；eid 空白 = 清除
     if (action === 'set_target_eid') {
       const customer = await findCustomerByEmail(supabase, email);
-      if (!customer) return NextResponse.json({ error: '只能設定自己購買的 eSIM' }, { status: 403 });
       const eid = normalizeEid(body.eid);
       if (eid && !isValidEid(eid)) return NextResponse.json({ error: 'EID 格式不正確，請確認是 89 開頭的 32 位數字' }, { status: 400 });
-      const allowed = await ownedItemIds(supabase, customer.id, itemIds);
-      if (!allowed.length) return NextResponse.json({ error: '請選擇自己購買的 eSIM' }, { status: 400 });
+      const allowed = await accessibleItemIds(supabase, customer?.id || null, email, itemIds);
+      if (!allowed.length) return NextResponse.json({ error: '請選擇可以管理的 eSIM' }, { status: 400 });
       const { error } = await supabase.from('order_items').update({ target_eid: eid || null }).in('id', allowed);
       if (error) throw error;
       return NextResponse.json({ success: true, updated: allowed, eid: eid || null });
